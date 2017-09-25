@@ -1,0 +1,4 @@
+.git
+tags
+obj/
+test/chrooted/
