@@ -1,18 +1,21 @@
 CC = gcc
 CFLAGS = --std=c11 -g -Wall -Wextra -pedantic
-LIBS = -lncurses
+LIBS = -lpanel -lncurses
 OBJDIR = obj
-OBJ = main.o
+OBJ = main.o file_view.o
 EXENAME = hund
 TESTEXENAME = test/testme
 
 all : project
 
-project : $(OBJDIR)/$(OBJ)
+project : $(addprefix $(OBJDIR)/, $(OBJ))
 	$(CC) $(LIBS) -o $(EXENAME) $^
 
-$(OBJDIR)/$(OBJ) : src/$(subst .o,.c,$(OBJ)) | $(OBJDIR)
-	$(CC) $(CFLAGS) -c $^ -o $@
+$(OBJDIR)/main.o : src/main.c src/include/file_view.h | $(OBJDIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(OBJDIR)/file_view.o : src/file_view.c src/include/file_view.h | $(OBJDIR)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJDIR) :
 	mkdir $(OBJDIR)
@@ -20,8 +23,8 @@ $(OBJDIR) :
 $(OBJDIR)/test.o : test/test.c | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $^ -o $@
 
-test : $(OBJDIR)/test.o $(subst $(OBJDIR)/main.o,,$(OBJDIR)/$(OBJ))
-	$(CC) -o $(TESTEXENAME) $^ && ./$(TESTEXENAME)
+test : $(OBJDIR)/test.o $(addprefix $(OBJDIR)/, $(subst main.o,,$(OBJ)))
+	$(CC) $(LIBS) -o $(TESTEXENAME) $^ && ./$(TESTEXENAME)
 
 .PHONY : clean
 clean :
