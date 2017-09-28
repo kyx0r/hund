@@ -24,6 +24,7 @@
 #include <locale.h>
 #include <getopt.h>
 #include <string.h>
+#include <syslog.h>
 
 #include "include/file_view.h"
 
@@ -56,13 +57,23 @@ int main(int argc, char* argv[])  {
 		}
 	}
 
+	openlog(argv[0], LOG_PID, LOG_USER);
+
 	setlocale(LC_ALL, "UTF-8");
 	initscr();
+	if (has_colors() == FALSE) {
+		endwin();
+		printf("no colors :(\n");
+		exit(1);
+	}
+	start_color();
 	noecho();
 	nonl();
 	raw();
 	intrflush(stdscr, FALSE);
 	keypad(stdscr, TRUE);
+	curs_set(0);
+	init_pair(1, COLOR_BLACK, COLOR_WHITE);
 
 	struct file_view pp[2];
 	int scrh, scrw;
@@ -74,30 +85,53 @@ int main(int argc, char* argv[])  {
 	get_cwd(primary_view->wd);
 	get_cwd(secondary_view->wd);
 	strcat(secondary_view->wd, "/src");
-	scan_wd(primary_view->wd, &primary_view->namelist, &primary_view->num_files);
-	scan_wd(secondary_view->wd, &secondary_view->namelist, &secondary_view->num_files);
+	scan_wd(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
+	scan_wd(secondary_view->wd, &secondary_view->file_list, &secondary_view->num_files);
 
-	int ch, x = 1, y = 1;
-	while ((ch = wgetch(primary_view->win)) != 'q') {
+	int ch;
+	while ((ch = wgetch(panel_window(primary_view->pan))) != 'q') {
 		switch (ch) {
 		case '\t':
 			{
 			struct file_view* tmp = primary_view;
 			primary_view = secondary_view;
 			secondary_view = tmp;
+			primary_view->focused = true;
+			secondary_view->focused = false;
 			}
 			break;
 		case 'j':
-			y += 1;
+			if (primary_view->selection < primary_view->num_files-1) {
+				primary_view->selection += 1;
+			}
+			if (primary_view->selection - primary_view->view_offset == primary_view->height-2) {
+				primary_view->view_offset += 1;
+			}
 			break;
 		case 'k':
-			y -= 1;
+			if (primary_view->selection > 0) {
+				primary_view->selection -= 1;
+			}
+			if (primary_view->selection - primary_view->view_offset == -1) {
+				primary_view->view_offset -= 1;
+			}
+			break;
+		case 'i':
+			strcat(primary_view->wd, "/");
+			strcat(primary_view->wd, primary_view->file_list[primary_view->selection]->file_name);
+			for (int i = 0; i < primary_view->num_files; i++) {
+				free(primary_view->file_list[i]->file_name);
+				free(primary_view->file_list[i]);
+			}
+			free(primary_view->file_list);
+			primary_view->file_list = NULL;
+			primary_view->num_files = 0;
+			primary_view->selection = 0;
+			scan_wd(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
 			break;
 		case 'h':
-			x -= 1;
 			break;
 		case 'l':
-			x += 1;
 			break;
 		default:
 			break;
@@ -119,14 +153,18 @@ int main(int argc, char* argv[])  {
 			file_view_update_geometry(&pp[0]);
 			file_view_update_geometry(&pp[1]);
 		}
-		//top_panel(primary_view->pan);
 		file_view_refresh(primary_view);
 		file_view_refresh(secondary_view);
 		update_panels();
 		doupdate();
-		wmove(primary_view->win, y, x);
+		refresh();
 	}
 
+	for (int i = 0; i < 2; i++) {
+		delete_file_list(&pp[i].file_list, pp[i].num_files);
+	}
+	syslog(LOG_DEBUG, "exit");
+	closelog();
 	endwin();
 	file_view_delete_pair(pp);
 	exit(EXIT_SUCCESS);

@@ -22,30 +22,44 @@
 
 #define _GNU_SOURCE
 #include <stdlib.h>
+#include <stdbool.h>
 #include <unistd.h>
+#include <string.h>
 #include <ncurses.h>
 #include <panel.h>
-#include <linux/limits.h>
 #include <dirent.h>
 #include <fcntl.h> // File control
-#include <string.h>
+#include <linux/limits.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <pwd.h>
+#include <syslog.h>
+
+struct file_record {
+	char* file_name;
+	unsigned char t;
+	struct stat s;
+};
 
 struct file_view {
 	char wd[PATH_MAX];
-	WINDOW* win;
+	struct file_record** file_list;
+	int num_files;
+	int selection;
+	int view_offset;
+	bool focused;
+
 	PANEL* pan;
+
 	int position_x;
 	int position_y;
 	int width;
 	int height;
-	struct dirent** namelist;
-	int num_files;
 };
 
 void get_cwd(char[PATH_MAX]);
-void scan_wd(char*, struct dirent***, int*); 
+void scan_wd(char*, struct file_record***, int*);
+void delete_file_list(struct file_record***, int);
 void file_view_update_geometry(struct file_view*);
 void file_view_refresh(struct file_view*);
 void file_view_setup_pair(struct file_view[2], int, int);
