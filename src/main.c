@@ -96,7 +96,7 @@ int main(int argc, char* argv[])  {
 	file_view_redraw(primary_view);
 	file_view_redraw(secondary_view);
 
-	int ch;
+	int ch, r;
 	while ((ch = wgetch(panel_window(primary_view->pan))) != 'q') {
 		switch (ch) {
 		case '\t':
@@ -128,28 +128,16 @@ int main(int argc, char* argv[])  {
 		case 'i':
 			if (primary_view->file_list[primary_view->selection]->t == DT_DIR) {
 				enter_dir(primary_view->wd, primary_view->file_list[primary_view->selection]->file_name);
-				for (int i = 0; i < primary_view->num_files; i++) {
-					free(primary_view->file_list[i]->file_name);
-					free(primary_view->file_list[i]);
-				}
-				free(primary_view->file_list);
-				primary_view->file_list = NULL;
-				primary_view->num_files = 0;
 				primary_view->selection = 0;
 				scan_wd(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
 			}
 			break;
 		case 'u':
-			up_dir(primary_view->wd);
-			for (int i = 0; i < primary_view->num_files; i++) {
-				free(primary_view->file_list[i]->file_name);
-				free(primary_view->file_list[i]);
+			r = up_dir(primary_view->wd);
+			if (!r) {
+				primary_view->selection = 0;
+				scan_wd(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
 			}
-			free(primary_view->file_list);
-			primary_view->file_list = NULL;
-			primary_view->num_files = 0;
-			primary_view->selection = 0;
-			scan_wd(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
 			break;
 		default:
 			break;

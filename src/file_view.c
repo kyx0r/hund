@@ -27,7 +27,19 @@ struct passwd* get_pwd(void) {
 	return getpwuid(geteuid());
 }
 
+/* Cleans up old data and scans working directory,
+ * putting data into variables passed in arguments.
+ */
 void scan_wd(char* wd, struct file_record*** file_list, int* num_files) {
+	if (*num_files != 0) {
+		for (int i = 0; i < *num_files; i++) {
+			free((*file_list)[i]->file_name);
+			free((*file_list)[i]);
+		}
+		free(*file_list);
+		*file_list = NULL;
+		*num_files = 0;
+	}
 	struct dirent** namelist;
 	DIR* dir = opendir(wd);
 	int n = scandir(wd, &namelist, NULL, alphasort);
