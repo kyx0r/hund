@@ -35,6 +35,8 @@
 #include <pwd.h>
 #include <syslog.h>
 
+#include "path.h"
+
 struct file_record {
 	char* file_name;
 	unsigned char t;
@@ -58,10 +60,13 @@ struct file_view {
 };
 
 void get_cwd(char[PATH_MAX]);
+struct passwd* get_pwd(void);
 void scan_wd(char*, struct file_record***, int*);
 void delete_file_list(struct file_record***, int);
-void file_view_update_geometry(struct file_view*);
-void file_view_refresh(struct file_view*);
-void file_view_setup_pair(struct file_view[2], int, int);
-void file_view_delete_pair(struct file_view[2]);
+
+void file_view_pair_setup(struct file_view[2], int, int);
+void file_view_pair_delete(struct file_view[2]);
+
+void file_view_pair_update_geometry(struct file_view[2]);
+void file_view_redraw(struct file_view*);
 #endif

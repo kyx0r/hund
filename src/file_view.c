@@ -20,12 +20,11 @@
 #include "include/file_view.h"
 
 void get_cwd(char b[PATH_MAX]) {
-	//const uid_t uid = geteuid();
-	//const struct passwd *pwd = getpwuid(uid);
 	getcwd(b, PATH_MAX);
-	//int cwd_len = strlen(b);
-	//cwd[cwd_len] = '/';
-	//cwd[cwd_len+1] = 0;
+}
+
+struct passwd* get_pwd(void) {
+	return getpwuid(geteuid());
 }
 
 void scan_wd(char* wd, struct file_record*** file_list, int* num_files) {
@@ -39,9 +38,7 @@ void scan_wd(char* wd, struct file_record*** file_list, int* num_files) {
 	for (int i = 0; i < (*num_files); i++) {
 		(*file_list)[i] = malloc(sizeof(struct file_record));
 		strcpy(path, wd);
-		strcat(path, "/");
-		strcat(path, namelist[i]->d_name);
-		syslog(LOG_DEBUG, "%s\n", path);
+		enter_dir(path, namelist[i]->d_name);
 		const size_t name_len = strlen(namelist[i]->d_name);
 		(*file_list)[i]->file_name = malloc(name_len+1); // +1 because cstring
 		memcpy((*file_list)[i]->file_name, namelist[i]->d_name, name_len+1);
@@ -60,59 +57,12 @@ void delete_file_list(struct file_record*** file_list, int num_files) {
 	free(*file_list);
 }
 
-void file_view_update_geometry(struct file_view* fv) {
-	/* Sometimes it's better to create a new window
-	 * instead of resizing existing one.
-	 * If you just resize window (to bigger size),
-	 * borders stay in buffer and the only thing
-	 * you can do about them is explicitly overwrite them by
-	 * mvwprintw or something.
-	 * I do overwrite all buffer with spaces, so I dont have to.
-	 * ...but if you do, delete old window AFTER you assign new one to panel.
-	 * All ncurses examples do so, so it's probably THE way to do it.
-	 */
-	//WINDOW* nw = newwin(fv->height, fv->width, fv->position_y, fv->position_x);
-	WINDOW* ow = panel_window(fv->pan);
-	wresize(ow, fv->height, fv->width);
-	wborder(ow, '|', '|', '-', '-', '+', '+', '+', '+');
-	//wtimeout(ow, 100);
-	//replace_panel(fv->pan, nw);
-	//delwin(ow);
-	move_panel(fv->pan, fv->position_y, fv->position_x);
-}
-
-void file_view_refresh(struct file_view* fv) {
-	WINDOW* w = panel_window(fv->pan);
-	mvwprintw(w, 0, 1, "%s", fv->wd);
-	int i;
-	for (i = 0; (i < fv->num_files && i < fv->height-2); i++) {
-		char entry[500];
-		snprintf(entry, sizeof(entry), "%d t: %02hhx, m: %d, uid: %d, gid: %d, s: %d, n: %s",
-				i+fv->view_offset,
-				fv->file_list[i+fv->view_offset]->t,
-				fv->file_list[i+fv->view_offset]->s.st_mode,
-				fv->file_list[i+fv->view_offset]->s.st_uid,
-				fv->file_list[i+fv->view_offset]->s.st_gid,
-				fv->file_list[i+fv->view_offset]->s.st_size,
-				fv->file_list[i+fv->view_offset]->file_name);
-		int visible_len = strlen(entry);
-		int padding_len = (fv->width - 2) - visible_len;
-		if (i+fv->view_offset == fv->selection && fv->focused) {
-			wattron(w, COLOR_PAIR(1));
-		}
-		mvwprintw(w, i+1, 1, "%s%*c", entry, padding_len, ' ');
-		if (i+fv->view_offset == fv->selection && fv->focused) {
-			wattroff(w, COLOR_PAIR(1));
-		}
-	}
-	for (; i < fv->height-3; i++) {
-		mvwprintw(w, i+1, 1, "%*c", fv->width-2, ' ');
-	}
-	wrefresh(w);
-}
-
-void file_view_setup_pair(struct file_view fvs[2], int scrh, int scrw) {
-	fvs[0] = (struct file_view) {
+/* file_view_pair_setup(), file_view_pair_delete(), file_view_pair_update_geometry()
+ * all take array of two file_view.
+ * Only file_view_redraw() takes only one file_view.
+ */
+void file_view_pair_setup(struct file_view fvp[2], int scrh, int scrw) {
+	fvp[0] = (struct file_view) {
 		.file_list = NULL,
 		.num_files = 0,
 		.selection = 0,
@@ -124,7 +74,7 @@ void file_view_setup_pair(struct file_view fvs[2], int scrh, int scrw) {
 		.height = scrh,
 	};
 
-	fvs[1] = (struct file_view) {
+	fvp[1] = (struct file_view) {
 		.file_list = NULL,
 		.num_files = 0,
 		.selection = 0,
@@ -137,10 +87,10 @@ void file_view_setup_pair(struct file_view fvs[2], int scrh, int scrw) {
 	};
 
 	for (int i = 0; i < 2; i++) {
-		WINDOW* tmpwin = newwin(fvs[i].height, fvs[i].width, fvs[i].position_y, fvs[i].position_x);
+		WINDOW* tmpwin = newwin(fvp[i].height, fvp[i].width, fvp[i].position_y, fvp[i].position_x);
 		wtimeout(tmpwin, 100);
 		wborder(tmpwin, '|', '|', '-', '-', '+', '+', '+', '+');
-		fvs[i].pan = new_panel(tmpwin);
+		fvp[i].pan = new_panel(tmpwin);
 	}
 
 	for (int i = 0; i < 2; i++) {
@@ -148,7 +98,7 @@ void file_view_setup_pair(struct file_view fvs[2], int scrh, int scrw) {
 	}
 }
 
-void file_view_delete_pair(struct file_view fvs[2]) {
+void file_view_pair_delete(struct file_view fvp[2]) {
 	/* Delete panel first, THEN it's window.
 	 * If you resize the terminal window at least once and then quit (q)
 	 * then the program will hang in infinite loop
@@ -161,9 +111,97 @@ void file_view_delete_pair(struct file_view fvs[2]) {
 	 */
 
 	for (int i = 0; i < 2; i++) {
-		PANEL* p = fvs[i].pan;
+		PANEL* p = fvp[i].pan;
 		WINDOW* w = panel_window(p);
 		del_panel(p);
 		delwin(w);
 	}
+}
+
+void file_view_pair_update_geometry(struct file_view fvp[2]) {
+	/* Sometimes it's better to create a new window
+	 * instead of resizing existing one.
+	 * If you just resize window (to bigger size),
+	 * borders stay in buffer and the only thing
+	 * you can do about them is explicitly overwrite them by
+	 * mvwprintw or something.
+	 * I do overwrite all buffer with spaces, so I dont have to.
+	 * ...but if you do, delete old window AFTER you assign new one to panel.
+	 * All ncurses examples do so, so it's probably THE way to do it.
+	 */
+	for (int i = 0; i < 2; i++) {
+		WINDOW* ow = panel_window(fvp[i].pan);
+		wresize(ow, fvp[i].height, fvp[i].width);
+		wborder(ow, '|', '|', '-', '-', '+', '+', '+', '+');
+		move_panel(fvp[i].pan, fvp[i].position_y, fvp[i].position_x);
+	}
+
+}
+
+void file_view_redraw(struct file_view* fv) {
+	WINDOW* w = panel_window(fv->pan);
+	wborder(w, '|', '|', '-', '-', '+', '+', '+', '+');
+	mvwprintw(w, 0, 2, "%s", fv->wd);
+	int view_row = 1; // Skipping border
+	int ei = fv->view_offset; // Entry Index
+	while (ei < fv->num_files && view_row < fv->height-2) {
+		// Current File Record
+		const struct file_record* cfr = fv->file_list[ei];
+		char entry[500];
+		char type_symbol;
+		int color_pair_enabled = 0;
+		switch (cfr->t) {
+		case DT_BLK: // Block device
+			type_symbol = '+';
+			color_pair_enabled = 7;
+			break;
+		case DT_CHR: // Charcter device
+			type_symbol = '-';
+			color_pair_enabled = 7;
+			break;
+		case DT_DIR: // Directory
+			type_symbol = '/';
+			color_pair_enabled = 3;
+			break;
+		case DT_FIFO: // Named pipe
+			type_symbol = '|';
+			color_pair_enabled = 1;
+			break;
+		case DT_LNK: // Symbolic link
+			type_symbol = '~';
+			color_pair_enabled = 5;
+			break;
+		case DT_REG: // Regular file
+			type_symbol = ' ';
+			color_pair_enabled = 1;
+			break;
+		case DT_SOCK: // UNIX domain socket
+			type_symbol = '=';
+			color_pair_enabled = 5;
+			break;
+		default:
+		case DT_UNKNOWN: // unknown
+			type_symbol = '?';
+			color_pair_enabled = 1;
+			break;
+
+		}
+		snprintf(entry, sizeof(entry), "%c%s", type_symbol, cfr->file_name);
+		int visible_len = strlen(entry);
+		int padding_len = (fv->width - 2) - visible_len;
+		if (ei == fv->selection && fv->focused) {
+			color_pair_enabled += 1;
+		}
+		wattron(w, COLOR_PAIR(color_pair_enabled));
+		mvwprintw(w, view_row, 1, "%s%*c", entry, padding_len, ' ');
+		wattroff(w, COLOR_PAIR(color_pair_enabled));
+		view_row += 1;
+		ei += 1;
+	}
+	while (view_row < fv->height-2) {
+		mvwprintw(w, view_row, 1, "%*c", fv->width-2, ' ');
+		view_row += 1;
+	}
+	mvwprintw(w, view_row+1, 2, "files: %d", fv->num_files);
+	wrefresh(w);
 }
