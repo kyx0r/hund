@@ -2,7 +2,7 @@ CC = gcc
 CFLAGS = --std=c11 -g -Wall -Wextra -pedantic
 LIBS = -lpanel -lncurses
 OBJDIR = obj
-OBJ = main.o file_view.o
+OBJ = main.o file_view.o path.o
 EXENAME = hund
 TESTEXENAME = test/testme
 
@@ -15,6 +15,9 @@ $(OBJDIR)/main.o : src/main.c src/include/file_view.h | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJDIR)/file_view.o : src/file_view.c src/include/file_view.h | $(OBJDIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(OBJDIR)/path.o : src/path.c src/include/path.h | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJDIR) :
