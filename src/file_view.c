@@ -144,7 +144,7 @@ void file_view_redraw(struct file_view* fv) {
 	mvwprintw(w, 0, 2, "%s", fv->wd);
 	int view_row = 1; // Skipping border
 	int ei = fv->view_offset; // Entry Index
-	while (ei < fv->num_files && view_row < fv->height-2) {
+	while (ei < fv->num_files && view_row < fv->height-1) {
 		// Current File Record
 		const struct file_record* cfr = fv->file_list[ei];
 		char entry[500];
@@ -198,7 +198,7 @@ void file_view_redraw(struct file_view* fv) {
 		view_row += 1;
 		ei += 1;
 	}
-	while (view_row < fv->height-2) {
+	while (view_row < fv->height-1) {
 		mvwprintw(w, view_row, 1, "%*c", fv->width-2, ' ');
 		view_row += 1;
 	}
