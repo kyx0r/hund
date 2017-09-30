@@ -63,6 +63,7 @@ int main(int argc, char* argv[])  {
 	}
 
 	openlog(argv[0], LOG_PID, LOG_USER);
+	syslog(LOG_NOTICE, "%s started", argv[0]+2);
 
 	setlocale(LC_ALL, "UTF-8");
 	initscr();
@@ -133,13 +134,20 @@ int main(int argc, char* argv[])  {
 				primary_view->view_offset -= 1;
 			}
 			break;
+		case 'e':
 		case 'i':
 			if (primary_view->file_list[primary_view->selection]->t == DIRECTORY) {
 				enter_dir(primary_view->wd, primary_view->file_list[primary_view->selection]->file_name);
 				primary_view->selection = 0;
 				scan_dir(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
 			}
+			else if (primary_view->file_list[primary_view->selection]->t == LINK) {
+				enter_dir(primary_view->wd, primary_view->file_list[primary_view->selection]->link_path);
+				primary_view->selection = 0;
+				scan_dir(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
+			}
 			break;
+		case 'd':
 		case 'u':
 			//current_dir(primary_view->wd, prevdir);
 			r = up_dir(primary_view->wd);

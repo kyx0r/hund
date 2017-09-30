@@ -23,10 +23,10 @@ int main() {
 	TEST(r == 0 && strcmp(path2, "/usr/bin") == 0, "correct path");
 
 	r = enter_dir(path2, ".");
-	TEST(r == -2 && strcmp(path2, "/usr/bin") == 0, "path unchanged");
+	TEST(r == 0 && strcmp(path2, "/usr/bin") == 0, "path unchanged");
 
 	r = enter_dir(path2, "..");
-	TEST(r == 1 && strcmp(path2, "/usr") == 0, "up_dir used");
+	TEST(r == 0 && strcmp(path2, "/usr") == 0, "up_dir used");
 
 	char path3[PATH_MAX*2] = "";
 	for (int i = 0; i < (PATH_MAX/2); i++) {
@@ -49,6 +49,11 @@ int main() {
 	strcpy(path4, "/");
 	current_dir(path4, cd);
 	TEST(strcmp(cd, "/") == 0, "");
+
+	TEST(!path_is_relative("/etc/netctl"), "absolute");
+	TEST(!path_is_relative("~/.config"), "absolute");
+	TEST(path_is_relative("./netctl"), "relative");
+	TEST(path_is_relative("etc/netctl"), "relative");
 
 	END_SECTION("path");
 

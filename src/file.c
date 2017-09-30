@@ -19,14 +19,6 @@
 
 #include "include/file.h"
 
-void get_cwd(char b[PATH_MAX]) {
-	getcwd(b, PATH_MAX);
-}
-
-struct passwd* get_pwd(void) {
-	return getpwuid(geteuid());
-}
-
 /* Cleans up old data and scans working directory,
  * putting data into variables passed in arguments.
  */
@@ -34,6 +26,7 @@ void scan_dir(char* wd, struct file_record*** file_list, int* num_files) {
 	if (*num_files != 0) {
 		for (int i = 0; i < *num_files; i++) {
 			free((*file_list)[i]->file_name);
+			free((*file_list)[i]->link_path);
 			free((*file_list)[i]);
 		}
 		free(*file_list);
@@ -48,22 +41,32 @@ void scan_dir(char* wd, struct file_record*** file_list, int* num_files) {
 	*file_list = malloc(sizeof(struct file_record*) * (*num_files));
 	char path[PATH_MAX];
 	for (int i = 0; i < (*num_files); i++) {
-		(*file_list)[i] = malloc(sizeof(struct file_record));
 		strcpy(path, wd);
 		enter_dir(path, namelist[i]->d_name);
 		const size_t name_len = strlen(namelist[i]->d_name);
-		(*file_list)[i]->file_name = malloc(name_len+1); // +1 because cstring
-		memcpy((*file_list)[i]->file_name, namelist[i]->d_name, name_len+1);
-		lstat(path, &(*file_list)[i]->s);
-		switch ((*file_list)[i]->s.st_mode & S_IFMT) {
-		case S_IFBLK: (*file_list)[i]->t = BLOCK; break;
-		case S_IFCHR: (*file_list)[i]->t = CHARACTER; break;
-		case S_IFDIR: (*file_list)[i]->t = DIRECTORY; break;
-		case S_IFIFO: (*file_list)[i]->t = FIFO; break;
-		case S_IFLNK: (*file_list)[i]->t = LINK; break;
-		case S_IFREG: (*file_list)[i]->t = REGULAR; break;
-		case S_IFSOCK: (*file_list)[i]->t = SOCKET; break;
-		default: (*file_list)[i]->t = UNKNOWN; break;
+		(*file_list)[i] = malloc(sizeof(struct file_record));
+		struct file_record* const fr = (*file_list)[i];
+		fr->file_name = malloc(name_len+1); // +1 because cstring
+		fr->link_path = NULL;
+		memcpy(fr->file_name, namelist[i]->d_name, name_len+1);
+		lstat(path, &fr->s);
+		switch (fr->s.st_mode & S_IFMT) {
+		case S_IFBLK: fr->t = BLOCK; break;
+		case S_IFCHR: fr->t = CHARACTER; break;
+		case S_IFDIR: fr->t = DIRECTORY; break;
+		case S_IFIFO: fr->t = FIFO; break;
+		case S_IFLNK: fr->t = LINK; break;
+		case S_IFREG: fr->t = REGULAR; break;
+		case S_IFSOCK: fr->t = SOCKET; break;
+		default: fr->t = UNKNOWN; break;
+		}
+		if (S_ISLNK(fr->s.st_mode)) {
+			char link_path[PATH_MAX];
+			memset(link_path, 0, sizeof(link_path));
+			readlink(path, link_path, sizeof(link_path));
+			const size_t lp_len = strlen(link_path)+1;
+			fr->link_path = malloc(lp_len);
+			memcpy(fr->link_path, link_path, lp_len);
 		}
 		free(namelist[i]);
 	}

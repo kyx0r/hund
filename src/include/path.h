@@ -22,9 +22,17 @@
 
 #include <linux/limits.h>
 #include <string.h>
+#include <stdbool.h>
+#include <unistd.h>
+#include <pwd.h>
 
-int enter_dir(char [PATH_MAX], char [NAME_MAX]);
+void get_cwd(char[PATH_MAX]);
+struct passwd* get_pwd(void);
+
+int enter_dir(char [PATH_MAX], char [PATH_MAX]);
 int up_dir(char [PATH_MAX]);
 int prettify_path(char [PATH_MAX], char [PATH_MAX]);
 void current_dir(char [PATH_MAX], char [NAME_MAX]);
+bool path_is_relative(char [PATH_MAX]);
+
 #endif

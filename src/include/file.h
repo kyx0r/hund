@@ -38,7 +38,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <pwd.h>
+#include <syslog.h>
 
 #include "path.h"
 
@@ -57,10 +57,9 @@ struct file_record {
 	char* file_name;
 	struct stat s;
 	enum file_type t;
+	char* link_path;
 };
 
-void get_cwd(char[PATH_MAX]);
-struct passwd* get_pwd(void);
 void scan_dir(char*, struct file_record***, int*);
 void delete_file_list(struct file_record***, int);
 

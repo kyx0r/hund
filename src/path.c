@@ -19,25 +19,52 @@
 
 #include "include/path.h"
 
-/* Return values:
- * 1 if up_dir was used; operation succesful
+void get_cwd(char b[PATH_MAX]) {
+	getcwd(b, PATH_MAX);
+}
+
+struct passwd* get_pwd(void) {
+	return getpwuid(geteuid());
+}
+
+/* dir does not have to be single file, but a path
+ * Return values:
  * 0 if operation successful
  * -1 if PATH_MAX would be exceeded; path left unchanged
- * -2 if operation is pointless (dir == "."); path left unchanged
  */
-int enter_dir(char path[PATH_MAX], char dir[NAME_MAX]) {
-	if (strlen(path) + strlen(dir) > PATH_MAX) return -1;
-	if (strcmp(dir, ".") == 0) return -2;
-	// Should it be here?
+int enter_dir(char path[PATH_MAX], char dir[PATH_MAX]) {
+	/* Apparenlty I have to rewrite entire function,
+	 * only to support multiple ".." anywhere in the path.
+	 * Symlinks can contain anything;
+	 * my '/var/run' points to '../run'
+	 */
+	if (strcmp(dir, ".") == 0) return 0;
 	if (strcmp(dir, "..") == 0) {
 		up_dir(path);
-		return 1;
 	}
-	// The only situation when adding '/' is not desired
-	if (strcmp(path, "/") != 0 ) {
-		strcat(path, "/");
+	// Relative path './netctl/config'
+	else if (dir[0] == '.' && dir[1] == '/') {
+		strcpy(path, dir+2);
 	}
-	strcat(path, dir);
+	// Absolute 'home' path '~/doc/wat.pdf'
+	else if (dir[0] == '~') {
+		struct passwd* pwd = get_pwd();
+		strcpy(path, pwd->pw_dir);
+		strcat(path, dir+1);
+	}
+	// Absolute path '/etc/sth/config'
+	else if (dir[0] == '/') {
+		strcpy(path, dir);
+	}
+	// Relative path 'wat/dir/docs'
+	else {
+		if (strlen(path) + strlen(dir) > PATH_MAX) return -1;
+		if (strcmp(path, "/") != 0 ) {
+			// The only situation when adding '/' is not desired
+			strcat(path, "/");
+		}
+		strcat(path, dir);
+	}
 	return 0;
 }
 
@@ -91,4 +118,8 @@ void current_dir(char path[PATH_MAX], char dir[NAME_MAX]) {
 		return;
 	}
 	memcpy(dir, path+lastslash+1, strlen(path+lastslash));
+}
+
+bool path_is_relative(char path[PATH_MAX]) {
+	return (path[0] != '/' && path[0] != '~') || (path[0] == '.' && path[1] == '/');
 }
