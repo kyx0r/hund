@@ -76,3 +76,19 @@ int prettify_path(char path[PATH_MAX], char home[PATH_MAX]) {
 	}
 	return -1;
 }
+
+void current_dir(char path[PATH_MAX], char dir[NAME_MAX]) {
+	const int plen = strlen(path);
+	int lastslash = 0;
+	for (int i = plen-1; i >= 0; i--) {
+		if (path[i] == '/') {
+			lastslash = i;
+			break;
+		}
+	}
+	if (lastslash == 0 && plen == 1) {
+		memcpy(dir, "/", 2);
+		return;
+	}
+	memcpy(dir, path+lastslash+1, strlen(path+lastslash));
+}

@@ -37,6 +37,19 @@ int main() {
 	r = enter_dir(path3, "m");
 	TEST(r == -1 && strlen(path3) == PATH_MAX, "respect PATH_MAX; leave path unchanged");
 
+	char path4[PATH_MAX] = "/bin";
+	char cd[NAME_MAX];
+	current_dir(path4, cd);
+	TEST(strcmp(cd, "bin") == 0, "");
+
+	enter_dir(path4, "wat");
+	current_dir(path4, cd);
+	TEST(strcmp(cd, "wat") == 0, "");
+
+	strcpy(path4, "/");
+	current_dir(path4, cd);
+	TEST(strcmp(cd, "/") == 0, "");
+
 	END_SECTION("path");
 
 	END_TESTS;

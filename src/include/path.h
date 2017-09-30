@@ -26,5 +26,5 @@
 int enter_dir(char [PATH_MAX], char [NAME_MAX]);
 int up_dir(char [PATH_MAX]);
 int prettify_path(char [PATH_MAX], char [PATH_MAX]);
-
+void current_dir(char [PATH_MAX], char [NAME_MAX]);
 #endif

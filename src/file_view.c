@@ -19,56 +19,6 @@
 
 #include "include/file_view.h"
 
-void get_cwd(char b[PATH_MAX]) {
-	getcwd(b, PATH_MAX);
-}
-
-struct passwd* get_pwd(void) {
-	return getpwuid(geteuid());
-}
-
-/* Cleans up old data and scans working directory,
- * putting data into variables passed in arguments.
- */
-void scan_wd(char* wd, struct file_record*** file_list, int* num_files) {
-	if (*num_files != 0) {
-		for (int i = 0; i < *num_files; i++) {
-			free((*file_list)[i]->file_name);
-			free((*file_list)[i]);
-		}
-		free(*file_list);
-		*file_list = NULL;
-		*num_files = 0;
-	}
-	struct dirent** namelist;
-	DIR* dir = opendir(wd);
-	int n = scandir(wd, &namelist, NULL, alphasort);
-	closedir(dir);
-	*num_files = n;
-	*file_list = malloc(sizeof(struct file_record*) * (*num_files));
-	char path[PATH_MAX];
-	for (int i = 0; i < (*num_files); i++) {
-		(*file_list)[i] = malloc(sizeof(struct file_record));
-		strcpy(path, wd);
-		enter_dir(path, namelist[i]->d_name);
-		const size_t name_len = strlen(namelist[i]->d_name);
-		(*file_list)[i]->file_name = malloc(name_len+1); // +1 because cstring
-		memcpy((*file_list)[i]->file_name, namelist[i]->d_name, name_len+1);
-		lstat(path, &(*file_list)[i]->s);
-		(*file_list)[i]->t = namelist[i]->d_type;
-		free(namelist[i]);
-	}
-	free(namelist);
-}
-
-void delete_file_list(struct file_record*** file_list, int num_files) {
-	for (int i = 0; i < num_files; i++) {
-		free((*file_list)[i]->file_name);
-		free((*file_list)[i]);
-	}
-	free(*file_list);
-}
-
 /* file_view_pair_setup(), file_view_pair_delete(), file_view_pair_update_geometry()
  * all take array of two file_view.
  * Only file_view_redraw() takes only one file_view.
@@ -103,10 +53,6 @@ void file_view_pair_setup(struct file_view fvp[2], int scrh, int scrw) {
 		wtimeout(tmpwin, 100);
 		wborder(tmpwin, '|', '|', '-', '-', '+', '+', '+', '+');
 		fvp[i].pan = new_panel(tmpwin);
-	}
-
-	for (int i = 0; i < 2; i++) {
-		//file_view_update_geometry(&fvs[i]);
 	}
 }
 
@@ -147,7 +93,6 @@ void file_view_pair_update_geometry(struct file_view fvp[2]) {
 		wborder(ow, '|', '|', '-', '-', '+', '+', '+', '+');
 		move_panel(fvp[i].pan, fvp[i].position_y, fvp[i].position_x);
 	}
-
 }
 
 void file_view_redraw(struct file_view* fv) {
@@ -163,40 +108,39 @@ void file_view_redraw(struct file_view* fv) {
 		char type_symbol;
 		int color_pair_enabled = 0;
 		switch (cfr->t) {
-		case DT_BLK: // Block device
+		case BLOCK:
 			type_symbol = '+';
 			color_pair_enabled = 7;
 			break;
-		case DT_CHR: // Charcter device
+		case CHARACTER:
 			type_symbol = '-';
 			color_pair_enabled = 7;
 			break;
-		case DT_DIR: // Directory
+		case DIRECTORY:
 			type_symbol = '/';
 			color_pair_enabled = 3;
 			break;
-		case DT_FIFO: // Named pipe
+		case FIFO:
 			type_symbol = '|';
 			color_pair_enabled = 1;
 			break;
-		case DT_LNK: // Symbolic link
+		case LINK:
 			type_symbol = '~';
 			color_pair_enabled = 5;
 			break;
-		case DT_REG: // Regular file
+		case REGULAR:
 			type_symbol = ' ';
 			color_pair_enabled = 1;
 			break;
-		case DT_SOCK: // UNIX domain socket
+		case SOCKET:
 			type_symbol = '=';
 			color_pair_enabled = 5;
 			break;
+		case UNKNOWN:
 		default:
-		case DT_UNKNOWN: // unknown
 			type_symbol = '?';
 			color_pair_enabled = 1;
 			break;
-
 		}
 		snprintf(entry, sizeof(entry), "%c%s", type_symbol, cfr->file_name);
 		int visible_len = strlen(entry);
@@ -214,6 +158,6 @@ void file_view_redraw(struct file_view* fv) {
 		mvwprintw(w, view_row, 1, "%*c", fv->width-2, ' ');
 		view_row += 1;
 	}
-	mvwprintw(w, view_row+1, 2, "files: %d", fv->num_files);
+	mvwprintw(w, view_row, 2, "files: %d", fv->num_files);
 	wrefresh(w);
 }

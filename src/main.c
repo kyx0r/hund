@@ -32,7 +32,7 @@ int main(int argc, char* argv[])  {
 	int o;
 	static char sopt[] = "vht:";
 	static struct option lopt[] = {
-		{"chroot", required_argument, 0, 't'},
+		{"chdir", required_argument, 0, 't'},
 		{"verbose", no_argument, 0, 'v'},
 		{"help", no_argument, 0, 'h'},
 		{0, 0, 0, 0}
@@ -51,10 +51,15 @@ int main(int argc, char* argv[])  {
 			puts("help?");
 			break;
 		default:
-			perror("unknown argument");
-			abort();
+			puts("unknown argument");
+			exit(1);
 			break;
 		}
+	}
+
+	while (optind < argc) {
+		printf("non-option argument at index %d: %s\n", optind, argv[optind]);
+		optind += 1;
 	}
 
 	openlog(argv[0], LOG_PID, LOG_USER);
@@ -75,8 +80,8 @@ int main(int argc, char* argv[])  {
 	curs_set(0);
 	init_pair(1, COLOR_WHITE, COLOR_BLACK);
 	init_pair(2, COLOR_BLACK, COLOR_WHITE);
-	init_pair(3, COLOR_BLUE, COLOR_BLACK);
-	init_pair(4, COLOR_BLACK, COLOR_BLUE);
+	init_pair(3, COLOR_CYAN, COLOR_BLACK);
+	init_pair(4, COLOR_BLACK, COLOR_CYAN);
 	init_pair(5, COLOR_RED, COLOR_BLACK);
 	init_pair(6, COLOR_BLACK, COLOR_RED);
 	init_pair(7, COLOR_YELLOW, COLOR_BLACK);
@@ -91,13 +96,16 @@ int main(int argc, char* argv[])  {
 
 	get_cwd(primary_view->wd);
 	get_cwd(secondary_view->wd);
-	scan_wd(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
-	scan_wd(secondary_view->wd, &secondary_view->file_list, &secondary_view->num_files);
+	scan_dir(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
+	scan_dir(secondary_view->wd, &secondary_view->file_list, &secondary_view->num_files);
 	file_view_redraw(primary_view);
 	file_view_redraw(secondary_view);
 
 	int ch, r;
+	//char prevdir[NAME_MAX];
+	//memset(prevdir, 0, sizeof(prevdir));
 	while ((ch = wgetch(panel_window(primary_view->pan))) != 'q') {
+		//syslog(LOG_DEBUG, "%d", primary_view->selection);
 		switch (ch) {
 		case '\t':
 			{
@@ -126,17 +134,55 @@ int main(int argc, char* argv[])  {
 			}
 			break;
 		case 'i':
-			if (primary_view->file_list[primary_view->selection]->t == DT_DIR) {
+			if (primary_view->file_list[primary_view->selection]->t == DIRECTORY) {
 				enter_dir(primary_view->wd, primary_view->file_list[primary_view->selection]->file_name);
 				primary_view->selection = 0;
-				scan_wd(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
+				scan_dir(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
 			}
 			break;
 		case 'u':
+			//current_dir(primary_view->wd, prevdir);
 			r = up_dir(primary_view->wd);
 			if (!r) {
+				scan_dir(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
 				primary_view->selection = 0;
-				scan_wd(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
+//				for (int i = 0; i < primary_view->num_files; i++) {
+//					if (strcmp(primary_view->file_list[i]->file_name, prevdir) == 0) {
+//						primary_view->selection = i;
+//						break;
+//					}
+//				}
+			}
+			break;
+		case 'm':
+			{
+			char* src_name = primary_view->file_list[primary_view->selection]->file_name;
+			char src_path[PATH_MAX];
+			char dest_path[PATH_MAX];
+			strcpy(src_path, primary_view->wd);
+			strcpy(dest_path, secondary_view->wd);
+			enter_dir(src_path, src_name);
+			enter_dir(dest_path, src_name);
+			syslog(LOG_DEBUG, "%s -> %s", src_path, dest_path);
+			file_move(src_path, dest_path);
+			scan_dir(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
+			scan_dir(secondary_view->wd, &secondary_view->file_list, &secondary_view->num_files);
+			file_view_redraw(primary_view);
+			file_view_redraw(secondary_view);
+			primary_view->selection = 0;
+			}
+			break;
+		case 'r':
+			{
+			char* src_name = primary_view->file_list[primary_view->selection]->file_name;
+			char src_path[PATH_MAX];
+			strcpy(src_path, primary_view->wd);
+			enter_dir(src_path, src_name);
+			syslog(LOG_DEBUG, "remove %s", src_path);
+			file_remove(src_path);
+			scan_dir(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
+			file_view_redraw(primary_view);
+			primary_view->selection = 0;
 			}
 			break;
 		default:
