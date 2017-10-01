@@ -32,7 +32,7 @@ $(OBJDIR)/test.o : test/test.c | $(OBJDIR)
 test : $(OBJDIR)/test.o $(addprefix $(OBJDIR)/, $(subst main.o,,$(OBJ)))
 	$(CC) $(LIBS) -o $(TESTEXENAME) $^ && ./$(TESTEXENAME)
 
-.PHONY : clean
+.PHONY : clean test
 clean :
 	rm -r $(OBJDIR) &> /dev/null || true
 	rm $(EXENAME) $(TESTEXENAME) &> /dev/null || true

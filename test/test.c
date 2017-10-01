@@ -17,7 +17,7 @@ int main() {
 
 	char path2[PATH_MAX] = "/";
 	r = enter_dir(path2, "usr");
-	TEST(r == 0, "entered directory in root (respect /)");
+	TEST(r == 0 && strcmp(path2, "/usr") == 0, "entered directory in root (respect /)");
 
 	r = enter_dir(path2, "bin");
 	TEST(r == 0 && strcmp(path2, "/usr/bin") == 0, "correct path");
@@ -28,13 +28,13 @@ int main() {
 	r = enter_dir(path2, "..");
 	TEST(r == 0 && strcmp(path2, "/usr") == 0, "up_dir used");
 
-	char path3[PATH_MAX*2] = "";
-	for (int i = 0; i < (PATH_MAX/2); i++) {
-		r = enter_dir(path3, "m");
-	}
+	char path3[PATH_MAX*2] = "/";
+	memset(path3+1, 0, sizeof(path3) - 1);
+	memset(path3+1, 'a', PATH_MAX-3);
+	r = enter_dir(path3, "b");
 	TEST(r == 0 && strlen(path3) == PATH_MAX, "path filled");
 
-	r = enter_dir(path3, "m");
+	r = enter_dir(path3, "end");
 	TEST(r == -1 && strlen(path3) == PATH_MAX, "respect PATH_MAX; leave path unchanged");
 
 	char path4[PATH_MAX] = "/bin";
@@ -54,6 +54,14 @@ int main() {
 	TEST(!path_is_relative("~/.config"), "absolute");
 	TEST(path_is_relative("./netctl"), "relative");
 	TEST(path_is_relative("etc/netctl"), "relative");
+
+	char path5[PATH_MAX] = "/dope/";
+	char dir5[] = "./wat/lol/../wut";
+	enter_dir(path5, dir5);
+	TEST(strcmp(path5, "/dope/wat/wut") == 0, "");
+
+	enter_dir(path5, "/home/user");
+	TEST(strcmp(path5, "/home/user") == 0, "");
 
 	END_SECTION("path");
 

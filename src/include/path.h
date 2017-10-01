@@ -20,10 +20,14 @@
 #ifndef PATH_H
 #define PATH_H
 
+// TODO warns about redefinition
+#define _XOPEN_SOURCE // strtok_r
+
 #include <linux/limits.h>
 #include <string.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include <pwd.h>
 
 void get_cwd(char[PATH_MAX]);

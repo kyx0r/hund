@@ -27,43 +27,62 @@ struct passwd* get_pwd(void) {
 	return getpwuid(geteuid());
 }
 
-/* dir does not have to be single file, but a path
+/* path[] must be absolute and not prettified
+ * dir[] does not have to be single file, can be a path
  * Return values:
  * 0 if operation successful
  * -1 if PATH_MAX would be exceeded; path left unchanged
+ *
+ * I couldn't find any standard function that would parse path and shorten it.
  */
 int enter_dir(char path[PATH_MAX], char dir[PATH_MAX]) {
-	/* Apparenlty I have to rewrite entire function,
-	 * only to support multiple ".." anywhere in the path.
-	 * Symlinks can contain anything;
-	 * my '/var/run' points to '../run'
-	 */
-	if (strcmp(dir, ".") == 0) return 0;
-	if (strcmp(dir, "..") == 0) {
-		up_dir(path);
-	}
-	// Relative path './netctl/config'
-	else if (dir[0] == '.' && dir[1] == '/') {
-		strcpy(path, dir+2);
-	}
-	// Absolute 'home' path '~/doc/wat.pdf'
-	else if (dir[0] == '~') {
-		struct passwd* pwd = get_pwd();
-		strcpy(path, pwd->pw_dir);
-		strcat(path, dir+1);
-	}
-	// Absolute path '/etc/sth/config'
-	else if (dir[0] == '/') {
+	if (!path_is_relative(dir)) {
 		strcpy(path, dir);
+		return 0;
 	}
-	// Relative path 'wat/dir/docs'
-	else {
-		if (strlen(path) + strlen(dir) > PATH_MAX) return -1;
-		if (strcmp(path, "/") != 0 ) {
-			// The only situation when adding '/' is not desired
-			strcat(path, "/");
+	const size_t plen = strlen(path);
+	/* path[] may contain '/' at the end
+	 * enter_dir appends entries with '/' PREpended;
+	 * path[] = '/a/b/c/' -> '/a/b/c'
+	 * if dir[] contains 'd....' it appends "/d"
+	 * If path ends with /, it would be doubled later
+	 */
+	if (path[plen-1] == '/' && plen > 1) {
+		path[plen-1] = 0;
+	}
+	char* save_ptr = NULL;
+	char* entry = strtok_r(dir, "/", &save_ptr);
+	while (entry != NULL) {
+		if (strcmp(entry, ".") == 0) {
+			goto next_entry;
 		}
-		strcat(path, dir);
+		else if (strcmp(entry, "..") == 0) {
+			char* p = path + strlen(path);
+			// At this point path never ends with /
+			// p points null pointer
+			// Go back till nearest /
+			while (*p != '/' && p != path) {
+				*p = 0;
+				p -= 1;
+			}
+			// loop stopped at /, which must be deleted too
+			*p = 0;
+		}
+		else {
+			// Check if PATH_MAX is respected
+			if (strlen(path) + strlen(entry) < PATH_MAX) {
+				if (path[0] == '/' && strlen(path) > 1) {
+					// dont prepend / in root directory
+					strcat(path, "/");
+				}
+				strcat(path, entry);
+			}
+			else {
+				return -1;
+			}
+		}
+		next_entry:
+		entry = strtok_r(NULL, "/", &save_ptr);
 	}
 	return 0;
 }
