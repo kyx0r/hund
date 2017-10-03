@@ -99,13 +99,26 @@ void file_view_redraw(struct file_view* fv) {
 	WINDOW* w = panel_window(fv->pan);
 	wborder(w, '|', '|', '-', '-', '+', '+', '+', '+');
 	mvwprintw(w, 0, 2, "%s", fv->wd);
+	// First, adjust view_offset to selection
+	if (fv->num_files <= fv->height - 1) {
+		fv->view_offset = 0;
+	}
+	else if (fv->selection < fv->height/2) {
+		fv->view_offset = 0;
+	}
+	else if (fv->selection > fv->num_files - fv->height/2) {
+		fv->view_offset = fv->num_files - fv->height + 2;
+	}
+	else {
+		fv->view_offset = fv->selection - fv->height/2 + 1;
+	}
 	int view_row = 1; // Skipping border
 	int ei = fv->view_offset; // Entry Index
 	while (ei < fv->num_files && view_row < fv->height-1) {
 		// Current File Record
 		const struct file_record* cfr = fv->file_list[ei];
 		char entry[500];
-		char type_symbol;
+		char type_symbol = '?';
 		int color_pair_enabled = 0;
 		switch (cfr->t) {
 		case BLOCK:

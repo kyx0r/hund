@@ -103,10 +103,9 @@ int main(int argc, char* argv[])  {
 	file_view_redraw(secondary_view);
 
 	int ch, r;
-	//char prevdir[NAME_MAX];
-	//memset(prevdir, 0, sizeof(prevdir));
+	char prevdir[NAME_MAX];
+	memset(prevdir, 0, sizeof(prevdir));
 	while ((ch = wgetch(panel_window(primary_view->pan))) != 'q') {
-		//syslog(LOG_DEBUG, "%d", primary_view->selection);
 		switch (ch) {
 		case '\t':
 			{
@@ -122,16 +121,10 @@ int main(int argc, char* argv[])  {
 			if (primary_view->selection < primary_view->num_files-1) {
 				primary_view->selection += 1;
 			}
-			if (primary_view->selection - primary_view->view_offset == primary_view->height-2) {
-				primary_view->view_offset += 1;
-			}
 			break;
 		case 'k':
 			if (primary_view->selection > 0) {
 				primary_view->selection -= 1;
-			}
-			if (primary_view->selection - primary_view->view_offset == -1) {
-				primary_view->view_offset -= 1;
 			}
 			break;
 		case 'e':
@@ -149,17 +142,20 @@ int main(int argc, char* argv[])  {
 			break;
 		case 'd':
 		case 'u':
-			//current_dir(primary_view->wd, prevdir);
+			/* Remember previous directory to later
+			 * move selection to that directory.
+			 */
+			current_dir(primary_view->wd, prevdir);
 			r = up_dir(primary_view->wd);
 			if (!r) {
 				scan_dir(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
 				primary_view->selection = 0;
-//				for (int i = 0; i < primary_view->num_files; i++) {
-//					if (strcmp(primary_view->file_list[i]->file_name, prevdir) == 0) {
-//						primary_view->selection = i;
-//						break;
-//					}
-//				}
+				for (int i = 0; i < primary_view->num_files; i++) {
+					if (strcmp(primary_view->file_list[i]->file_name, prevdir) == 0) {
+						primary_view->selection = i;
+						break;
+					}
+				}
 			}
 			break;
 		case 'm':
