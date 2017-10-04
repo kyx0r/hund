@@ -117,7 +117,6 @@ void file_view_redraw(struct file_view* fv) {
 	while (ei < fv->num_files && view_row < fv->height-1) {
 		// Current File Record
 		const struct file_record* cfr = fv->file_list[ei];
-		char entry[500];
 		char type_symbol = '?';
 		int color_pair_enabled = 0;
 		switch (cfr->t) {
@@ -155,14 +154,26 @@ void file_view_redraw(struct file_view* fv) {
 			color_pair_enabled = 1;
 			break;
 		}
-		snprintf(entry, sizeof(entry), "%c%s", type_symbol, cfr->file_name);
-		int visible_len = strlen(entry);
-		int padding_len = (fv->width - 2) - visible_len;
+		const int fnlen = strlen(cfr->file_name); // File Name Length
+		int enlen; // entry length
+		int padding;
+		if (fnlen > fv->width - 3) {
+			// If file name can't fit in line, its just cut
+			padding = 0;
+			enlen = fv->width - 3;
+		}
+		else {
+			padding = (fv->width - 3) - fnlen;
+			enlen = fnlen;
+		}
 		if (ei == fv->selection && fv->focused) {
 			color_pair_enabled += 1;
 		}
 		wattron(w, COLOR_PAIR(color_pair_enabled));
-		mvwprintw(w, view_row, 1, "%s%*c", entry, padding_len, ' ');
+		mvwprintw(w, view_row, 1, "%c%.*s", type_symbol, enlen, cfr->file_name);
+		if (padding) {
+			mvwprintw(w, view_row, 1 + enlen + 1, "%*c", padding, ' ');
+		}
 		wattroff(w, COLOR_PAIR(color_pair_enabled));
 		view_row += 1;
 		ei += 1;
