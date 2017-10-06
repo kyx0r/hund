@@ -158,6 +158,21 @@ int main(int argc, char* argv[])  {
 				}
 			}
 			break;
+		case 'c':
+			{
+			char* src_name = primary_view->file_list[primary_view->selection]->file_name;
+			char src_path[PATH_MAX];
+			char dest_path[PATH_MAX];
+			strcpy(src_path, primary_view->wd);
+			strcpy(dest_path, secondary_view->wd);
+			enter_dir(src_path, src_name);
+			enter_dir(dest_path, src_name);
+			syslog(LOG_DEBUG, "copy %s -> %s", src_path, dest_path);
+			file_copy(src_path, dest_path);
+			scan_dir(secondary_view->wd, &secondary_view->file_list, &secondary_view->num_files);
+			file_view_redraw(secondary_view);
+			}
+			break;
 		case 'm':
 			{
 			char* src_name = primary_view->file_list[primary_view->selection]->file_name;
@@ -167,7 +182,7 @@ int main(int argc, char* argv[])  {
 			strcpy(dest_path, secondary_view->wd);
 			enter_dir(src_path, src_name);
 			enter_dir(dest_path, src_name);
-			syslog(LOG_DEBUG, "%s -> %s", src_path, dest_path);
+			syslog(LOG_DEBUG, "move %s -> %s", src_path, dest_path);
 			file_move(src_path, dest_path);
 			scan_dir(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
 			scan_dir(secondary_view->wd, &secondary_view->file_list, &secondary_view->num_files);
@@ -188,6 +203,10 @@ int main(int argc, char* argv[])  {
 			file_view_redraw(primary_view);
 			primary_view->selection = 0;
 			}
+			break;
+		case 's':
+			scan_dir(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
+			file_view_redraw(primary_view);
 			break;
 		default:
 			break;

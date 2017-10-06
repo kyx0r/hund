@@ -81,7 +81,6 @@ void delete_file_list(struct file_record*** file_list, int num_files) {
 	free(*file_list);
 }
 
-
 int file_move(const char* src, const char* dest) {
 	return rename(src, dest);
 }
@@ -102,5 +101,22 @@ int file_remove(const char* src) {
 }
 
 int file_copy(const char* src, const char* dest) {
+	FILE* input_file = fopen(src, "rb");
+	FILE* output_file = fopen(dest, "wb");
+	const size_t buffer_size = 4096;
+	char* buffer = malloc(buffer_size);
+	int rr, wr;
+	int acc = 0;
+	while ((rr = fread(buffer, 1, buffer_size, input_file)) != 0) {
+		wr = fwrite(buffer, 1, rr, output_file);
+		acc += wr;
+		syslog(LOG_DEBUG, "copied %d bytes", acc);
+		if (wr != rr) {
+			syslog(LOG_DEBUG, "something weird");
+		}
+	}
+	fclose(output_file);
+	fclose(input_file);
+	free(buffer);
 	return 0;
 }
