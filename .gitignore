@@ -1,4 +1,6 @@
 .git
 tags
 obj/
+hund
+test/testme
 test/safe/
