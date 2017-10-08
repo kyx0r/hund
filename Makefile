@@ -8,9 +8,9 @@ OBJ = main.o file_view.o path.o file.o prompt.o
 EXENAME = hund
 TESTEXENAME = test/testme
 
-all : project
+all : $(EXENAME)
 
-project : $(addprefix $(OBJDIR)/, $(OBJ))
+$(EXENAME) : $(addprefix $(OBJDIR)/, $(OBJ))
 	$(LD) $(LIBS) $^ -o $(EXENAME) 
 
 $(OBJDIR)/main.o : src/main.c src/include/file_view.h | $(OBJDIR)
