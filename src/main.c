@@ -27,6 +27,7 @@
 #include <syslog.h>
 
 #include "include/file_view.h"
+#include "include/prompt.h"
 
 int main(int argc, char* argv[])  {
 	int o;
@@ -74,7 +75,7 @@ int main(int argc, char* argv[])  {
 	}
 	start_color();
 	noecho();
-	nonl();
+	//nonl();
 	raw();
 	intrflush(stdscr, FALSE);
 	keypad(stdscr, TRUE);
@@ -149,13 +150,7 @@ int main(int argc, char* argv[])  {
 			r = up_dir(primary_view->wd);
 			if (!r) {
 				scan_dir(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
-				primary_view->selection = 0;
-				for (int i = 0; i < primary_view->num_files; i++) {
-					if (strcmp(primary_view->file_list[i]->file_name, prevdir) == 0) {
-						primary_view->selection = i;
-						break;
-					}
-				}
+				primary_view->selection = file_index(primary_view->file_list, primary_view->num_files, prevdir);
 			}
 			break;
 		case 'c':
@@ -166,7 +161,7 @@ int main(int argc, char* argv[])  {
 			strcpy(src_path, primary_view->wd);
 			strcpy(dest_path, secondary_view->wd);
 			enter_dir(src_path, src_name);
-			enter_dir(dest_path, src_name);
+			prompt("new name", sizeof dest_path, dest_path);
 			syslog(LOG_DEBUG, "copy %s -> %s", src_path, dest_path);
 			file_copy(src_path, dest_path);
 			scan_dir(secondary_view->wd, &secondary_view->file_list, &secondary_view->num_files);
@@ -181,7 +176,7 @@ int main(int argc, char* argv[])  {
 			strcpy(src_path, primary_view->wd);
 			strcpy(dest_path, secondary_view->wd);
 			enter_dir(src_path, src_name);
-			enter_dir(dest_path, src_name);
+			prompt("new name", sizeof dest_path, dest_path);
 			syslog(LOG_DEBUG, "move %s -> %s", src_path, dest_path);
 			file_move(src_path, dest_path);
 			scan_dir(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
@@ -202,6 +197,20 @@ int main(int argc, char* argv[])  {
 			scan_dir(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
 			file_view_redraw(primary_view);
 			primary_view->selection = 0;
+			}
+			break;
+		case 'n':
+			{
+			char src_path[PATH_MAX];
+			strcpy(src_path, primary_view->wd);
+			strcat(src_path, "/");
+			char name[PATH_MAX] = "";
+			prompt("directory name", sizeof name, name);
+			strcat(src_path, name);
+			dir_make(src_path);
+			scan_dir(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
+			primary_view->selection = file_index(primary_view->file_list, primary_view->num_files, prevdir);
+			file_view_redraw(primary_view);
 			}
 			break;
 		case 's':

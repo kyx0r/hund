@@ -96,6 +96,9 @@ void file_view_pair_update_geometry(struct file_view fvp[2]) {
 }
 
 void file_view_redraw(struct file_view* fv) {
+	if (fv->selection == -1) {
+		fv->selection = 0;
+	}
 	WINDOW* w = panel_window(fv->pan);
 	wborder(w, '|', '|', '-', '-', '+', '+', '+', '+');
 	mvwprintw(w, 0, 2, "%s", fv->wd);
