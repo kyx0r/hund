@@ -39,10 +39,8 @@ int prompt(char prompt[], size_t bufsize, char buf[bufsize]) {
 	wtimeout(fw, 100);
 	keypad(fw, TRUE);
 	int c;
-	while (c = wgetch(fw)) {
+	while ((c = wgetch(fw)) != '\n') {
 		switch (c) {
-		case '\n':
-			goto exit_loop;
 		//case KEY_LEFT: cursor -= 1; break;
 		//case KEY_RIGHT: cursor += 1; break;
 		case KEY_BACKSPACE:
@@ -67,7 +65,6 @@ int prompt(char prompt[], size_t bufsize, char buf[bufsize]) {
 		}
 		wmove(fw, 1, 1 + cursor);
 	}
-	exit_loop:
 	curs_set(0);
 	del_panel(fp);
 	delwin(fw);

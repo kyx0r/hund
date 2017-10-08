@@ -20,8 +20,9 @@
 #ifndef PATH_H
 #define PATH_H
 
-// TODO warns about redefinition
-#define _XOPEN_SOURCE // strtok_r
+#ifndef _XOPEN_SOURCE
+	#define _XOPEN_SOURCE // strtok_r
+#endif
 
 #include <linux/limits.h>
 #include <string.h>

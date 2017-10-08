@@ -20,12 +20,13 @@
 #ifndef FILE_H
 #define FILE_H
 
-// To expose some dirent.h and fnctl.h stuff
+// dirent.h and fnctl.h stuff
 #define _GNU_SOURCE
 
-// To expose S_ISSOCK
-#define _XOPEN_SOURCE
-#define _XOPEN_SOURCE_EXTENDED
+#ifndef _XOPEN_SOURCE
+	#define _XOPEN_SOURCE // S_ISSOCK
+#endif
+//#define _XOPEN_SOURCE_EXTENDED
 
 #include <linux/limits.h>
 #include <sys/types.h>
