@@ -22,7 +22,7 @@
 /* Cleans up old data and scans working directory,
  * putting data into variables passed in arguments.
  */
-void scan_dir(char* wd, struct file_record*** file_list, int* num_files) {
+void scan_dir(const char* wd, struct file_record*** file_list, int* num_files) {
 	if (*num_files != 0) {
 		for (int i = 0; i < *num_files; i++) {
 			free((*file_list)[i]->file_name);
@@ -35,11 +35,11 @@ void scan_dir(char* wd, struct file_record*** file_list, int* num_files) {
 	}
 	struct dirent** namelist;
 	DIR* dir = opendir(wd);
-	int n = scandir(wd, &namelist, NULL, alphasort);
+	*num_files = scandir(wd, &namelist, NULL, alphasort);
 	closedir(dir);
-	*num_files = n;
 	*file_list = malloc(sizeof(struct file_record*) * (*num_files));
-	char path[PATH_MAX];
+	char* path = malloc(PATH_MAX);
+	char* link_path = malloc(PATH_MAX);
 	for (int i = 0; i < (*num_files); i++) {
 		strcpy(path, wd);
 		enter_dir(path, namelist[i]->d_name);
@@ -61,15 +61,16 @@ void scan_dir(char* wd, struct file_record*** file_list, int* num_files) {
 		default: fr->t = UNKNOWN; break;
 		}
 		if (S_ISLNK(fr->s.st_mode)) {
-			char link_path[PATH_MAX];
-			memset(link_path, 0, sizeof(link_path));
-			readlink(path, link_path, sizeof(link_path));
+			memset(link_path, 0, PATH_MAX);
+			readlink(path, link_path, PATH_MAX);
 			const size_t lp_len = strlen(link_path)+1;
 			fr->link_path = malloc(lp_len);
 			memcpy(fr->link_path, link_path, lp_len);
 		}
 		free(namelist[i]);
 	}
+	free(link_path);
+	free(path);
 	free(namelist);
 }
 
@@ -98,16 +99,30 @@ int file_move(const char* src, const char* dest) {
 }
 
 int file_remove(const char* src) {
+	syslog(LOG_DEBUG, "file_remove(\"%s\")", src);
 	struct stat s;
 	int r = lstat(src, &s); 
 	if (r == -1) {
 		perror("lstat failed");
-		return r;
+		abort();
 	}
-	r = unlink(src);
-	if (r == -1) {
-		perror("unlink failed");
-		return r;
+	if ((s.st_mode & S_IFMT) == S_IFDIR) {
+		struct file_record** fl = NULL;
+		int fn = 0;
+		scan_dir(src, &fl, &fn);
+		char* path = malloc(PATH_MAX);
+		// 2 -> skip . and ..
+		for (int i = 2; i < fn; i++) {
+			strcpy(path, src);
+			enter_dir(path, fl[i]->file_name);
+			file_remove(path);
+		}
+		delete_file_list(&fl, fn);
+		free(path);
+		r = rmdir(src);
+	}
+	else {
+		r = unlink(src);
 	}
 	return r;
 }
@@ -133,6 +148,6 @@ int file_copy(const char* src, const char* dest) {
 	return 0;
 }
 
-int dir_make(const char* src) {
-	return mkdir(src, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+int dir_make(const char* name) {
+	return mkdir(name, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 }

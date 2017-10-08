@@ -29,32 +29,126 @@
 #include "include/file_view.h"
 #include "include/prompt.h"
 
+static void swap_views(struct file_view** pv, struct file_view** sv) {
+	struct file_view* tmp = *pv;
+	*pv = *sv;
+	*sv = tmp;
+	(*pv)->focused = true;
+	(*sv)->focused = false;
+	file_view_redraw(*sv);
+}
+
+static void create_directory(struct file_view* v) {
+	char* path = malloc(PATH_MAX);
+	char* name = malloc(NAME_MAX);
+	name[0] = 0;
+	strcpy(path, v->wd);
+	prompt("directory name", NAME_MAX, name);
+	enter_dir(path, name);
+	dir_make(path);
+	scan_dir(v->wd, &v->file_list, &v->num_files);
+	v->selection = file_index(v->file_list, v->num_files, name);
+	free(path);
+	free(name);
+	file_view_redraw(v);
+}
+
+static void remove_file(struct file_view* v) {
+	char* path = malloc(PATH_MAX);
+	strcpy(path, v->wd);
+	enter_dir(path, v->file_list[v->selection]->file_name);
+	file_remove(path);
+	free(path);
+	scan_dir(v->wd, &v->file_list, &v->num_files);
+	v->selection -= 1;
+	file_view_redraw(v);
+}
+
+static void move_file(struct file_view* pv, struct file_view* sv) {
+	char* src_path = malloc(PATH_MAX);
+	char* dest_path = malloc(PATH_MAX);
+	strcpy(src_path, pv->wd);
+	strcpy(dest_path, sv->wd);
+	enter_dir(src_path, pv->file_list[pv->selection]->file_name);
+	prompt("new name", PATH_MAX, dest_path);
+	file_move(src_path, dest_path);
+	free(src_path);
+	free(dest_path);
+	scan_dir(pv->wd, &pv->file_list, &pv->num_files);
+	scan_dir(sv->wd, &sv->file_list, &sv->num_files);
+	pv->selection = 0;
+	file_view_redraw(pv);
+	file_view_redraw(sv);
+}
+
+static void copy_file(struct file_view* pv, struct file_view* sv) {
+	char* src_path = malloc(PATH_MAX);
+	char* dest_path = malloc(PATH_MAX);
+	strcpy(src_path, pv->wd);
+	strcpy(dest_path, sv->wd);
+	enter_dir(src_path, pv->file_list[pv->selection]->file_name);
+	prompt("copy name", PATH_MAX, dest_path);
+	file_copy(src_path, dest_path);
+	free(src_path);
+	free(dest_path);
+	scan_dir(sv->wd, &sv->file_list, &sv->num_files);
+	file_view_redraw(sv);
+}
+
+static void go_up_dir(struct file_view* v) {
+	char* prevdir = malloc(NAME_MAX);
+	current_dir(v->wd, prevdir);
+	int r = up_dir(v->wd);
+	if (!r) {
+		scan_dir(v->wd, &v->file_list, &v->num_files);
+		v->selection = file_index(v->file_list, v->num_files, prevdir);
+	}
+	free(prevdir);
+}
+
+static void go_enter_dir(struct file_view* v) {
+	if (v->file_list[v->selection]->t == DIRECTORY) {
+		enter_dir(v->wd, v->file_list[v->selection]->file_name);
+		v->selection = 0;
+		scan_dir(v->wd, &v->file_list, &v->num_files);
+	}
+	else if (v->file_list[v->selection]->t == LINK) {
+		enter_dir(v->wd, v->file_list[v->selection]->link_path);
+		v->selection = 0;
+		scan_dir(v->wd, &v->file_list, &v->num_files);
+	}
+}
+
+static char* help = "Usage: hund [OPTION]...\n"
+"Options:\n"
+"  -c, --chdir\t\tchange initial directory\n"
+"  -v, --verbose\t\tbe verbose\n"
+"  -h, --help\t\tdisplay this help message\n";
+
 int main(int argc, char* argv[])  {
-	int o;
-	static char sopt[] = "vht:";
+	static char sopt[] = "vhc:";
 	static struct option lopt[] = {
-		{"chdir", required_argument, 0, 't'},
+		{"chdir", required_argument, 0, 'c'},
 		{"verbose", no_argument, 0, 'v'},
 		{"help", no_argument, 0, 'h'},
 		{0, 0, 0, 0}
     };
-    int opti = 0;
+	int o, opti = 0;
 	while ((o = getopt_long(argc, argv, sopt, lopt, &opti)) != -1) {
 		if (o == -1) break;
 		switch (o) {
-		case 't':
+		case 'c':
 			chdir(optarg);
 			break;
 		case 'v':
 			puts("woof!");
-			break;
+			exit(EXIT_SUCCESS);
 		case 'h':
-			puts("help?");
-			break;
+			printf(help);
+			exit(EXIT_SUCCESS);
 		default:
 			puts("unknown argument");
 			exit(1);
-			break;
 		}
 	}
 
@@ -63,10 +157,7 @@ int main(int argc, char* argv[])  {
 		optind += 1;
 	}
 
-	openlog(argv[0], LOG_PID, LOG_USER);
-	syslog(LOG_NOTICE, "%s started", argv[0]+2);
-
-	setlocale(LC_ALL, "UTF-8");
+	setlocale(LC_ALL, "");
 	initscr();
 	if (has_colors() == FALSE) {
 		endwin();
@@ -80,6 +171,7 @@ int main(int argc, char* argv[])  {
 	intrflush(stdscr, FALSE);
 	keypad(stdscr, TRUE);
 	curs_set(0);
+
 	init_pair(1, COLOR_WHITE, COLOR_BLACK);
 	init_pair(2, COLOR_BLACK, COLOR_WHITE);
 	init_pair(3, COLOR_CYAN, COLOR_BLACK);
@@ -89,133 +181,62 @@ int main(int argc, char* argv[])  {
 	init_pair(7, COLOR_YELLOW, COLOR_BLACK);
 	init_pair(8, COLOR_BLACK, COLOR_YELLOW);
 
+	openlog(argv[0], LOG_PID, LOG_USER);
+	syslog(LOG_NOTICE, "%s started", argv[0]+2);
+
 	struct file_view pp[2];
 	int scrh, scrw;
 	getmaxyx(stdscr, scrh, scrw);
 	file_view_pair_setup(pp, scrh, scrw);
-	struct file_view* primary_view = &pp[0];
-	struct file_view* secondary_view = &pp[1];
+	struct file_view* pv = &pp[0];
+	struct file_view* sv = &pp[1];
 
-	get_cwd(primary_view->wd);
-	get_cwd(secondary_view->wd);
-	scan_dir(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
-	scan_dir(secondary_view->wd, &secondary_view->file_list, &secondary_view->num_files);
-	file_view_redraw(primary_view);
-	file_view_redraw(secondary_view);
+	get_cwd(pv->wd);
+	get_cwd(sv->wd);
+	scan_dir(pv->wd, &pv->file_list, &pv->num_files);
+	scan_dir(sv->wd, &sv->file_list, &sv->num_files);
+	file_view_redraw(pv);
+	file_view_redraw(sv);
 
-	int ch, r;
-	char prevdir[NAME_MAX];
-	memset(prevdir, 0, sizeof(prevdir));
-	while ((ch = wgetch(panel_window(primary_view->pan))) != 'q') {
+	int ch;
+	while ((ch = wgetch(panel_window(pv->pan))) != 'q') {
 		switch (ch) {
 		case '\t':
-			{
-			struct file_view* tmp = primary_view;
-			primary_view = secondary_view;
-			secondary_view = tmp;
-			primary_view->focused = true;
-			secondary_view->focused = false;
-			file_view_redraw(secondary_view);
-			}
+			swap_views(&pv, &sv);
 			break;
 		case 'j':
-			if (primary_view->selection < primary_view->num_files-1) {
-				primary_view->selection += 1;
+			if (pv->selection < pv->num_files-1) {
+				pv->selection += 1;
 			}
 			break;
 		case 'k':
-			if (primary_view->selection > 0) {
-				primary_view->selection -= 1;
+			if (pv->selection > 0) {
+				pv->selection -= 1;
 			}
 			break;
 		case 'e':
 		case 'i':
-			if (primary_view->file_list[primary_view->selection]->t == DIRECTORY) {
-				enter_dir(primary_view->wd, primary_view->file_list[primary_view->selection]->file_name);
-				primary_view->selection = 0;
-				scan_dir(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
-			}
-			else if (primary_view->file_list[primary_view->selection]->t == LINK) {
-				enter_dir(primary_view->wd, primary_view->file_list[primary_view->selection]->link_path);
-				primary_view->selection = 0;
-				scan_dir(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
-			}
+			go_enter_dir(pv);
 			break;
 		case 'd':
 		case 'u':
-			/* Remember previous directory to later
-			 * move selection to that directory.
-			 */
-			current_dir(primary_view->wd, prevdir);
-			r = up_dir(primary_view->wd);
-			if (!r) {
-				scan_dir(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
-				primary_view->selection = file_index(primary_view->file_list, primary_view->num_files, prevdir);
-			}
+			go_up_dir(pv);
 			break;
 		case 'c':
-			{
-			char* src_name = primary_view->file_list[primary_view->selection]->file_name;
-			char src_path[PATH_MAX];
-			char dest_path[PATH_MAX];
-			strcpy(src_path, primary_view->wd);
-			strcpy(dest_path, secondary_view->wd);
-			enter_dir(src_path, src_name);
-			prompt("new name", sizeof dest_path, dest_path);
-			syslog(LOG_DEBUG, "copy %s -> %s", src_path, dest_path);
-			file_copy(src_path, dest_path);
-			scan_dir(secondary_view->wd, &secondary_view->file_list, &secondary_view->num_files);
-			file_view_redraw(secondary_view);
-			}
+			copy_file(pv, sv);
 			break;
 		case 'm':
-			{
-			char* src_name = primary_view->file_list[primary_view->selection]->file_name;
-			char src_path[PATH_MAX];
-			char dest_path[PATH_MAX];
-			strcpy(src_path, primary_view->wd);
-			strcpy(dest_path, secondary_view->wd);
-			enter_dir(src_path, src_name);
-			prompt("new name", sizeof dest_path, dest_path);
-			syslog(LOG_DEBUG, "move %s -> %s", src_path, dest_path);
-			file_move(src_path, dest_path);
-			scan_dir(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
-			scan_dir(secondary_view->wd, &secondary_view->file_list, &secondary_view->num_files);
-			file_view_redraw(primary_view);
-			file_view_redraw(secondary_view);
-			primary_view->selection = 0;
-			}
+			move_file(pv, sv);
 			break;
 		case 'r':
-			{
-			char* src_name = primary_view->file_list[primary_view->selection]->file_name;
-			char src_path[PATH_MAX];
-			strcpy(src_path, primary_view->wd);
-			enter_dir(src_path, src_name);
-			syslog(LOG_DEBUG, "remove %s", src_path);
-			file_remove(src_path);
-			scan_dir(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
-			file_view_redraw(primary_view);
-			primary_view->selection = 0;
-			}
+			remove_file(pv);
 			break;
 		case 'n':
-			{
-			char src_path[PATH_MAX];
-			strcpy(src_path, primary_view->wd);
-			strcat(src_path, "/");
-			char name[PATH_MAX] = "";
-			prompt("directory name", sizeof name, name);
-			strcat(src_path, name);
-			dir_make(src_path);
-			scan_dir(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
-			primary_view->selection = file_index(primary_view->file_list, primary_view->num_files, prevdir);
-			file_view_redraw(primary_view);
-			}
+			create_directory(pv);
 			break;
 		case 's':
-			scan_dir(primary_view->wd, &primary_view->file_list, &primary_view->num_files);
-			file_view_redraw(primary_view);
+			scan_dir(pv->wd, &pv->file_list, &pv->num_files);
+			file_view_redraw(pv);
 			break;
 		default:
 			break;
@@ -235,12 +256,12 @@ int main(int argc, char* argv[])  {
 			pp[1].position_x = scrw/2;
 			pp[1].position_y = 0;
 			file_view_pair_update_geometry(pp);
-			file_view_redraw(primary_view);
-			file_view_redraw(secondary_view);
+			file_view_redraw(pv);
+			file_view_redraw(sv);
 		}
 		// If screen size not changed, then only redraw active view.
 		else {
-			file_view_redraw(primary_view);
+			file_view_redraw(pv);
 		}
 		update_panels();
 		doupdate();

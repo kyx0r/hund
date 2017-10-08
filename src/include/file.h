@@ -39,6 +39,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+//#include <errno.h>
 #include <syslog.h>
 
 #include "path.h"
@@ -61,7 +62,7 @@ struct file_record {
 	char* link_path;
 };
 
-void scan_dir(char*, struct file_record***, int*);
+void scan_dir(const char*, struct file_record***, int*);
 void delete_file_list(struct file_record***, int);
 int file_index(struct file_record**, int, const char*);
 
