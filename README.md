@@ -1,4 +1,28 @@
-hund
-===
-A terminal file manager
-More info later...
+# Hund
+A terminal file manager.
+#### Goals
+I want to learn new things. If you find Hund useful, it's a huge plus.
+#### Current features
+- Resize window
+- File type recognition (indicated by color and symbol)
+- Follow symlinks
+- Move/remove/copy single file
+- Create/move directory
+#### UI
+Hund uses dual-panel view just like GNU Midnight Commander does. And it uses ncurses too.
+#### Be careful
+Hund is very young at the moment and it can mess your files up if you trust it too much.
+#### Commands
+- `j` entry down
+- `k` entry up
+- `u` or `d` up directory
+- `i` or `e` enter directory
+- `c` copy highlighted file from active view to the other view
+- `m` move highlighted file from active view to the other view
+- `r` remove highlighted file
+- `s` rescan and refresh active view
+- `n` create directory
+- `TAB` change active view
+- `q` exit
+#### Name
+_Hund_ is a german word for _dog_.
