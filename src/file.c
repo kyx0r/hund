@@ -81,6 +81,18 @@ void delete_file_list(struct file_record*** file_list, int num_files) {
 	free(*file_list);
 }
 
+/* Finds file with given name and returns it's position in file_list
+ * If not found, returns -1;
+ */
+int file_index(struct file_record** fl, int nf, const char* name) {
+	for (int i = 0; i < nf; i++) {
+		if (strcmp(fl[i]->file_name, name) == 0) {
+			return i;
+		}
+	}
+	return -1;
+}
+
 int file_move(const char* src, const char* dest) {
 	return rename(src, dest);
 }
@@ -119,4 +131,8 @@ int file_copy(const char* src, const char* dest) {
 	fclose(input_file);
 	free(buffer);
 	return 0;
+}
+
+int dir_make(const char* src) {
+	return mkdir(src, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 }
