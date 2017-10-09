@@ -19,6 +19,20 @@
 
 #include "include/file.h"
 
+static int file_filter(const struct dirent* d) {
+	// Skip . and ..
+	// Don't need them
+	// I'm avoiding strcmp. It would probably be slower.
+	return !((d->d_name[0] == '.' && d->d_name[1] == 0) || (d->d_name[0] == '.' && d->d_name[1] == '.' && d->d_name[2] == 0));
+}
+
+static int file_sort(const struct dirent** a, const struct dirent** b) {
+	// Directories first, then other files
+	if ((*a)->d_type == DT_DIR && (*b)->d_type != DT_DIR) return -1;
+	else if ((*b)->d_type == DT_DIR && (*a)->d_type != DT_DIR) return 1;
+	else return strcmp((*a)->d_name, (*b)->d_name);
+}
+
 /* Cleans up old data and scans working directory,
  * putting data into variables passed in arguments.
  */
@@ -35,7 +49,7 @@ void scan_dir(const char* wd, struct file_record*** file_list, int* num_files) {
 	}
 	struct dirent** namelist;
 	DIR* dir = opendir(wd);
-	*num_files = scandir(wd, &namelist, NULL, alphasort);
+	*num_files = scandir(wd, &namelist, file_filter, file_sort);
 	closedir(dir);
 	*file_list = malloc(sizeof(struct file_record*) * (*num_files));
 	char* path = malloc(PATH_MAX);
