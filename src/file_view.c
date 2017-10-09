@@ -101,8 +101,16 @@ void file_view_redraw(struct file_view* fv) {
 	}
 	WINDOW* w = panel_window(fv->pan);
 	wborder(w, '|', '|', '-', '-', '+', '+', '+', '+');
-	mvwprintw(w, 0, 2, "%s", fv->wd);
+	struct passwd* pw = get_pwd();
+	char* pretty = malloc(PATH_MAX);
+	strcpy(pretty, fv->wd);
+	prettify_path(pretty, pw->pw_dir);
+	wattron(w, COLOR_PAIR(4));
+	mvwprintw(w, 0, 2, "%s", pretty);
+	wattroff(w, COLOR_PAIR(4));
+	free(pretty);
 	// First, adjust view_offset to selection
+	// (Keep selection in center if possible)
 	if (fv->num_files <= fv->height - 1) {
 		fv->view_offset = 0;
 	}
