@@ -119,11 +119,51 @@ static void go_enter_dir(struct file_view* v) {
 	}
 }
 
+enum command {
+	NONE = 0,
+	QUIT,
+	COPY,
+	MOVE,
+	REMOVE,
+	SWITCH_PANEL,
+	UP_DIR,
+	ENTER_DIR,
+	REFRESH,
+	ENTRY_UP,
+	ENTRY_DOWN,
+	CREATE_DIR,
+};
+
 static char* help = "Usage: hund [OPTION]...\n"
 "Options:\n"
 "  -c, --chdir\t\tchange initial directory\n"
 "  -v, --verbose\t\tbe verbose\n"
 "  -h, --help\t\tdisplay this help message\n";
+
+#define MAX_KEYSEQ_LENGTH 4
+
+struct key2cmd {
+	int ks[MAX_KEYSEQ_LENGTH]; // Key Sequence
+	enum command c;
+};
+
+/* Such table is cool since it's easy to change with a config */
+static struct key2cmd key_mapping[] = {
+	{ .ks = { 'q', 'q', 0, 0 }, .c = QUIT  },
+	{ .ks = { 'j', 0, 0, 0 }, .c = ENTRY_DOWN },
+	{ .ks = { 'k', 0, 0, 0 }, .c = ENTRY_UP },
+	{ .ks = { 'c', 'p', 0, 0 }, .c = COPY },
+	{ .ks = { 'r', 'm', 0, 0 }, .c = REMOVE },
+	{ .ks = { 'm', 'v', 0, 0 }, .c = MOVE },
+	{ .ks = { '\t', 0, 0, 0 }, .c = SWITCH_PANEL },
+	{ .ks = { 'r', 'r', 0, 0 }, .c = REFRESH },
+	{ .ks = { 'm', 'k', 0, 0 }, .c = CREATE_DIR },
+	{ .ks = { 'u', 0, 0, 0 }, .c = UP_DIR },
+	{ .ks = { 'd', 0, 0, 0 }, .c = UP_DIR },
+	{ .ks = { 'i', 0, 0, 0 }, .c = ENTER_DIR },
+	{ .ks = { 'e', 0, 0, 0 }, .c = ENTER_DIR },
+	{ .ks = { 0, 0, 0, 0 }, .c = NONE }, // NULL-terminator
+};
 
 int main(int argc, char* argv[])  {
 	static char sopt[] = "vhc:";
@@ -198,50 +238,92 @@ int main(int argc, char* argv[])  {
 	file_view_redraw(pv);
 	file_view_redraw(sv);
 
-	int ch;
-	while ((ch = wgetch(panel_window(pv->pan))) != 'q') {
-		switch (ch) {
-		case '\t':
+	int keyseq[MAX_KEYSEQ_LENGTH]; // Key Sequence
+	int ksi = 0; // Key Sequence Index (keyseq is basically a tiny stack)
+	memset(keyseq, 0, sizeof(keyseq));
+	enum command cmd = NONE;
+	bool run = true;
+
+	while (run) {
+		int c = wgetch(panel_window(pv->pan));
+		syslog(LOG_DEBUG, "getch = %d, ksi = %d", c, ksi);
+		if (c != -1) {
+			if (c == 27) {
+				memset(keyseq, 0, sizeof(keyseq));
+				ksi = 0;
+			}
+			else {
+				keyseq[ksi] = c;
+				ksi += 1;
+			}
+		}
+
+		/* left side of &&: key_mapping is NULL-terminated
+		 * right side of &&: if no command is gathered then don't check
+		 * Also, after cleaning keyseq[] and setting ksi to 0, loop automatically stops
+		 */
+		int kmi = 0; // Key Mapping Index (i'm looping through key_mapping)
+		while (key_mapping[kmi].ks[0] != 0 && ksi != 0) {
+			if (memcmp(key_mapping[kmi].ks, keyseq, sizeof(int)*MAX_KEYSEQ_LENGTH) == 0) {
+				cmd = key_mapping[kmi].c;
+				memset(keyseq, 0, sizeof(keyseq));
+				ksi = 0;
+			}
+			kmi += 1;
+		}
+
+		switch (cmd) {
+		case QUIT:
+			run = false;
+			break;
+		case SWITCH_PANEL:
 			swap_views(&pv, &sv);
 			break;
-		case 'j':
+		case ENTRY_DOWN:
 			if (pv->selection < pv->num_files-1) {
 				pv->selection += 1;
 			}
 			break;
-		case 'k':
+		case ENTRY_UP:
 			if (pv->selection > 0) {
 				pv->selection -= 1;
 			}
 			break;
-		case 'e':
-		case 'i':
+		case ENTER_DIR:
 			go_enter_dir(pv);
 			break;
-		case 'd':
-		case 'u':
+		case UP_DIR:
 			go_up_dir(pv);
 			break;
-		case 'c':
+		case COPY:
 			copy_file(pv, sv);
 			break;
-		case 'm':
+		case MOVE:
 			move_file(pv, sv);
 			break;
-		case 'r':
+		case REMOVE:
 			remove_file(pv);
 			break;
-		case 'n':
+		case CREATE_DIR:
 			create_directory(pv);
 			break;
-		case 's':
+		case REFRESH:
 			scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 			file_view_redraw(pv);
 			break;
-		default:
-			break;
+		}
+		cmd = NONE;
+
+		/* If keyseq is full and no command is found for current key sequence
+		 * then there is no command coresponding to that key sequence
+		 * TODO It should be detected earlier (but that's enough for now)
+		 */
+		if (ksi == MAX_KEYSEQ_LENGTH) {
+			memset(keyseq, 0, sizeof(keyseq));
+			ksi = 0;
 		}
 
+		// Check if screen size changed and resize panels if yes
 		int new_scrh, new_scrw;
 		getmaxyx(stdscr, new_scrh, new_scrw);
 		if (new_scrh != scrh || new_scrw != scrw) {
@@ -263,6 +345,7 @@ int main(int argc, char* argv[])  {
 		else {
 			file_view_redraw(pv);
 		}
+		// TODO read manuals to find out whether I need them all
 		update_panels();
 		doupdate();
 		refresh();
