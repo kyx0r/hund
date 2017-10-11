@@ -53,9 +53,7 @@ int enter_dir(char path[PATH_MAX], char dir[PATH_MAX]) {
 	char* save_ptr = NULL;
 	char* entry = strtok_r(dir, "/", &save_ptr);
 	while (entry != NULL) {
-		if (strcmp(entry, ".") == 0) {
-			goto next_entry;
-		}
+		if (strcmp(entry, ".") == 0); // Do nothing; Skip the conditional block
 		else if (strcmp(entry, "..") == 0) {
 			char* p = path + strlen(path);
 			// At this point path never ends with /
@@ -81,7 +79,6 @@ int enter_dir(char path[PATH_MAX], char dir[PATH_MAX]) {
 				return -1;
 			}
 		}
-		next_entry:
 		entry = strtok_r(NULL, "/", &save_ptr);
 	}
 	return 0;
