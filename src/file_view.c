@@ -50,6 +50,7 @@ void file_view_pair_setup(struct file_view fvp[2], int scrh, int scrw) {
 
 	for (int i = 0; i < 2; i++) {
 		WINDOW* tmpwin = newwin(fvp[i].height, fvp[i].width, fvp[i].position_y, fvp[i].position_x);
+		keypad(tmpwin, TRUE);
 		wtimeout(tmpwin, 100);
 		wborder(tmpwin, '|', '|', '-', '-', '+', '+', '+', '+');
 		fvp[i].pan = new_panel(tmpwin);
