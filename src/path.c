@@ -52,9 +52,9 @@ int enter_dir(char path[PATH_MAX], char dir[PATH_MAX]) {
 	}
 	char* save_ptr = NULL;
 	char* entry = strtok_r(dir, "/", &save_ptr);
-	while (entry != NULL) {
-		if (strcmp(entry, ".") == 0); // Do nothing; Skip the conditional block
-		else if (strcmp(entry, "..") == 0) {
+	while (entry) {
+		if (!strcmp(entry, ".")); // Do nothing; Skip the conditional block
+		else if (!strcmp(entry, "..")) {
 			char* p = path + strlen(path);
 			// At this point path never ends with /
 			// p points null pointer
@@ -68,7 +68,7 @@ int enter_dir(char path[PATH_MAX], char dir[PATH_MAX]) {
 		}
 		else {
 			// Check if PATH_MAX is respected
-			if (strlen(path) + strlen(entry) < PATH_MAX) {
+			if ((strlen(path) + strlen(entry)) < PATH_MAX) {
 				if (path[0] == '/' && strlen(path) > 1) {
 					// dont prepend / in root directory
 					strcat(path, "/");
@@ -90,14 +90,14 @@ int enter_dir(char path[PATH_MAX], char dir[PATH_MAX]) {
  * -1 if path == '/'
  */
 int up_dir(char path[PATH_MAX]) {
-	if (strcmp(path, "/") == 0) return -1;
+	if (!strcmp(path, "/")) return -1;
 	int i;
 	for (i = strlen(path); i > 0 && path[i] != '/'; i--) {
 		path[i] = 0;
 	}
 	// At this point i points that last '/'
 	// But if it's root, don't delete it
-	if (i != 0) {
+	if (i) {
 		path[i] = 0;
 	}
 	return 0;
@@ -112,7 +112,7 @@ int up_dir(char path[PATH_MAX]) {
 int prettify_path(char path[PATH_MAX], char home[PATH_MAX]) {
 	const int hlen = strlen(home);
 	const int plen = strlen(path);
-	if (memcmp(path, home, hlen) == 0) {
+	if (!memcmp(path, home, hlen)) {
 		path[0] = '~';
 		memmove(path+1, path+hlen, plen-hlen+1);
 		return 0;
@@ -122,18 +122,15 @@ int prettify_path(char path[PATH_MAX], char home[PATH_MAX]) {
 
 void current_dir(char path[PATH_MAX], char dir[NAME_MAX]) {
 	const int plen = strlen(path);
-	int lastslash = 0;
-	for (int i = plen-1; i >= 0; i--) {
-		if (path[i] == '/') {
-			lastslash = i;
-			break;
-		}
+	int i = plen-1; // i will point last slash in path
+	while (path[i] != '/' && i >= 0) {
+		i--;
 	}
-	if (lastslash == 0 && plen == 1) {
+	if (!i && plen == 1) {
 		memcpy(dir, "/", 2);
 		return;
 	}
-	memcpy(dir, path+lastslash+1, strlen(path+lastslash));
+	memcpy(dir, path+i+1, strlen(path+i));
 }
 
 bool path_is_relative(char path[PATH_MAX]) {
