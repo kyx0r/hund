@@ -37,7 +37,7 @@ static int file_sort(const struct dirent** a, const struct dirent** b) {
  * putting data into variables passed in arguments.
  */
 void scan_dir(const char* wd, struct file_record*** file_list, int* num_files) {
-	if (*num_files != 0) {
+	if (*num_files) {
 		for (int i = 0; i < *num_files; i++) {
 			free((*file_list)[i]->file_name);
 			free((*file_list)[i]->link_path);
@@ -60,27 +60,34 @@ void scan_dir(const char* wd, struct file_record*** file_list, int* num_files) {
 		const size_t name_len = strlen(namelist[i]->d_name);
 		(*file_list)[i] = malloc(sizeof(struct file_record));
 		struct file_record* const fr = (*file_list)[i];
-		fr->file_name = malloc(name_len+1); // +1 because cstring
+		fr->file_name = strdup(namelist[i]->d_name);
 		fr->link_path = NULL;
-		memcpy(fr->file_name, namelist[i]->d_name, name_len+1);
-		lstat(path, &fr->s);
-		switch (fr->s.st_mode & S_IFMT) {
-		case S_IFBLK: fr->t = BLOCK; break;
-		case S_IFCHR: fr->t = CHARACTER; break;
-		case S_IFDIR: fr->t = DIRECTORY; break;
-		case S_IFIFO: fr->t = FIFO; break;
-		case S_IFLNK: fr->t = LINK; break;
-		case S_IFREG: fr->t = REGULAR; break;
-		case S_IFSOCK: fr->t = SOCKET; break;
-		default: fr->t = UNKNOWN; break;
+		if (!lstat(path, &fr->s)) {
+			switch (fr->s.st_mode & S_IFMT) {
+			case S_IFBLK: fr->t = BLOCK; break;
+			case S_IFCHR: fr->t = CHARACTER; break;
+			case S_IFDIR: fr->t = DIRECTORY; break;
+			case S_IFIFO: fr->t = FIFO; break;
+			case S_IFLNK: fr->t = LINK; break;
+			case S_IFREG: fr->t = REGULAR; break;
+			case S_IFSOCK: fr->t = SOCKET; break;
+			default: fr->t = UNKNOWN; break;
+			}
+			if (S_ISLNK(fr->s.st_mode)) {
+				// Readlink does not append NULL terminator,
+				// but it returns the length of copied path
+				const int lp_len = readlink(path, link_path, PATH_MAX);
+				fr->link_path = malloc(lp_len+1);
+				memcpy(fr->link_path, link_path, lp_len+1);
+				fr->link_path[lp_len] = 0; // NULL terminator
+			}
 		}
-		if (S_ISLNK(fr->s.st_mode)) {
-			memset(link_path, 0, PATH_MAX);
-			readlink(path, link_path, PATH_MAX);
-			const size_t lp_len = strlen(link_path)+1;
-			fr->link_path = malloc(lp_len);
-			memcpy(fr->link_path, link_path, lp_len);
+		else {
+			syslog(LOG_ERR, "lstat(\"%s\"), called in scan_dir() failed", path);
+			fr->t = UNKNOWN;
+			continue;
 		}
+		// I'm keeping d_name, don't need the rest
 		free(namelist[i]);
 	}
 	free(link_path);
@@ -100,12 +107,11 @@ void delete_file_list(struct file_record*** file_list, int num_files) {
  * If not found, returns -1;
  */
 int file_index(struct file_record** fl, int nf, const char* name) {
-	for (int i = 0; i < nf; i++) {
-		if (strcmp(fl[i]->file_name, name) == 0) {
-			return i;
-		}
+	int i = 0;
+	while (i < nf && strcmp(fl[i]->file_name, name)) {
+		i += 1;
 	}
-	return -1;
+	return (i != nf) ? i : -1;
 }
 
 int file_move(const char* src, const char* dest) {
@@ -115,10 +121,9 @@ int file_move(const char* src, const char* dest) {
 int file_remove(const char* src) {
 	syslog(LOG_DEBUG, "file_remove(\"%s\")", src);
 	struct stat s;
-	int r = lstat(src, &s); 
-	if (r == -1) {
-		perror("lstat failed");
-		abort();
+	if (lstat(src, &s)) {
+		syslog(LOG_ERR, "lstat failed");
+		return errno;
 	}
 	if ((s.st_mode & S_IFMT) == S_IFDIR) {
 		struct file_record** fl = NULL;
@@ -129,32 +134,48 @@ int file_remove(const char* src) {
 		for (int i = 2; i < fn; i++) {
 			strcpy(path, src);
 			enter_dir(path, fl[i]->file_name);
-			file_remove(path);
+			if (file_remove(path)) {
+				syslog(LOG_ERR, "recursive call of file_remove(\"%s\") failed", path);
+			}
 		}
 		delete_file_list(&fl, fn);
 		free(path);
-		r = rmdir(src);
+		return rmdir(src);
 	}
 	else {
-		r = unlink(src);
+		return unlink(src);
 	}
-	return r;
 }
 
 int file_copy(const char* src, const char* dest) {
 	FILE* input_file = fopen(src, "rb");
+	if (!input_file) {
+		return -1;
+	}
 	FILE* output_file = fopen(dest, "wb");
+	if (!output_file) {
+		fclose(input_file);
+		return -1;
+	}
 	const size_t buffer_size = 4096;
 	char* buffer = malloc(buffer_size);
-	int rr, wr;
-	int acc = 0;
+	int rr, wr, acc = 0;
 	while ((rr = fread(buffer, 1, buffer_size, input_file)) != 0) {
 		wr = fwrite(buffer, 1, rr, output_file);
+		if (ferror(output_file)) {
+			syslog(LOG_ERR, "file error");
+			// An error occured
+			// TODO handle
+		}
 		acc += wr;
-		syslog(LOG_DEBUG, "copied %d bytes", acc);
 		if (wr != rr) {
 			syslog(LOG_DEBUG, "something weird");
 		}
+	}
+	if (!feof(input_file) || ferror(input_file)) {
+		syslog(LOG_ERR, "file error");
+		// An error occured
+		// TODO handle
 	}
 	fclose(output_file);
 	fclose(input_file);
