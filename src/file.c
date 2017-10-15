@@ -57,7 +57,6 @@ void scan_dir(const char* wd, struct file_record*** file_list, int* num_files) {
 	for (int i = 0; i < (*num_files); i++) {
 		strcpy(path, wd);
 		enter_dir(path, namelist[i]->d_name);
-		const size_t name_len = strlen(namelist[i]->d_name);
 		(*file_list)[i] = malloc(sizeof(struct file_record));
 		struct file_record* const fr = (*file_list)[i];
 		fr->file_name = strdup(namelist[i]->d_name);
