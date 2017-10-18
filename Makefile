@@ -7,22 +7,24 @@ OBJDIR = obj
 OBJ = main.o file_view.o path.o file.o prompt.o
 EXENAME = hund
 TESTEXENAME = test/testme
+TESTSCRIPTNAME = test/test.sh
 
 all : $(EXENAME)
 
 $(EXENAME) : $(addprefix $(OBJDIR)/, $(OBJ))
 	$(LD) $(LIBS) $^ -o $(EXENAME) 
 
-$(OBJDIR)/main.o : src/main.c src/include/file_view.h | $(OBJDIR)
+$(OBJDIR)/main.o : src/main.c src/include/file_view.h src/include/prompt.h | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(OBJDIR)/file_view.o : src/file_view.c src/include/file_view.h src/include/file.h | $(OBJDIR)
+$(OBJDIR)/file_view.o : src/file_view.c src/include/file_view.h \
+	src/include/file.h src/include/path.h | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJDIR)/path.o : src/path.c src/include/path.h | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(OBJDIR)/file.o : src/file.c src/include/file.h | $(OBJDIR)
+$(OBJDIR)/file.o : src/file.c src/include/file.h src/include/path.h | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJDIR)/prompt.o : src/prompt.c src/include/prompt.h | $(OBJDIR)
@@ -35,7 +37,7 @@ $(OBJDIR)/test.o : test/test.c | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $^ -o $@
 
 test : $(OBJDIR)/test.o $(addprefix $(OBJDIR)/, $(subst main.o,,$(OBJ)))
-	$(CC) $(LIBS) -o $(TESTEXENAME) $^ && ./$(TESTEXENAME)
+	$(CC) $(LIBS) -o $(TESTEXENAME) $^ && ./$(TESTEXENAME) && make $(EXENAME) && ./$(TESTSCRIPTNAME)
 
 .PHONY : clean test
 clean :
