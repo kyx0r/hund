@@ -37,7 +37,7 @@ struct passwd* get_pwd(void);
 int enter_dir(char [PATH_MAX], char [PATH_MAX]);
 int up_dir(char [PATH_MAX]);
 int prettify_path(char [PATH_MAX], char [PATH_MAX]);
-void current_dir(char [PATH_MAX], char [NAME_MAX]);
+void current_dir(const char [PATH_MAX], char [NAME_MAX]);
 bool path_is_relative(char [PATH_MAX]);
 
 #endif

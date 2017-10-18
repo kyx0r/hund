@@ -120,7 +120,8 @@ int prettify_path(char path[PATH_MAX], char home[PATH_MAX]) {
 	return -1;
 }
 
-void current_dir(char path[PATH_MAX], char dir[NAME_MAX]) {
+// Places current directory in dir[]
+void current_dir(const char path[PATH_MAX], char dir[NAME_MAX]) {
 	const int plen = strlen(path);
 	int i = plen-1; // i will point last slash in path
 	while (path[i] != '/' && i >= 0) {
