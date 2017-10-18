@@ -67,13 +67,18 @@ static void remove_file(struct file_view* v) {
 static void move_file(struct file_view* pv, struct file_view* sv) {
 	char* src_path = malloc(PATH_MAX);
 	char* dest_path = malloc(PATH_MAX);
+	char* name = malloc(NAME_MAX);
+	name[0] = 0;
 	strcpy(src_path, pv->wd);
 	strcpy(dest_path, sv->wd);
 	enter_dir(src_path, pv->file_list[pv->selection]->file_name);
-	prompt("new name", PATH_MAX, dest_path);
-	file_move(src_path, dest_path);
+	prompt("new name", NAME_MAX, name);
+	enter_dir(dest_path, name);
+	int fmr = file_move(src_path, dest_path);
+	syslog(LOG_DEBUG, "file_move() returned %d", fmr);
 	free(src_path);
 	free(dest_path);
+	free(name);
 	scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 	scan_dir(sv->wd, &sv->file_list, &sv->num_files);
 	pv->selection = 0;
@@ -84,13 +89,18 @@ static void move_file(struct file_view* pv, struct file_view* sv) {
 static void copy_file(struct file_view* pv, struct file_view* sv) {
 	char* src_path = malloc(PATH_MAX);
 	char* dest_path = malloc(PATH_MAX);
+	char* name = malloc(NAME_MAX);
+	name[0] = 0;
 	strcpy(src_path, pv->wd);
 	strcpy(dest_path, sv->wd);
 	enter_dir(src_path, pv->file_list[pv->selection]->file_name);
-	prompt("copy name", PATH_MAX, dest_path);
-	file_copy(src_path, dest_path);
+	prompt("copy name", NAME_MAX, name);
+	enter_dir(dest_path, name);
+	int fcr = file_copy(src_path, dest_path);
+	syslog(LOG_DEBUG, "file_copy() returned %d", fcr);
 	free(src_path);
 	free(dest_path);
+	free(name);
 	scan_dir(sv->wd, &sv->file_list, &sv->num_files);
 	file_view_redraw(sv);
 }
@@ -358,11 +368,12 @@ int main(int argc, char* argv[])  {
 			scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 			file_view_redraw(pv);
 			break;
+		case NONE:
+			break;
 		}
 
 		/* If keyseq is full and no command is found for current key sequence
 		 * then there is no command coresponding to that key sequence
-		 * TODO It should be detected earlier (but that's enough for now)
 		 */
 		if (!match || ksi == MAX_KEYSEQ_LENGTH || cmd != NONE) {
 			cmd = NONE;
@@ -399,7 +410,7 @@ int main(int argc, char* argv[])  {
 	}
 
 	for (int i = 0; i < 2; i++) {
-		delete_file_list(&pp[i].file_list, pp[i].num_files);
+		delete_file_list(&pp[i].file_list, &pp[i].num_files);
 	}
 	syslog(LOG_DEBUG, "exit");
 	closelog();
