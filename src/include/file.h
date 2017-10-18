@@ -63,7 +63,7 @@ struct file_record {
 };
 
 void scan_dir(const char*, struct file_record***, int*);
-void delete_file_list(struct file_record***, int);
+void delete_file_list(struct file_record***, int*);
 int file_index(struct file_record**, int, const char*);
 
 int file_move(const char*, const char*);

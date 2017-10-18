@@ -37,16 +37,7 @@ static int file_sort(const struct dirent** a, const struct dirent** b) {
  * putting data into variables passed in arguments.
  */
 void scan_dir(const char* wd, struct file_record*** file_list, int* num_files) {
-	if (*num_files) {
-		for (int i = 0; i < *num_files; i++) {
-			free((*file_list)[i]->file_name);
-			free((*file_list)[i]->link_path);
-			free((*file_list)[i]);
-		}
-		free(*file_list);
-		*file_list = NULL;
-		*num_files = 0;
-	}
+	delete_file_list(file_list, num_files);
 	struct dirent** namelist;
 	DIR* dir = opendir(wd);
 	*num_files = scandir(wd, &namelist, file_filter, file_sort);
@@ -94,12 +85,17 @@ void scan_dir(const char* wd, struct file_record*** file_list, int* num_files) {
 	free(namelist);
 }
 
-void delete_file_list(struct file_record*** file_list, int num_files) {
-	for (int i = 0; i < num_files; i++) {
-		free((*file_list)[i]->file_name);
-		free((*file_list)[i]);
+void delete_file_list(struct file_record*** file_list, int* num_files) {
+	if (*num_files) {
+		for (int i = 0; i < *num_files; i++) {
+			free((*file_list)[i]->file_name);
+			free((*file_list)[i]->link_path);
+			free((*file_list)[i]);
+		}
+		free(*file_list);
+		*file_list = NULL;
+		*num_files = 0;
 	}
-	free(*file_list);
 }
 
 /* Finds file with given name and returns it's position in file_list
@@ -114,7 +110,34 @@ int file_index(struct file_record** fl, int nf, const char* name) {
 }
 
 int file_move(const char* src, const char* dest) {
-	return rename(src, dest);
+	// Split dest[] to name[] and dest_dir[]
+	// to check if destination and source are on the same filesystem
+	// In case they are on the same FS,
+	// then it's just one library function to call: rename()
+	char* name = malloc(NAME_MAX);
+	current_dir(dest, name);
+	char* dest_dir = strdup(dest);
+	up_dir(dest_dir);
+
+	struct stat src_stat, dest_stat;
+	int sse, dse; // Source Stat Error, Destination Stat Error
+	if ((sse = lstat(src, &src_stat)) || (dse = lstat(dest_dir, &dest_stat))) {
+		int e = errno;
+		syslog(LOG_ERR, "stat chain failed for %s (%d) or %s (%d), errno: %d", src, sse, dest_dir, dse, e);
+		return e;
+	}
+	syslog(LOG_DEBUG, "src %s %ld, dest %s %ld", src, src_stat.st_dev, dest, dest_stat.st_dev);
+	int r;
+	if (src_stat.st_dev == dest_stat.st_dev) {
+		// Within single filesystem, moving is easy
+		r = rename(src, dest);
+	}
+	else {
+		// TODO
+	}
+	free(name);
+	free(dest_dir);
+	return r;
 }
 
 int file_remove(const char* src) {
@@ -129,15 +152,16 @@ int file_remove(const char* src) {
 		int fn = 0;
 		scan_dir(src, &fl, &fn);
 		char* path = malloc(PATH_MAX);
-		// 2 -> skip . and ..
-		for (int i = 2; i < fn; i++) {
+		for (int i = 0; i < fn; i++) {
 			strcpy(path, src);
 			enter_dir(path, fl[i]->file_name);
-			if (file_remove(path)) {
-				syslog(LOG_ERR, "recursive call of file_remove(\"%s\") failed", path);
+			int r;
+			if ((r = file_remove(path))) {
+				syslog(LOG_ERR, "recursive call of file_remove(\"%s\") failed, returning %d", path, r);
+				return r;
 			}
 		}
-		delete_file_list(&fl, fn);
+		delete_file_list(&fl, &fn);
 		free(path);
 		return rmdir(src);
 	}
