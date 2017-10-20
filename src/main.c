@@ -17,26 +17,14 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <locale.h>
 #include <getopt.h>
 #include <string.h>
 #include <syslog.h>
 
-#include "include/file_view.h"
-#include "include/prompt.h"
-
-static void swap_views(struct file_view** pv, struct file_view** sv) {
-	struct file_view* tmp = *pv;
-	*pv = *sv;
-	*sv = tmp;
-	(*pv)->focused = true;
-	(*sv)->focused = false;
-	file_view_redraw(*sv);
-}
+#include "include/ui.h"
 
 static void create_directory(struct file_view* v) {
 	char* path = malloc(PATH_MAX);
@@ -50,7 +38,6 @@ static void create_directory(struct file_view* v) {
 	v->selection = file_index(v->file_list, v->num_files, name);
 	free(path);
 	free(name);
-	file_view_redraw(v);
 }
 
 static void remove_file(struct file_view* v) {
@@ -61,7 +48,6 @@ static void remove_file(struct file_view* v) {
 	free(path);
 	scan_dir(v->wd, &v->file_list, &v->num_files);
 	v->selection -= 1;
-	file_view_redraw(v);
 }
 
 static void move_file(struct file_view* pv, struct file_view* sv) {
@@ -82,8 +68,6 @@ static void move_file(struct file_view* pv, struct file_view* sv) {
 	scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 	scan_dir(sv->wd, &sv->file_list, &sv->num_files);
 	pv->selection = 0;
-	file_view_redraw(pv);
-	file_view_redraw(sv);
 }
 
 static void copy_file(struct file_view* pv, struct file_view* sv) {
@@ -102,7 +86,6 @@ static void copy_file(struct file_view* pv, struct file_view* sv) {
 	free(dest_path);
 	free(name);
 	scan_dir(sv->wd, &sv->file_list, &sv->num_files);
-	file_view_redraw(sv);
 }
 
 static void go_up_dir(struct file_view* v) {
@@ -211,52 +194,18 @@ int main(int argc, char* argv[])  {
 		optind += 1;
 	}
 
-	setlocale(LC_ALL, "");
-	initscr();
-	if (has_colors() == FALSE) {
-		endwin();
-		printf("no colors :(\n");
-		exit(1);
-	}
-	start_color();
-	noecho();
-	//nonl();
-	//raw();
-	intrflush(stdscr, FALSE);
-	keypad(stdscr, TRUE);
-	curs_set(0);
-
-	init_pair(1, COLOR_WHITE, COLOR_BLACK);
-	init_pair(2, COLOR_BLACK, COLOR_WHITE);
-	init_pair(3, COLOR_CYAN, COLOR_BLACK);
-	init_pair(4, COLOR_BLACK, COLOR_CYAN);
-	init_pair(5, COLOR_RED, COLOR_BLACK);
-	init_pair(6, COLOR_BLACK, COLOR_RED);
-	init_pair(7, COLOR_YELLOW, COLOR_BLACK);
-	init_pair(8, COLOR_BLACK, COLOR_YELLOW);
-
 	openlog(argv[0], LOG_PID, LOG_USER);
 	syslog(LOG_NOTICE, "%s started", argv[0]+2);
-
-	struct file_view pp[2];
-	int scrh, scrw;
-	getmaxyx(stdscr, scrh, scrw);
-	file_view_pair_setup(pp, scrh, scrw);
-	struct file_view* pv = &pp[0];
-	struct file_view* sv = &pp[1];
-
-//	WINDOW* hintwin = newwin(1, scrw, 0, 0);
-//	PANEL* hintpan = new_panel(hintwin);
-//	move_panel(hintpan, scrh-1, 0);
-//	mvwprintw(hintwin, 0, 1, "hello");
-//	wrefresh(hintwin);
+	
+	struct ui i;
+	ui_init(&i);
+	struct file_view* pv = &i.fvs[0];
+	struct file_view* sv = &i.fvs[1];
 
 	get_cwd(pv->wd);
 	get_cwd(sv->wd);
 	scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 	scan_dir(sv->wd, &sv->file_list, &sv->num_files);
-	file_view_redraw(pv);
-	file_view_redraw(sv);
 
 	int keyseq[MAX_KEYSEQ_LENGTH]; // Key Sequence
 	int ksi = 0; // Key Sequence Index (keyseq is basically a tiny stack)
@@ -265,7 +214,7 @@ int main(int argc, char* argv[])  {
 	bool run = true;
 
 	while (run) {
-		int c = wgetch(panel_window(pv->pan));
+		int c = wgetch(panel_window(i.fvp[i.active_view]));
 		if (c != -1) {
 			// 27 = ESCAPE KEY
 			if (c == 27) {
@@ -307,16 +256,6 @@ int main(int argc, char* argv[])  {
 			match = match || mks[c];
 		}
 
-//		wmove(hintwin, 0, 0);
-//		if (match) {
-//			for (int c = 0; c < kml; c++) {
-//				if (mks[c]) {
-//					wprintw(hintwin, "%s, ", key_mapping[c].d);
-//				}
-//			}
-//		}
-//		wprintw(hintwin, "%*c", 10, ' ');
-
 		if (match) {
 			for (int c = 0; c < kml; c++) {
 				int ksl = 0;
@@ -334,7 +273,10 @@ int main(int argc, char* argv[])  {
 			run = false;
 			break;
 		case SWITCH_PANEL:
-			swap_views(&pv, &sv);
+			sv = &i.fvs[i.active_view];
+			i.active_view += 1;
+			i.active_view %= 2;
+			pv = &i.fvs[i.active_view];
 			break;
 		case ENTRY_DOWN:
 			if (pv->selection < pv->num_files-1) {
@@ -366,7 +308,6 @@ int main(int argc, char* argv[])  {
 			break;
 		case REFRESH:
 			scan_dir(pv->wd, &pv->file_list, &pv->num_files);
-			file_view_redraw(pv);
 			break;
 		case NONE:
 			break;
@@ -381,40 +322,11 @@ int main(int argc, char* argv[])  {
 			ksi = 0;
 		}
 
-		// Check if screen size changed and resize panels if yes
-		int new_scrh, new_scrw;
-		getmaxyx(stdscr, new_scrh, new_scrw);
-		if (new_scrh != scrh || new_scrw != scrw) {
-			scrh = new_scrh;
-			scrw = new_scrw;
-			pp[0].width = scrw/2;
-			pp[0].height = scrh;
-			pp[0].position_x = 0;
-			pp[0].position_y = 0;
-			pp[1].width = scrw/2;
-			pp[1].height = scrh;
-			pp[1].position_x = scrw/2;
-			pp[1].position_y = 0;
-			file_view_pair_update_geometry(pp);
-			file_view_redraw(pv);
-			file_view_redraw(sv);
-		}
-		// If screen size not changed, then only redraw active view.
-		else {
-			file_view_redraw(pv);
-		}
-		// TODO read manuals to find out whether I need them all
-		update_panels();
-		doupdate();
-		refresh();
+		ui_update_geometry(&i);
+		ui_draw(&i);
 	}
-
-	for (int i = 0; i < 2; i++) {
-		delete_file_list(&pp[i].file_list, &pp[i].num_files);
-	}
+	ui_end(&i);
 	syslog(LOG_DEBUG, "exit");
 	closelog();
-	endwin();
-	file_view_pair_delete(pp);
 	exit(EXIT_SUCCESS);
 }

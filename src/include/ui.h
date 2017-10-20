@@ -17,16 +17,19 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef FILE_VIEW_H
-#define FILE_VIEW_H
+#ifndef UI_H
+#define UI_H
 
+#define _GNU_SOURCE
 #include <ncurses.h>
 #include <panel.h>
 #include <linux/limits.h>
+#include <locale.h>
 #include <syslog.h>
 
 #include "path.h"
 #include "file.h"
+//#include "prompt.h"
 
 struct file_view {
 	char wd[PATH_MAX];
@@ -34,18 +37,21 @@ struct file_view {
 	int num_files;
 	int selection;
 	int view_offset;
-	bool focused;
-
-	PANEL* pan;
-
-	int position_x;
-	int position_y;
-	int width;
-	int height;
 };
 
-void file_view_pair_setup(struct file_view[2], int, int);
-void file_view_pair_delete(struct file_view[2]);
-void file_view_pair_update_geometry(struct file_view[2]);
-void file_view_redraw(struct file_view*);
+/* UI is intended only to handle drawing functions
+ * No FS logic or data manipulation
+ */
+struct ui {
+	int scrh, scrw;
+	int active_view;
+	PANEL* fvp[2];
+	struct file_view fvs[2];
+};
+
+void ui_init(struct ui* const);
+void ui_end(struct ui* const);
+void ui_draw(struct ui* const);
+void ui_update_geometry(struct ui* const);
+
 #endif
