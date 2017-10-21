@@ -4,7 +4,7 @@ CFLAGS = --std=c11 -g -Wall -Wextra -pedantic
 #LIBS = -lform -lpanel -lncurses
 LIBS = -lpanel -lncurses
 OBJDIR = obj
-OBJ = main.o path.o file.o prompt.o ui.o
+OBJ = main.o path.o file.o ui.o
 EXENAME = hund
 TESTEXENAME = test/testme
 TESTSCRIPTNAME = test/test.sh
@@ -14,16 +14,13 @@ all : $(EXENAME)
 $(EXENAME) : $(addprefix $(OBJDIR)/, $(OBJ))
 	$(LD) $(LIBS) $^ -o $(EXENAME) 
 
-$(OBJDIR)/main.o : src/main.c src/include/file_view.h src/include/prompt.h | $(OBJDIR)
+$(OBJDIR)/main.o : src/main.c src/include/ui.h | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJDIR)/path.o : src/path.c src/include/path.h | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJDIR)/file.o : src/file.c src/include/file.h src/include/path.h | $(OBJDIR)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(OBJDIR)/prompt.o : src/prompt.c src/include/prompt.h | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJDIR)/ui.o : src/ui.c src/include/ui.h | $(OBJDIR)

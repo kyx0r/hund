@@ -31,7 +31,7 @@ static void create_directory(struct file_view* v) {
 	char* name = malloc(NAME_MAX);
 	name[0] = 0;
 	strcpy(path, v->wd);
-	prompt("directory name", NAME_MAX, name);
+	//prompt("directory name", NAME_MAX, name);
 	enter_dir(path, name);
 	dir_make(path);
 	scan_dir(v->wd, &v->file_list, &v->num_files);
@@ -58,7 +58,7 @@ static void move_file(struct file_view* pv, struct file_view* sv) {
 	strcpy(src_path, pv->wd);
 	strcpy(dest_path, sv->wd);
 	enter_dir(src_path, pv->file_list[pv->selection]->file_name);
-	prompt("new name", NAME_MAX, name);
+	//prompt("new name", NAME_MAX, name);
 	enter_dir(dest_path, name);
 	int fmr = file_move(src_path, dest_path);
 	syslog(LOG_DEBUG, "file_move() returned %d", fmr);
@@ -78,7 +78,7 @@ static void copy_file(struct file_view* pv, struct file_view* sv) {
 	strcpy(src_path, pv->wd);
 	strcpy(dest_path, sv->wd);
 	enter_dir(src_path, pv->file_list[pv->selection]->file_name);
-	prompt("copy name", NAME_MAX, name);
+	//prompt("copy name", NAME_MAX, name);
 	enter_dir(dest_path, name);
 	int fcr = file_copy(src_path, dest_path);
 	syslog(LOG_DEBUG, "file_copy() returned %d", fcr);
@@ -141,7 +141,6 @@ struct key2cmd {
 	enum command c;
 };
 
-/* Such table is cool since it's easy to change with a config */
 static struct key2cmd key_mapping[] = {
 	{ .ks = { 'q', 'q', 0, 0 }, .d = "quit", .c = QUIT  },
 	{ .ks = { 'j', 0, 0, 0 }, .d = "down", .c = ENTRY_DOWN },
@@ -161,6 +160,67 @@ static struct key2cmd key_mapping[] = {
 	{ .ks = { 'x', 'y', 0, 0 }, .d = "quit", .c = QUIT },
 	{ .ks = { 'x', 'z', 0, 0 }, .d = "quit", .c = QUIT }
 };
+
+int get_cmd(const int kml, int* mks) {
+	static int keyseq[MAX_KEYSEQ_LENGTH] = { 0 };
+	static int ksi = 0;
+	int c = getch();
+	//syslog(LOG_DEBUG, "%d, (%d) %d %d %d %d", c, ksi, keyseq[0], keyseq[1], keyseq[2], keyseq[3]);
+
+	if (c == -1 && !ksi) return NONE;
+	if (c == 27) {
+		memset(mks, 0, kml*sizeof(int));
+		memset(keyseq, 0, sizeof(keyseq));
+		ksi = 0;
+		return NONE;
+	}
+	if (c != -1 || !ksi) {
+		keyseq[ksi] = c;
+		ksi += 1;
+	}
+
+	memset(mks, 0, kml*sizeof(int));
+	for (int c = 0; c < kml; c++) {
+		int s = 0;
+		// Skip zeroes; these does not matter
+		while (keyseq[s]) {
+			/* mks[c] will contain length of matching sequence
+			 * mks[c] will be zeroed if sequence broken at any point
+			 */
+			if (key_mapping[c].ks[s] == keyseq[s]) {
+				mks[c] += 1;
+			}
+			else {
+				mks[c] = 0;
+				break;
+			}
+			s += 1;
+		}
+	}
+
+	bool match = false; // At least one match
+	for (int c = 0; c < kml; c++) {
+		match = match || mks[c];
+	}
+
+	enum command cmd = NONE;
+	if (match) {
+		for (int c = 0; c < kml; c++) {
+			int ksl = 0;
+			for (int s = 0; key_mapping[c].ks[s]; s++) {
+				ksl += 1;
+			}
+			if (mks[c] == ksl) {
+				cmd = key_mapping[c].c;
+			}
+		}
+	}
+	if (!match || ksi == MAX_KEYSEQ_LENGTH || cmd != NONE) {
+		memset(keyseq, 0, sizeof(keyseq));
+		ksi = 0;
+	}
+	return cmd;
+}
 
 int main(int argc, char* argv[])  {
 	static char sopt[] = "vhc:";
@@ -207,68 +267,12 @@ int main(int argc, char* argv[])  {
 	scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 	scan_dir(sv->wd, &sv->file_list, &sv->num_files);
 
-	int keyseq[MAX_KEYSEQ_LENGTH]; // Key Sequence
-	int ksi = 0; // Key Sequence Index (keyseq is basically a tiny stack)
-	memset(keyseq, 0, sizeof(keyseq));
-	enum command cmd = NONE;
+	const int kml = sizeof(key_mapping)/sizeof(struct key2cmd);
+	int mks[kml]; // Matching Key Sequence
+	memset(mks, 0, sizeof(mks));
 	bool run = true;
-
 	while (run) {
-		int c = wgetch(panel_window(i.fvp[i.active_view]));
-		if (c != -1) {
-			// 27 = ESCAPE KEY
-			if (c == 27) {
-				memset(keyseq, 0, sizeof(keyseq));
-				ksi = 0;
-			}
-			else {
-				//syslog(LOG_DEBUG, "input: %d", c);
-				keyseq[ksi] = c;
-				ksi += 1;
-			}
-		}
-
-		// Key Mapping Length
-		const int kml = sizeof(key_mapping)/sizeof(struct key2cmd);
-		int mks[kml]; // Matching Key Sequence
-		memset(mks, 0, sizeof(mks));
-
-		for (int c = 0; c < kml; c++) {
-			int s = 0;
-			// Skip zeroes; these does not matter
-			while (keyseq[s]) {
-				/* mks[c] will contain length of matching sequence
-				 * mks[c] will be zeroed if sequence broken at any point
-				 */
-				if (key_mapping[c].ks[s] == keyseq[s]) {
-					mks[c] += 1;
-				}
-				else {
-					mks[c] = 0;
-					break;
-				}
-				s += 1;
-			}
-		}
-
-		bool match = false; // At least one match
-		for (int c = 0; c < kml; c++) {
-			match = match || mks[c];
-		}
-
-		if (match) {
-			for (int c = 0; c < kml; c++) {
-				int ksl = 0;
-				for (int s = 0; key_mapping[c].ks[s]; s++) {
-					ksl += 1;
-				}
-				if (mks[c] == ksl) {
-					cmd = key_mapping[c].c;
-				}
-			}
-		}
-
-		switch (cmd) {
+		switch (get_cmd(kml, mks)) {
 		case QUIT:
 			run = false;
 			break;
@@ -312,16 +316,29 @@ int main(int argc, char* argv[])  {
 		case NONE:
 			break;
 		}
-
-		/* If keyseq is full and no command is found for current key sequence
-		 * then there is no command coresponding to that key sequence
-		 */
-		if (!match || ksi == MAX_KEYSEQ_LENGTH || cmd != NONE) {
-			cmd = NONE;
-			memset(keyseq, 0, sizeof(keyseq));
-			ksi = 0;
+		mvwprintw(panel_window(i.hint), 0, 0, "%*c", i.scrw, ' ');
+		wmove(panel_window(i.hint), 0, 0);
+		for (int x = 0; x < kml; x++) {
+			if (mks[x]) {
+				int c = 0;
+				wprintw(panel_window(i.hint), " ");
+				int k;
+				while ((k = key_mapping[x].ks[c])) {
+					switch (k) {
+					case '\t':
+						wprintw(panel_window(i.hint), "TAB");
+						break;
+					default:
+						wprintw(panel_window(i.hint), "%c", key_mapping[x].ks[c]);
+						break;
+					}
+					c += 1;
+				}
+				wattron(panel_window(i.hint), COLOR_PAIR(4));
+				wprintw(panel_window(i.hint), "%s", key_mapping[x].d);
+				wattroff(panel_window(i.hint), COLOR_PAIR(4));
+			}
 		}
-
 		ui_update_geometry(&i);
 		ui_draw(&i);
 	}

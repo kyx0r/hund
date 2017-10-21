@@ -33,6 +33,7 @@ void ui_init(struct ui* const i) {
 	//raw();
 	intrflush(stdscr, FALSE);
 	keypad(stdscr, TRUE);
+	timeout(100);
 	curs_set(0);
 
 	init_pair(1, COLOR_WHITE, COLOR_BLACK);
@@ -58,12 +59,16 @@ void ui_init(struct ui* const i) {
 	};
 	for (int x = 0; x < 2; x++) {
 		WINDOW* tmpwin = newwin(1, 1, 0, 0);
-		keypad(tmpwin, TRUE);
-		wtimeout(tmpwin, 100);
 		i->fvp[x] = new_panel(tmpwin);
 	}
 	i->scrw = i->scrh = 0;
 	i->active_view = 0;
+	i->prompt_title = NULL;
+	i->prompt_textbox = NULL;
+	i->prompt_textbox_size = 0;
+	i->prompt = NULL;
+	WINDOW* hw = newwin(1, 1, 0, 0);
+	i->hint = new_panel(hw);
 	syslog(LOG_DEBUG, "ncurses initialized");
 }
 
@@ -87,6 +92,9 @@ void ui_end(struct ui* const i) {
 		del_panel(p);
 		delwin(w);
 	}
+	WINDOW* hw = panel_window(i->hint);
+	del_panel(i->hint);
+	delwin(hw);
 	endwin();
 }
 
@@ -224,12 +232,38 @@ void ui_update_geometry(struct ui* const i) {
 	for (int x = 0; x < 2; x++) {
 		PANEL* p = i->fvp[x];
 		WINDOW* ow = panel_window(p);
-		wresize(ow, i->scrh, w[x]);
+		wresize(ow, i->scrh-1, w[x]);
 		wborder(ow, '|', '|', '-', '-', '+', '+', '+', '+');
 		move_panel(p, 0, px[x]);
 	}
-	syslog(LOG_DEBUG, "[%dx%d] (%d, %d) %dx%d, (%d, %d) %dx%d",
-			i->scrw, i->scrh,
-			0, px[0], w[0], i->scrh,
-			0, px[1], w[1], i->scrh);
+	WINDOW* hw = panel_window(i->hint);
+	wresize(hw, 1, i->scrw);
+	move_panel(i->hint, i->scrh-1, 0);
+}
+
+void ui_prompt_open(struct ui* i, char* ptt, char* ptb, int ptbs) {
+	int scrh, scrw;
+	getmaxyx(stdscr, scrh, scrw);
+	const int box_w = 50;
+	const int box_h = 3;
+	WINDOW* fw = newwin(box_h, box_w, 0, 0);
+	PANEL* fp = new_panel(fw);
+	move_panel(fp, (scrh-box_h)/2, (scrw-box_w)/2);
+	wrefresh(fw);
+	curs_set(2);
+	//keypad(fw, TRUE);
+	//wtimeout(fw, 100);
+	box(fw, 0, 0);
+	i->prompt = fp;
+	i->prompt_title = ptt;
+	i->prompt_textbox = ptb;
+	i->prompt_textbox_size = ptbs;
+}
+
+void ui_prompt_close(struct ui* i) {
+	curs_set(0);
+	WINDOW* fw = panel_window(i->prompt);
+	delwin(fw);
+	del_panel(i->prompt);
+	i->prompt = NULL;
 }

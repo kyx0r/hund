@@ -29,7 +29,6 @@
 
 #include "path.h"
 #include "file.h"
-//#include "prompt.h"
 
 struct file_view {
 	char wd[PATH_MAX];
@@ -47,11 +46,18 @@ struct ui {
 	int active_view;
 	PANEL* fvp[2];
 	struct file_view fvs[2];
+	char* prompt_title;
+	char* prompt_textbox;
+	int prompt_textbox_size;
+	PANEL* prompt;
+	PANEL* hint;
 };
 
 void ui_init(struct ui* const);
 void ui_end(struct ui* const);
 void ui_draw(struct ui* const);
 void ui_update_geometry(struct ui* const);
+void ui_prompt_open(struct ui* i, char* ptt, char* ptb, int ptbs);
+void ui_prompt_close(struct ui*);
 
 #endif
