@@ -112,55 +112,6 @@ static void go_enter_dir(struct file_view* v) {
 	}
 }
 
-enum command {
-	NONE = 0,
-	QUIT,
-	COPY,
-	MOVE,
-	REMOVE,
-	SWITCH_PANEL,
-	UP_DIR,
-	ENTER_DIR,
-	REFRESH,
-	ENTRY_UP,
-	ENTRY_DOWN,
-	CREATE_DIR,
-};
-
-static char* help = "Usage: hund [OPTION]...\n"
-"Options:\n"
-"  -c, --chdir\t\tchange initial directory\n"
-"  -v, --verbose\t\tbe verbose\n"
-"  -h, --help\t\tdisplay this help message\n";
-
-#define MAX_KEYSEQ_LENGTH 4
-
-struct key2cmd {
-	int ks[MAX_KEYSEQ_LENGTH]; // Key Sequence
-	char* d;
-	enum command c;
-};
-
-static struct key2cmd key_mapping[] = {
-	{ .ks = { 'q', 'q', 0, 0 }, .d = "quit", .c = QUIT  },
-	{ .ks = { 'j', 0, 0, 0 }, .d = "down", .c = ENTRY_DOWN },
-	{ .ks = { 'k', 0, 0, 0 }, .d = "up", .c = ENTRY_UP },
-	{ .ks = { 'c', 'p', 0, 0 }, .d = "copy", .c = COPY },
-	{ .ks = { 'r', 'm', 0, 0 }, .d = "remove", .c = REMOVE },
-	{ .ks = { 'm', 'v', 0, 0 }, .d = "move", .c = MOVE },
-	{ .ks = { '\t', 0, 0, 0 }, .d = "switch panel", .c = SWITCH_PANEL },
-	{ .ks = { 'r', 'r', 0, 0 }, .d = "refresh", .c = REFRESH },
-	{ .ks = { 'm', 'k', 0, 0 }, .d = "create dir", .c = CREATE_DIR },
-	{ .ks = { 'u', 0, 0, 0 }, .d = "up dir", .c = UP_DIR },
-	{ .ks = { 'd', 0, 0, 0 }, .d = "up dir", .c = UP_DIR },
-	{ .ks = { 'i', 0, 0, 0 }, .d = "enter dir", .c = ENTER_DIR },
-	{ .ks = { 'e', 0, 0, 0 }, .d = "enter dir", .c = ENTER_DIR },
-
-	{ .ks = { 'x', 'x', 0, 0 }, .d = "quit", .c = QUIT },
-	{ .ks = { 'x', 'y', 0, 0 }, .d = "quit", .c = QUIT },
-	{ .ks = { 'x', 'z', 0, 0 }, .d = "quit", .c = QUIT }
-};
-
 int get_cmd(const int kml, int* mks) {
 	static int keyseq[MAX_KEYSEQ_LENGTH] = { 0 };
 	static int ksi = 0;
@@ -223,6 +174,12 @@ int get_cmd(const int kml, int* mks) {
 }
 
 int main(int argc, char* argv[])  {
+	static char* help = "Usage: hund [OPTION]...\n"
+	"Options:\n"
+	"  -c, --chdir\t\tchange initial directory\n"
+	"  -v, --verbose\t\tbe verbose\n"
+	"  -h, --help\t\tdisplay this help message\n";
+
 	static char sopt[] = "vhc:";
 	static struct option lopt[] = {
 		{"chdir", required_argument, 0, 'c'},
@@ -267,12 +224,9 @@ int main(int argc, char* argv[])  {
 	scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 	scan_dir(sv->wd, &sv->file_list, &sv->num_files);
 
-	const int kml = sizeof(key_mapping)/sizeof(struct key2cmd);
-	int mks[kml]; // Matching Key Sequence
-	memset(mks, 0, sizeof(mks));
 	bool run = true;
 	while (run) {
-		switch (get_cmd(kml, mks)) {
+		switch (get_cmd(i.kml, i.mks)) {
 		case QUIT:
 			run = false;
 			break;
@@ -315,29 +269,6 @@ int main(int argc, char* argv[])  {
 			break;
 		case NONE:
 			break;
-		}
-		mvwprintw(panel_window(i.hint), 0, 0, "%*c", i.scrw, ' ');
-		wmove(panel_window(i.hint), 0, 0);
-		for (int x = 0; x < kml; x++) {
-			if (mks[x]) {
-				int c = 0;
-				wprintw(panel_window(i.hint), " ");
-				int k;
-				while ((k = key_mapping[x].ks[c])) {
-					switch (k) {
-					case '\t':
-						wprintw(panel_window(i.hint), "TAB");
-						break;
-					default:
-						wprintw(panel_window(i.hint), "%c", key_mapping[x].ks[c]);
-						break;
-					}
-					c += 1;
-				}
-				wattron(panel_window(i.hint), COLOR_PAIR(4));
-				wprintw(panel_window(i.hint), "%s", key_mapping[x].d);
-				wattroff(panel_window(i.hint), COLOR_PAIR(4));
-			}
 		}
 		ui_update_geometry(&i);
 		ui_draw(&i);

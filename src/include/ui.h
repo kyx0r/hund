@@ -29,6 +29,7 @@
 
 #include "path.h"
 #include "file.h"
+#include "key_mapping.h"
 
 struct file_view {
 	char wd[PATH_MAX];
@@ -51,6 +52,8 @@ struct ui {
 	int prompt_textbox_size;
 	PANEL* prompt;
 	PANEL* hint;
+	int kml;
+	int* mks; // Matching Key Sequence
 };
 
 void ui_init(struct ui* const);

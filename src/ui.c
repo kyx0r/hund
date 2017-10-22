@@ -69,7 +69,12 @@ void ui_init(struct ui* const i) {
 	i->prompt = NULL;
 	WINDOW* hw = newwin(1, 1, 0, 0);
 	i->hint = new_panel(hw);
-	syslog(LOG_DEBUG, "ncurses initialized");
+	i->kml = 0;
+	while (key_mapping[i->kml].ks[0]) {
+		i->kml += 1;
+	}
+	i->mks = calloc(i->kml, sizeof(int));
+	syslog(LOG_DEBUG, "UI initialized");
 }
 
 void ui_end(struct ui* const i) {
@@ -92,9 +97,13 @@ void ui_end(struct ui* const i) {
 		del_panel(p);
 		delwin(w);
 	}
+	WINDOW* pw = panel_window(i->prompt);
+	del_panel(i->prompt);
+	delwin(pw);
 	WINDOW* hw = panel_window(i->hint);
 	del_panel(i->hint);
 	delwin(hw);
+	free(i->mks);
 	endwin();
 }
 
@@ -203,6 +212,36 @@ void ui_draw(struct ui* const i) {
 		}
 		mvwprintw(w, view_row, 2, "files: %d", s->num_files);
 		wrefresh(w);
+	}
+	WINDOW* hw = panel_window(i->hint);
+	mvwprintw(hw, 0, 0, "%*c", i->scrw-1, ' ');
+	wmove(hw, 0, 0);
+	for (int x = 0; x < i->kml; x++) {
+		if (i->mks[x]) {
+			int c = 0;
+			wprintw(hw, " ");
+			int k;
+			while ((k = key_mapping[x].ks[c])) {
+				switch (k) {
+				case '\t':
+					wprintw(hw, "TAB");
+					break;
+				default:
+					wprintw(hw, "%c", key_mapping[x].ks[c]);
+					break;
+				}
+				c += 1;
+			}
+			wattron(hw, COLOR_PAIR(4));
+			wprintw(hw, "%s", key_mapping[x].d);
+			wattroff(hw, COLOR_PAIR(4));
+		}
+	}
+	wrefresh(hw);
+	if (i->prompt) {
+		WINDOW* pw = panel_window(i->prompt);
+		mvwprintw(pw, 0, 1, "%s", i->prompt_title);
+		wrefresh(pw);
 	}
 	update_panels();
 	doupdate();
