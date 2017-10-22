@@ -63,8 +63,10 @@ void ui_init(struct ui* const i) {
 	}
 	i->scrw = i->scrh = 0;
 	i->active_view = 0;
+	i->m = MANAGER;
 	i->prompt_title = NULL;
 	i->prompt_textbox = NULL;
+	i->prompt_textbox_top = 0;
 	i->prompt_textbox_size = 0;
 	i->prompt = NULL;
 	WINDOW* hw = newwin(1, 1, 0, 0);
@@ -240,7 +242,11 @@ void ui_draw(struct ui* const i) {
 	wrefresh(hw);
 	if (i->prompt) {
 		WINDOW* pw = panel_window(i->prompt);
+		wborder(pw, '|', '|', '-', '-', '+', '+', '+', '+');
 		mvwprintw(pw, 0, 1, "%s", i->prompt_title);
+		mvwprintw(pw, 1, 1, "%s%*c", i->prompt_textbox,
+				(i->scrw/2)-(strlen(i->prompt_textbox)+4), ' ');
+		wmove(pw, 1, i->prompt_textbox_top);
 		wrefresh(pw);
 	}
 	update_panels();
@@ -281,6 +287,7 @@ void ui_update_geometry(struct ui* const i) {
 }
 
 void prompt_open(struct ui* i, char* ptt, char* ptb, int ptbs) {
+	i->m = PROMPT;
 	int scrh, scrw;
 	getmaxyx(stdscr, scrh, scrw);
 	const int box_w = 50;
@@ -289,22 +296,22 @@ void prompt_open(struct ui* i, char* ptt, char* ptb, int ptbs) {
 	PANEL* fp = new_panel(fw);
 	move_panel(fp, (scrh-box_h)/2, (scrw-box_w)/2);
 	wrefresh(fw);
-	curs_set(2);
-	//keypad(fw, TRUE);
-	//wtimeout(fw, 100);
-	box(fw, 0, 0);
+	keypad(fw, TRUE);
+	wtimeout(fw, 100);
 	i->prompt = fp;
 	i->prompt_title = ptt;
 	i->prompt_textbox = ptb;
+	i->prompt_textbox_top = 0;
 	i->prompt_textbox_size = ptbs;
+	memset(i->prompt_textbox, 0, i->prompt_textbox_size);
 }
 
-void prompt_close(struct ui* i) {
-	curs_set(0);
+void prompt_close(struct ui* i, enum mode new_mode) {
 	WINDOW* fw = panel_window(i->prompt);
 	delwin(fw);
 	del_panel(i->prompt);
 	i->prompt = NULL;
+	i->m = new_mode;
 }
 
 enum command get_cmd(struct ui* i) {
@@ -327,8 +334,8 @@ enum command get_cmd(struct ui* i) {
 
 	memset(i->mks, 0, i->kml*sizeof(int));
 	for (int c = 0; c < i->kml; c++) {
+		if (key_mapping[c].m != i->m) break;
 		int s = 0;
-		// Skip zeroes; these does not matter
 		while (keyseq[s]) {
 			/* mks[c] will contain length of matching sequence
 			 * mks[c] will be zeroed if sequence broken at any point

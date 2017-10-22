@@ -26,12 +26,9 @@
 
 #include "include/ui.h"
 
-static void create_directory(struct file_view* v) {
+static void create_directory(struct file_view* v, char name[NAME_MAX]) {
 	char* path = malloc(PATH_MAX);
-	char* name = malloc(NAME_MAX);
-	name[0] = 0;
 	strcpy(path, v->wd);
-	//prompt("directory name", NAME_MAX, name);
 	enter_dir(path, name);
 	dir_make(path);
 	scan_dir(v->wd, &v->file_list, &v->num_files);
@@ -163,51 +160,79 @@ int main(int argc, char* argv[])  {
 	scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 	scan_dir(sv->wd, &sv->file_list, &sv->num_files);
 
+	char mkdir_name[NAME_MAX];
+
 	bool run = true;
 	while (run) {
-		switch (get_cmd(&i)) {
-		case QUIT:
-			run = false;
-			break;
-		case SWITCH_PANEL:
-			sv = &i.fvs[i.active_view];
-			i.active_view += 1;
-			i.active_view %= 2;
-			pv = &i.fvs[i.active_view];
-			break;
-		case ENTRY_DOWN:
-			if (pv->selection < pv->num_files-1) {
-				pv->selection += 1;
+		if (i.m == MANAGER) {
+			switch (get_cmd(&i)) {
+			case QUIT:
+				run = false;
+				break;
+			case SWITCH_PANEL:
+				sv = &i.fvs[i.active_view];
+				i.active_view += 1;
+				i.active_view %= 2;
+				pv = &i.fvs[i.active_view];
+				break;
+			case ENTRY_DOWN:
+				if (pv->selection < pv->num_files-1) {
+					pv->selection += 1;
+				}
+				break;
+			case ENTRY_UP:
+				if (pv->selection > 0) {
+					pv->selection -= 1;
+				}
+				break;
+			case ENTER_DIR:
+				go_enter_dir(pv);
+				break;
+			case UP_DIR:
+				go_up_dir(pv);
+				break;
+			case COPY:
+				copy_file(pv, sv);
+				break;
+			case MOVE:
+				move_file(pv, sv);
+				break;
+			case REMOVE:
+				remove_file(pv);
+				break;
+			case CREATE_DIR:
+				prompt_open(&i, "directory name", mkdir_name, NAME_MAX);
+				//create_directory(pv);
+				break;
+			case REFRESH:
+				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
+				break;
+			case NONE:
+				break;
 			}
-			break;
-		case ENTRY_UP:
-			if (pv->selection > 0) {
-				pv->selection -= 1;
+		}
+		else if (i.m == PROMPT) {
+			curs_set(2);
+			WINDOW* pw = panel_window(i.prompt);
+			wmove(pw, 1, i.prompt_textbox_top+1);
+			int c = wgetch(pw);
+			if (c == -1);
+			else if (c == '\n') {
+				syslog(LOG_DEBUG, "exit prompt");
+				prompt_close(&i, MANAGER);
 			}
-			break;
-		case ENTER_DIR:
-			go_enter_dir(pv);
-			break;
-		case UP_DIR:
-			go_up_dir(pv);
-			break;
-		case COPY:
-			copy_file(pv, sv);
-			break;
-		case MOVE:
-			move_file(pv, sv);
-			break;
-		case REMOVE:
-			remove_file(pv);
-			break;
-		case CREATE_DIR:
-			create_directory(pv);
-			break;
-		case REFRESH:
-			scan_dir(pv->wd, &pv->file_list, &pv->num_files);
-			break;
-		case NONE:
-			break;
+			else if (c == KEY_BACKSPACE) {
+				if (i.prompt_textbox_top > 0) {
+					i.prompt_textbox[i.prompt_textbox_top-1] = 0;
+					i.prompt_textbox_top -= 1;
+				}
+			}
+			else if (i.prompt_textbox_top < i.prompt_textbox_size) {
+				syslog(LOG_DEBUG, "input: %d", c);
+				i.prompt_textbox[i.prompt_textbox_top] = c;
+				i.prompt_textbox_top += 1;
+			}
+			curs_set(0);
 		}
 		ui_update_geometry(&i);
 		ui_draw(&i);
