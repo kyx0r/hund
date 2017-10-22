@@ -112,67 +112,6 @@ static void go_enter_dir(struct file_view* v) {
 	}
 }
 
-int get_cmd(const int kml, int* mks) {
-	static int keyseq[MAX_KEYSEQ_LENGTH] = { 0 };
-	static int ksi = 0;
-	int c = getch();
-	//syslog(LOG_DEBUG, "%d, (%d) %d %d %d %d", c, ksi, keyseq[0], keyseq[1], keyseq[2], keyseq[3]);
-
-	if (c == -1 && !ksi) return NONE;
-	if (c == 27) {
-		memset(mks, 0, kml*sizeof(int));
-		memset(keyseq, 0, sizeof(keyseq));
-		ksi = 0;
-		return NONE;
-	}
-	if (c != -1 || !ksi) {
-		keyseq[ksi] = c;
-		ksi += 1;
-	}
-
-	memset(mks, 0, kml*sizeof(int));
-	for (int c = 0; c < kml; c++) {
-		int s = 0;
-		// Skip zeroes; these does not matter
-		while (keyseq[s]) {
-			/* mks[c] will contain length of matching sequence
-			 * mks[c] will be zeroed if sequence broken at any point
-			 */
-			if (key_mapping[c].ks[s] == keyseq[s]) {
-				mks[c] += 1;
-			}
-			else {
-				mks[c] = 0;
-				break;
-			}
-			s += 1;
-		}
-	}
-
-	bool match = false; // At least one match
-	for (int c = 0; c < kml; c++) {
-		match = match || mks[c];
-	}
-
-	enum command cmd = NONE;
-	if (match) {
-		for (int c = 0; c < kml; c++) {
-			int ksl = 0;
-			for (int s = 0; key_mapping[c].ks[s]; s++) {
-				ksl += 1;
-			}
-			if (mks[c] == ksl) {
-				cmd = key_mapping[c].c;
-			}
-		}
-	}
-	if (!match || ksi == MAX_KEYSEQ_LENGTH || cmd != NONE) {
-		memset(keyseq, 0, sizeof(keyseq));
-		ksi = 0;
-	}
-	return cmd;
-}
-
 int main(int argc, char* argv[])  {
 	static char* help = "Usage: hund [OPTION]...\n"
 	"Options:\n"
@@ -226,7 +165,7 @@ int main(int argc, char* argv[])  {
 
 	bool run = true;
 	while (run) {
-		switch (get_cmd(i.kml, i.mks)) {
+		switch (get_cmd(&i)) {
 		case QUIT:
 			run = false;
 			break;

@@ -280,7 +280,7 @@ void ui_update_geometry(struct ui* const i) {
 	move_panel(i->hint, i->scrh-1, 0);
 }
 
-void ui_prompt_open(struct ui* i, char* ptt, char* ptb, int ptbs) {
+void prompt_open(struct ui* i, char* ptt, char* ptb, int ptbs) {
 	int scrh, scrw;
 	getmaxyx(stdscr, scrh, scrw);
 	const int box_w = 50;
@@ -299,10 +299,71 @@ void ui_prompt_open(struct ui* i, char* ptt, char* ptb, int ptbs) {
 	i->prompt_textbox_size = ptbs;
 }
 
-void ui_prompt_close(struct ui* i) {
+void prompt_close(struct ui* i) {
 	curs_set(0);
 	WINDOW* fw = panel_window(i->prompt);
 	delwin(fw);
 	del_panel(i->prompt);
 	i->prompt = NULL;
+}
+
+enum command get_cmd(struct ui* i) {
+	static int keyseq[MAX_KEYSEQ_LENGTH] = { 0 };
+	static int ksi = 0;
+	int c = getch();
+	//syslog(LOG_DEBUG, "%d, (%d) %d %d %d %d", c, ksi, keyseq[0], keyseq[1], keyseq[2], keyseq[3]);
+
+	if (c == -1 && !ksi) return NONE;
+	if (c == 27) {
+		memset(i->mks, 0, i->kml*sizeof(int));
+		memset(keyseq, 0, sizeof(keyseq));
+		ksi = 0;
+		return NONE;
+	}
+	if (c != -1 || !ksi) {
+		keyseq[ksi] = c;
+		ksi += 1;
+	}
+
+	memset(i->mks, 0, i->kml*sizeof(int));
+	for (int c = 0; c < i->kml; c++) {
+		int s = 0;
+		// Skip zeroes; these does not matter
+		while (keyseq[s]) {
+			/* mks[c] will contain length of matching sequence
+			 * mks[c] will be zeroed if sequence broken at any point
+			 */
+			if (key_mapping[c].ks[s] == keyseq[s]) {
+				i->mks[c] += 1;
+			}
+			else {
+				i->mks[c] = 0;
+				break;
+			}
+			s += 1;
+		}
+	}
+
+	bool match = false; // At least one match
+	for (int c = 0; c < i->kml; c++) {
+		match = match || i->mks[c];
+	}
+
+	enum command cmd = NONE;
+	if (match) {
+		for (int c = 0; c < i->kml; c++) {
+			int ksl = 0;
+			for (int s = 0; key_mapping[c].ks[s]; s++) {
+				ksl += 1;
+			}
+			if (i->mks[c] == ksl) {
+				cmd = key_mapping[c].c;
+			}
+		}
+	}
+	if (!match || ksi == MAX_KEYSEQ_LENGTH || cmd != NONE) {
+		memset(keyseq, 0, sizeof(keyseq));
+		ksi = 0;
+	}
+	return cmd;
 }

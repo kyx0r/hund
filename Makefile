@@ -23,7 +23,7 @@ $(OBJDIR)/path.o : src/path.c src/include/path.h | $(OBJDIR)
 $(OBJDIR)/file.o : src/file.c src/include/file.h src/include/path.h | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(OBJDIR)/ui.o : src/ui.c src/include/ui.h src/include/key_mapping.h | $(OBJDIR)
+$(OBJDIR)/ui.o : src/ui.c src/include/ui.h | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJDIR) :
