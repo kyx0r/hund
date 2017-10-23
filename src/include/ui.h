@@ -31,23 +31,23 @@
 #include "file.h"
 
 enum mode {
-	MANAGER,
-	PROMPT
+	MODE_MANAGER,
+	MODE_PROMPT
 };
 
 enum command {
-	NONE = 0,
-	QUIT,
-	COPY,
-	MOVE,
-	REMOVE,
-	SWITCH_PANEL,
-	UP_DIR,
-	ENTER_DIR,
-	REFRESH,
-	ENTRY_UP,
-	ENTRY_DOWN,
-	CREATE_DIR,
+	CMD_NONE = 0,
+	CMD_QUIT,
+	CMD_COPY,
+	CMD_MOVE,
+	CMD_REMOVE,
+	CMD_SWITCH_PANEL,
+	CMD_UP_DIR,
+	CMD_ENTER_DIR,
+	CMD_REFRESH,
+	CMD_ENTRY_UP,
+	CMD_ENTRY_DOWN,
+	CMD_CREATE_DIR,
 };
 
 #define MAX_KEYSEQ_LENGTH 4
@@ -59,26 +59,33 @@ struct key2cmd {
 	enum command c;
 };
 
-static struct key2cmd key_mapping[] = {
-	{ .ks = { 'q', 'q', 0, 0 }, .d = "quit", .m = MANAGER, .c = QUIT  },
-	{ .ks = { 'j', 0, 0, 0 }, .d = "down", .m = MANAGER, .c = ENTRY_DOWN },
-	{ .ks = { 'k', 0, 0, 0 }, .d = "up", .m = MANAGER, .c = ENTRY_UP },
-	{ .ks = { 'c', 'p', 0, 0 }, .d = "copy", .m = MANAGER, .c = COPY },
-	{ .ks = { 'r', 'm', 0, 0 }, .d = "remove", .m = MANAGER, .c = REMOVE },
-	{ .ks = { 'm', 'v', 0, 0 }, .d = "move", .m = MANAGER, .c = MOVE },
-	{ .ks = { '\t', 0, 0, 0 }, .d = "switch panel", .m = MANAGER, .c = SWITCH_PANEL },
-	{ .ks = { 'r', 'r', 0, 0 }, .d = "refresh", .m = MANAGER, .c = REFRESH },
-	{ .ks = { 'm', 'k', 0, 0 }, .d = "create dir", .m = MANAGER, .c = CREATE_DIR },
-	{ .ks = { 'u', 0, 0, 0 }, .d = "up dir", .m = MANAGER, .c = UP_DIR },
-	{ .ks = { 'd', 0, 0, 0 }, .d = "up dir", .m = MANAGER, .c = UP_DIR },
-	{ .ks = { 'i', 0, 0, 0 }, .d = "enter dir", .m = MANAGER, .c = ENTER_DIR },
-	{ .ks = { 'e', 0, 0, 0 }, .d = "enter dir", .m = MANAGER, .c = ENTER_DIR },
+static const struct key2cmd key_mapping[] = {
+	{ .ks = { 'q', 'q', 0, 0 }, .d = "quit", .m = MODE_MANAGER, .c = CMD_QUIT  },
+	{ .ks = { 'j', 0, 0, 0 }, .d = "down", .m = MODE_MANAGER, .c = CMD_ENTRY_DOWN },
+	{ .ks = { 'k', 0, 0, 0 }, .d = "up", .m = MODE_MANAGER, .c = CMD_ENTRY_UP },
+	{ .ks = { 'c', 'p', 0, 0 }, .d = "copy", .m = MODE_MANAGER, .c = CMD_COPY },
+	{ .ks = { 'r', 'm', 0, 0 }, .d = "remove", .m = MODE_MANAGER, .c = CMD_REMOVE },
+	{ .ks = { 'm', 'v', 0, 0 }, .d = "move", .m = MODE_MANAGER, .c = CMD_MOVE },
+	{ .ks = { '\t', 0, 0, 0 }, .d = "switch panel", .m = MODE_MANAGER, .c = CMD_SWITCH_PANEL },
+	{ .ks = { 'r', 'r', 0, 0 }, .d = "refresh", .m = MODE_MANAGER, .c = CMD_REFRESH },
+	{ .ks = { 'm', 'k', 0, 0 }, .d = "create dir", .m = MODE_MANAGER, .c = CMD_CREATE_DIR },
+	{ .ks = { 'u', 0, 0, 0 }, .d = "up dir", .m = MODE_MANAGER, .c = CMD_UP_DIR },
+	{ .ks = { 'd', 0, 0, 0 }, .d = "up dir", .m = MODE_MANAGER, .c = CMD_UP_DIR },
+	{ .ks = { 'i', 0, 0, 0 }, .d = "enter dir", .m = MODE_MANAGER, .c = CMD_ENTER_DIR },
+	{ .ks = { 'e', 0, 0, 0 }, .d = "enter dir", .m = MODE_MANAGER, .c = CMD_ENTER_DIR },
 
-	{ .ks = { 'x', 'x', 0, 0 }, .d = "quit", .m = MANAGER, .c = QUIT },
-	{ .ks = { 'x', 'y', 0, 0 }, .d = "quit", .m = MANAGER, .c = QUIT },
-	{ .ks = { 'x', 'z', 0, 0 }, .d = "quit", .m = MANAGER, .c = QUIT },
+	{ .ks = { 'x', 'x', 0, 0 }, .d = "quit", .m = MODE_MANAGER, .c = CMD_QUIT },
+	{ .ks = { 'x', 'y', 0, 0 }, .d = "quit", .m = MODE_MANAGER, .c = CMD_QUIT },
+	{ .ks = { 'x', 'z', 0, 0 }, .d = "quit", .m = MODE_MANAGER, .c = CMD_QUIT },
 
-	{ .ks = { 0, 0, 0, 0 }, .d = NULL, .m = 0, .c = NONE }
+	{ .ks = { 0, 0, 0, 0 }, .d = NULL, .m = 0, .c = CMD_NONE } // Null terminator
+	/* TODO if it's global static and const it's size is known at compile time;
+	 * get rid of that null terminator
+	 * OR
+	 * TODO move to some local scope; const can't be altered, and I do want to
+	 * alter this thing with a config or something
+	 * Where should it be? UI? Probably. But how initialized?
+	 */
 };
 
 struct file_view {

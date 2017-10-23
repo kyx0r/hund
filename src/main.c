@@ -26,27 +26,6 @@
 
 #include "include/ui.h"
 
-static void create_directory(struct file_view* v, char name[NAME_MAX]) {
-	char* path = malloc(PATH_MAX);
-	strcpy(path, v->wd);
-	enter_dir(path, name);
-	dir_make(path);
-	scan_dir(v->wd, &v->file_list, &v->num_files);
-	v->selection = file_index(v->file_list, v->num_files, name);
-	free(path);
-	free(name);
-}
-
-static void remove_file(struct file_view* v) {
-	char* path = malloc(PATH_MAX);
-	strcpy(path, v->wd);
-	enter_dir(path, v->file_list[v->selection]->file_name);
-	file_remove(path);
-	free(path);
-	scan_dir(v->wd, &v->file_list, &v->num_files);
-	v->selection -= 1;
-}
-
 static void move_file(struct file_view* pv, struct file_view* sv) {
 	char* src_path = malloc(PATH_MAX);
 	char* dest_path = malloc(PATH_MAX);
@@ -109,6 +88,18 @@ static void go_enter_dir(struct file_view* v) {
 	}
 }
 
+enum task_type {
+	TASK_NONE = 0,
+	TASK_MKDIR,
+	TASK_RM,
+};
+
+struct task {
+	bool rte; // Ready To Execute
+	enum task_type t;
+	char *src, *dst;
+};
+
 int main(int argc, char* argv[])  {
 	static const char* help = "Usage: hund [OPTION]...\n"
 	"Options:\n"
@@ -160,58 +151,70 @@ int main(int argc, char* argv[])  {
 	scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 	scan_dir(sv->wd, &sv->file_list, &sv->num_files);
 
-	char mkdir_name[NAME_MAX];
+	struct task t = (struct task) {
+		.t = TASK_NONE,
+		.rte = false,
+		.src = NULL,
+		.dst = NULL,
+	};
 
 	bool run = true;
 	while (run) {
-		if (i.m == MANAGER) {
+		if (i.m == MODE_MANAGER) {
 			switch (get_cmd(&i)) {
-			case QUIT:
+			case CMD_QUIT:
 				run = false;
 				break;
-			case SWITCH_PANEL:
+			case CMD_SWITCH_PANEL:
 				sv = &i.fvs[i.active_view];
 				i.active_view += 1;
 				i.active_view %= 2;
 				pv = &i.fvs[i.active_view];
 				break;
-			case ENTRY_DOWN:
+			case CMD_ENTRY_DOWN:
 				if (pv->selection < pv->num_files-1) {
 					pv->selection += 1;
 				}
 				break;
-			case ENTRY_UP:
+			case CMD_ENTRY_UP:
 				if (pv->selection > 0) {
 					pv->selection -= 1;
 				}
 				break;
-			case ENTER_DIR:
+			case CMD_ENTER_DIR:
 				go_enter_dir(pv);
 				break;
-			case UP_DIR:
+			case CMD_UP_DIR:
 				go_up_dir(pv);
 				break;
-			case COPY:
+			case CMD_COPY:
 				copy_file(pv, sv);
 				break;
-			case MOVE:
+			case CMD_MOVE:
 				move_file(pv, sv);
 				break;
-			case REMOVE:
-				remove_file(pv);
+			case CMD_REMOVE:
+				t.src = calloc(PATH_MAX, sizeof(char));
+				t.t = TASK_RM;
+				strcpy(t.src, pv->wd);
+				strcat(t.src, "/");
+				prompt_open(&i, "name of file to remove", t.src+strlen(t.src), NAME_MAX);
 				break;
-			case CREATE_DIR:
-				prompt_open(&i, "directory name", mkdir_name, NAME_MAX);
-				//create_directory(pv);
+			case CMD_CREATE_DIR:
+				t.src = calloc(PATH_MAX, sizeof(char));
+				t.t = TASK_MKDIR;
+				strcpy(t.src, pv->wd);
+				strcat(t.src, "/");
+				prompt_open(&i, "new directory name", t.src+strlen(t.src), NAME_MAX);
 				break;
-			case REFRESH:
+			case CMD_REFRESH:
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				break;
-			case NONE:
+			case CMD_NONE:
 				break;
 			}
 		}
-		else if (i.m == PROMPT) {
+		else if (i.m ==	MODE_PROMPT) {
 			curs_set(2);
 			WINDOW* pw = panel_window(i.prompt);
 			wmove(pw, 1, i.prompt_textbox_top+1);
@@ -219,7 +222,8 @@ int main(int argc, char* argv[])  {
 			if (c == -1);
 			else if (c == '\n') {
 				syslog(LOG_DEBUG, "exit prompt");
-				prompt_close(&i, MANAGER);
+				prompt_close(&i, MODE_MANAGER);
+				t.rte = true;
 			}
 			else if (c == KEY_BACKSPACE) {
 				if (i.prompt_textbox_top > 0) {
@@ -228,12 +232,37 @@ int main(int argc, char* argv[])  {
 				}
 			}
 			else if (i.prompt_textbox_top < i.prompt_textbox_size) {
-				syslog(LOG_DEBUG, "input: %d", c);
+				//syslog(LOG_DEBUG, "input: %d", c);
 				i.prompt_textbox[i.prompt_textbox_top] = c;
 				i.prompt_textbox_top += 1;
 			}
 			curs_set(0);
 		}
+
+		if (t.rte) {
+			switch (t.t) {
+			case TASK_MKDIR:
+				syslog(LOG_DEBUG, "task_mkdir %s (%s)", t.src, i.prompt_textbox);
+				dir_make(t.src);
+				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
+				pv->selection = file_index(pv->file_list, pv->num_files, i.prompt_textbox);
+				free(t.src);
+				t.src = NULL;
+				break;
+			case TASK_RM:
+				syslog(LOG_DEBUG, "task_rmdir %s (%s)", t.src, i.prompt_textbox);
+				file_remove(t.src);
+				free(t.src);
+				t.src = NULL;
+				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
+				pv->selection = 0;
+				break;
+			case TASK_NONE:
+				break;
+			}
+			t.rte = false;
+		}
+
 		ui_update_geometry(&i);
 		ui_draw(&i);
 	}

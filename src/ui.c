@@ -63,7 +63,7 @@ void ui_init(struct ui* const i) {
 	}
 	i->scrw = i->scrh = 0;
 	i->active_view = 0;
-	i->m = MANAGER;
+	i->m = MODE_MANAGER;
 	i->prompt_title = NULL;
 	i->prompt_textbox = NULL;
 	i->prompt_textbox_top = 0;
@@ -287,7 +287,7 @@ void ui_update_geometry(struct ui* const i) {
 }
 
 void prompt_open(struct ui* i, char* ptt, char* ptb, int ptbs) {
-	i->m = PROMPT;
+	i->m = MODE_PROMPT;
 	int scrh, scrw;
 	getmaxyx(stdscr, scrh, scrw);
 	const int box_w = 50;
@@ -320,12 +320,12 @@ enum command get_cmd(struct ui* i) {
 	int c = getch();
 	//syslog(LOG_DEBUG, "%d, (%d) %d %d %d %d", c, ksi, keyseq[0], keyseq[1], keyseq[2], keyseq[3]);
 
-	if (c == -1 && !ksi) return NONE;
+	if (c == -1 && !ksi) return CMD_NONE;
 	if (c == 27) {
 		memset(i->mks, 0, i->kml*sizeof(int));
 		memset(keyseq, 0, sizeof(keyseq));
 		ksi = 0;
-		return NONE;
+		return CMD_NONE;
 	}
 	if (c != -1 || !ksi) {
 		keyseq[ksi] = c;
@@ -356,7 +356,7 @@ enum command get_cmd(struct ui* i) {
 		match = match || i->mks[c];
 	}
 
-	enum command cmd = NONE;
+	enum command cmd = CMD_NONE;
 	if (match) {
 		for (int c = 0; c < i->kml; c++) {
 			int ksl = 0;
@@ -368,7 +368,7 @@ enum command get_cmd(struct ui* i) {
 			}
 		}
 	}
-	if (!match || ksi == MAX_KEYSEQ_LENGTH || cmd != NONE) {
+	if (!match || ksi == MAX_KEYSEQ_LENGTH || cmd != CMD_NONE) {
 		memset(keyseq, 0, sizeof(keyseq));
 		ksi = 0;
 	}
