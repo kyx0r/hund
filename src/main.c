@@ -26,44 +26,6 @@
 
 #include "include/ui.h"
 
-static void move_file(struct file_view* pv, struct file_view* sv) {
-	char* src_path = malloc(PATH_MAX);
-	char* dest_path = malloc(PATH_MAX);
-	char* name = malloc(NAME_MAX);
-	name[0] = 0;
-	strcpy(src_path, pv->wd);
-	strcpy(dest_path, sv->wd);
-	enter_dir(src_path, pv->file_list[pv->selection]->file_name);
-	//prompt("new name", NAME_MAX, name);
-	enter_dir(dest_path, name);
-	int fmr = file_move(src_path, dest_path);
-	syslog(LOG_DEBUG, "file_move() returned %d", fmr);
-	free(src_path);
-	free(dest_path);
-	free(name);
-	scan_dir(pv->wd, &pv->file_list, &pv->num_files);
-	scan_dir(sv->wd, &sv->file_list, &sv->num_files);
-	pv->selection = 0;
-}
-
-static void copy_file(struct file_view* pv, struct file_view* sv) {
-	char* src_path = malloc(PATH_MAX);
-	char* dest_path = malloc(PATH_MAX);
-	char* name = malloc(NAME_MAX);
-	name[0] = 0;
-	strcpy(src_path, pv->wd);
-	strcpy(dest_path, sv->wd);
-	enter_dir(src_path, pv->file_list[pv->selection]->file_name);
-	//prompt("copy name", NAME_MAX, name);
-	enter_dir(dest_path, name);
-	int fcr = file_copy(src_path, dest_path);
-	syslog(LOG_DEBUG, "file_copy() returned %d", fcr);
-	free(src_path);
-	free(dest_path);
-	free(name);
-	scan_dir(sv->wd, &sv->file_list, &sv->num_files);
-}
-
 static void go_up_dir(struct file_view* v) {
 	char* prevdir = malloc(NAME_MAX);
 	current_dir(v->wd, prevdir);
@@ -92,10 +54,20 @@ enum task_type {
 	TASK_NONE = 0,
 	TASK_MKDIR,
 	TASK_RM,
+	TASK_COPY,
+	TASK_MOVE
+};
+
+enum task_state {
+	TASK_STATE_CLEAN = 0,
+	TASK_STATE_GATHERING_DATA,
+	TASK_STATE_DATA_GATHERED, // AKA ready to execute
+	TASK_STATE_EXECUTING,
+	TASK_STATE_FINISHED // AKA all done, cleanme
 };
 
 struct task {
-	bool rte; // Ready To Execute
+	enum task_state s;
 	enum task_type t;
 	char *src, *dst;
 };
@@ -153,7 +125,7 @@ int main(int argc, char* argv[])  {
 
 	struct task t = (struct task) {
 		.t = TASK_NONE,
-		.rte = false,
+		.s = TASK_STATE_CLEAN,
 		.src = NULL,
 		.dst = NULL,
 	};
@@ -188,21 +160,38 @@ int main(int argc, char* argv[])  {
 				go_up_dir(pv);
 				break;
 			case CMD_COPY:
-				copy_file(pv, sv);
+				t.src = calloc(PATH_MAX, sizeof(char));
+				strcpy(t.src, pv->wd);
+				enter_dir(t.src, pv->file_list[pv->selection]->file_name);
+				t.dst = calloc(PATH_MAX, sizeof(char));
+				strcpy(t.dst, sv->wd);
+				strcat(t.dst, "/");
+				t.t = TASK_COPY;
+				t.s = TASK_STATE_GATHERING_DATA;
+				prompt_open(&i, "copy name", t.dst+strlen(t.dst), NAME_MAX);
 				break;
 			case CMD_MOVE:
-				move_file(pv, sv);
+				t.src = calloc(PATH_MAX, sizeof(char));
+				strcpy(t.src, pv->wd);
+				enter_dir(t.src, pv->file_list[pv->selection]->file_name);
+				t.dst = calloc(PATH_MAX, sizeof(char));
+				strcpy(t.dst, sv->wd);
+				/* same name; TODO detect conflicting file names */
+				enter_dir(t.dst, pv->file_list[pv->selection]->file_name);
+				t.t = TASK_MOVE;
+				t.s = TASK_STATE_DATA_GATHERED;
 				break;
 			case CMD_REMOVE:
 				t.src = calloc(PATH_MAX, sizeof(char));
 				t.t = TASK_RM;
+				t.s = TASK_STATE_DATA_GATHERED;
 				strcpy(t.src, pv->wd);
-				strcat(t.src, "/");
-				prompt_open(&i, "name of file to remove", t.src+strlen(t.src), NAME_MAX);
+				enter_dir(t.src, pv->file_list[pv->selection]->file_name);
 				break;
 			case CMD_CREATE_DIR:
 				t.src = calloc(PATH_MAX, sizeof(char));
 				t.t = TASK_MKDIR;
+				t.s = TASK_STATE_GATHERING_DATA;
 				strcpy(t.src, pv->wd);
 				strcat(t.src, "/");
 				prompt_open(&i, "new directory name", t.src+strlen(t.src), NAME_MAX);
@@ -223,7 +212,9 @@ int main(int argc, char* argv[])  {
 			else if (c == '\n') {
 				syslog(LOG_DEBUG, "exit prompt");
 				prompt_close(&i, MODE_MANAGER);
-				t.rte = true;
+				if (t.t != TASK_NONE && t.s == TASK_STATE_GATHERING_DATA) {
+					t.s = TASK_STATE_DATA_GATHERED;
+				}
 			}
 			else if (c == KEY_BACKSPACE) {
 				if (i.prompt_textbox_top > 0) {
@@ -239,7 +230,8 @@ int main(int argc, char* argv[])  {
 			curs_set(0);
 		}
 
-		if (t.rte) {
+		if (t.s == TASK_STATE_DATA_GATHERED) {
+			t.s = TASK_STATE_EXECUTING;
 			switch (t.t) {
 			case TASK_MKDIR:
 				syslog(LOG_DEBUG, "task_mkdir %s (%s)", t.src, i.prompt_textbox);
@@ -255,12 +247,35 @@ int main(int argc, char* argv[])  {
 				free(t.src);
 				t.src = NULL;
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
-				pv->selection = 0;
+				if (pv->selection >= pv->num_files) {
+					pv->selection -= 1;
+				}
+				break;
+			case TASK_COPY:
+				syslog(LOG_DEBUG, "task_copy %s -> %s", t.src, t.dst);
+				file_copy(t.src, t.dst);
+				free(t.src);
+				free(t.dst);
+				t.src = t.dst = NULL;
+				//scan_dir(pv->wd, &pv->file_list, &pv->num_files);
+				scan_dir(sv->wd, &sv->file_list, &sv->num_files);
+				break;
+			case TASK_MOVE:
+				syslog(LOG_DEBUG, "task_move %s -> %s", t.src, t.dst);
+				file_move(t.src, t.dst);
+				free(t.src);
+				free(t.dst);
+				t.src = t.dst = NULL;
+				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
+				scan_dir(sv->wd, &sv->file_list, &sv->num_files);
+				if (pv->selection >= pv->num_files) {
+					pv->selection -= 1;
+				}
 				break;
 			case TASK_NONE:
 				break;
 			}
-			t.rte = false;
+			t.s = TASK_STATE_FINISHED;
 		}
 
 		ui_update_geometry(&i);

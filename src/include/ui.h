@@ -104,7 +104,7 @@ struct ui {
 	int active_view;
 	enum mode m;
 	PANEL* fvp[2];
-	struct file_view fvs[2];
+	struct file_view fvs[2]; // Dunno where to put it
 	char* prompt_title;
 	char* prompt_textbox;
 	int prompt_textbox_top;
