@@ -45,14 +45,14 @@
 #include "path.h"
 
 enum file_type {
+	UNKNOWN = 0,
 	BLOCK,
 	CHARACTER,
 	DIRECTORY,
 	FIFO,
 	LINK,
 	REGULAR,
-	SOCKET,
-	UNKNOWN
+	SOCKET
 };
 
 struct file_record {

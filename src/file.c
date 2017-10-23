@@ -22,7 +22,6 @@
 static int file_filter(const struct dirent* d) {
 	// Skip . and ..
 	// Don't need them
-	// I'm avoiding strcmp. It would probably be slower.
 	return !((d->d_name[0] == '.' && d->d_name[1] == 0) || (d->d_name[0] == '.' && d->d_name[1] == '.' && d->d_name[2] == 0));
 }
 

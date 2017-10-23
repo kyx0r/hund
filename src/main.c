@@ -110,14 +110,14 @@ static void go_enter_dir(struct file_view* v) {
 }
 
 int main(int argc, char* argv[])  {
-	static char* help = "Usage: hund [OPTION]...\n"
+	static const char* help = "Usage: hund [OPTION]...\n"
 	"Options:\n"
 	"  -c, --chdir\t\tchange initial directory\n"
 	"  -v, --verbose\t\tbe verbose\n"
 	"  -h, --help\t\tdisplay this help message\n";
 
-	static char sopt[] = "vhc:";
-	static struct option lopt[] = {
+	static const char sopt[] = "vhc:";
+	static const struct option lopt[] = {
 		{"chdir", required_argument, 0, 'c'},
 		{"verbose", no_argument, 0, 'v'},
 		{"help", no_argument, 0, 'h'},
