@@ -302,9 +302,10 @@ void prompt_open(struct ui* i, char* ptt, char* ptb, int ptbs) {
 	i->prompt = fp;
 	i->prompt_title = ptt;
 	i->prompt_textbox = ptb;
-	i->prompt_textbox_top = 0;
+	// strlen() instead of 0: allows initial string to contain something
+	i->prompt_textbox_top = strlen(ptb);
 	i->prompt_textbox_size = ptbs;
-	memset(i->prompt_textbox, 0, i->prompt_textbox_size);
+	//memset(i->prompt_textbox, 0, i->prompt_textbox_size);
 }
 
 void prompt_close(struct ui* i, enum mode new_mode) {
