@@ -232,6 +232,7 @@ int main(int argc, char* argv[])  {
 
 		if (t.s == TASK_STATE_DATA_GATHERED) {
 			t.s = TASK_STATE_EXECUTING;
+			int err;
 			switch (t.t) {
 			case TASK_MKDIR:
 				syslog(LOG_DEBUG, "task_mkdir %s (%s)", t.src, i.prompt_textbox);
@@ -242,8 +243,11 @@ int main(int argc, char* argv[])  {
 				t.src = NULL;
 				break;
 			case TASK_RM:
-				syslog(LOG_DEBUG, "task_rmdir %s (%s)", t.src, i.prompt_textbox);
-				file_remove(t.src);
+				syslog(LOG_DEBUG, "task_rmdir %s", t.src);
+				err = file_remove(t.src);
+				if (err) {
+					syslog(LOG_ERR, "file_remove(\"%s\") failed: %s", t.src, strerror(err));
+				}
 				free(t.src);
 				t.src = NULL;
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);

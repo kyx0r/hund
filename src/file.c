@@ -132,42 +132,39 @@ int file_move(const char* src, const char* dest) {
 		r = rename(src, dest);
 	}
 	else {
-		file_copy(src, dest);
-		file_remove(src);
+		r = file_copy(src, dest);
+		r |= file_remove(src);
 	}
 	free(name);
 	free(dest_dir);
 	return r;
 }
 
+/* On failure, last errno value is returned.
+ * (All functions that may fail here, return errno)
+ */
 int file_remove(const char* src) {
 	syslog(LOG_DEBUG, "file_remove(\"%s\")", src);
 	struct stat s;
-	if (lstat(src, &s)) {
-		syslog(LOG_ERR, "lstat failed");
-		return errno;
-	}
+	if (lstat(src, &s)) return errno;
 	if ((s.st_mode & S_IFMT) == S_IFDIR) {
 		struct file_record** fl = NULL;
 		int fn = 0;
 		scan_dir(src, &fl, &fn);
 		char* path = malloc(PATH_MAX);
-		for (int i = 0; i < fn; i++) {
+		for (int i = 0; i < fn; ++i) {
+			// TODO minimalize copying paths if possible
 			strcpy(path, src);
 			enter_dir(path, fl[i]->file_name);
 			int r;
-			if ((r = file_remove(path))) {
-				syslog(LOG_ERR, "recursive call of file_remove(\"%s\") failed, returning %d", path, r);
-				return r;
-			}
+			if ((r = file_remove(path))) return r;
 		}
 		delete_file_list(&fl, &fn);
 		free(path);
-		return rmdir(src);
+		if (rmdir(src)) return errno;
 	}
-	else {
-		return unlink(src);
-	}
+	else if (unlink(src)) return errno;
+	return 0;
 }
 
 int file_copy(const char* src, const char* dest) {
