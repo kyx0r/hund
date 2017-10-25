@@ -27,7 +27,6 @@
 #include <locale.h>
 #include <syslog.h>
 
-#include "path.h"
 #include "file.h"
 
 enum mode {

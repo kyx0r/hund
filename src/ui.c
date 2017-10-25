@@ -212,7 +212,8 @@ void ui_draw(struct ui* const i) {
 			mvwprintw(w, view_row, 1, "%*c", pw-2, ' ');
 			view_row += 1;
 		}
-		mvwprintw(w, view_row, 2, "files: %d", s->num_files);
+		mvwprintw(w, view_row, 2, "files: %d, size: %dB",
+				s->num_files, (s->selection < s->num_files ? s->file_list[s->selection]->s.st_size : 0));
 		wrefresh(w);
 	}
 	WINDOW* hw = panel_window(i->hint);

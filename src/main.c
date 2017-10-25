@@ -253,7 +253,9 @@ int main(int argc, char* argv[])  {
 				break;
 			case TASK_COPY:
 				syslog(LOG_DEBUG, "task_copy %s -> %s", t.src, t.dst);
-				file_copy(t.src, t.dst);
+				if (file_copy(t.src, t.dst)) {
+					syslog(LOG_ERR, "file copy failed");
+				}
 				free(t.src);
 				free(t.dst);
 				t.src = t.dst = NULL;
