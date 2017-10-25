@@ -236,7 +236,10 @@ int main(int argc, char* argv[])  {
 			switch (t.t) {
 			case TASK_MKDIR:
 				syslog(LOG_DEBUG, "task_mkdir %s (%s)", t.src, i.prompt_textbox);
-				dir_make(t.src);
+				err = dir_make(t.src);
+				if (err) {
+					syslog(LOG_ERR, "dir_make(\"%s\") failed: %s", t.src, strerror(err));
+				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				pv->selection = file_index(pv->file_list, pv->num_files, i.prompt_textbox);
 				free(t.src);
@@ -257,8 +260,10 @@ int main(int argc, char* argv[])  {
 				break;
 			case TASK_COPY:
 				syslog(LOG_DEBUG, "task_copy %s -> %s", t.src, t.dst);
-				if (file_copy(t.src, t.dst)) {
-					syslog(LOG_ERR, "file copy failed");
+				err = file_copy(t.src, t.dst);
+				if (err) {
+					syslog(LOG_ERR, "file_copy(\"%s\", \"%s\") failed: %s",
+							t.src, t.dst, strerror(err));
 				}
 				free(t.src);
 				free(t.dst);
@@ -268,7 +273,11 @@ int main(int argc, char* argv[])  {
 				break;
 			case TASK_MOVE:
 				syslog(LOG_DEBUG, "task_move %s -> %s", t.src, t.dst);
-				file_move(t.src, t.dst);
+				err = file_move(t.src, t.dst);
+				if (err) {
+					syslog(LOG_ERR, "file_move(\"%s\", \"%s\") failed: %s",
+							t.src, t.dst, strerror(err));
+				}
 				free(t.src);
 				free(t.dst);
 				t.src = t.dst = NULL;

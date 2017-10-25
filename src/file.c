@@ -34,6 +34,7 @@ static int file_sort(const struct dirent** a, const struct dirent** b) {
 
 /* Cleans up old data and scans working directory,
  * putting data into variables passed in arguments.
+ * TODO it can fail too; to error handling
  */
 void scan_dir(const char* wd, struct file_record*** file_list, int* num_files) {
 	delete_file_list(file_list, num_files);
@@ -108,36 +109,36 @@ int file_index(struct file_record** fl, int nf, const char* name) {
 	return (i != nf) ? i : -1;
 }
 
-int file_move(const char* src, const char* dest) {
-	// Split dest[] to name[] and dest_dir[]
+int file_move(const char* src, const char* dst) {
+	syslog(LOG_DEBUG, "file_move(\"%s\", \"%s\")", src, dst);
+	// Split dst[] to name[] and dst_dir[]
 	// to check if destination and source are on the same filesystem
 	// In case they are on the same FS,
 	// then it's just one library function to call: rename()
 	char* name = malloc(NAME_MAX);
-	current_dir(dest, name);
-	char* dest_dir = strdup(dest);
-	up_dir(dest_dir);
+	current_dir(dst, name);
+	char* dst_dir = strdup(dst);
+	up_dir(dst_dir);
 
-	struct stat src_stat, dest_stat;
+	struct stat src_stat, dst_stat;
 	int sse, dse; // Source Stat Error, Destination Stat Error
-	if ((sse = lstat(src, &src_stat)) || (dse = lstat(dest_dir, &dest_stat))) {
-		int e = errno;
-		syslog(LOG_ERR, "stat chain failed for %s (%d) or %s (%d), errno: %d", src, sse, dest_dir, dse, e);
-		return e;
+	if ((sse = lstat(src, &src_stat)) || (dse = lstat(dst_dir, &dst_stat))) {
+		return errno;
 	}
-	syslog(LOG_DEBUG, "src %s %ld, dest %s %ld", src, src_stat.st_dev, dest, dest_stat.st_dev);
-	int r;
-	if (src_stat.st_dev == dest_stat.st_dev) {
+	if (src_stat.st_dev == dst_stat.st_dev) {
 		// Within single filesystem, moving is easy
-		r = rename(src, dest);
+		if (rename(src, dst)) return errno;
 	}
 	else {
-		r = file_copy(src, dest);
-		r |= file_remove(src);
+		int r;
+		r = file_copy(src, dst);
+		if (r) return errno;
+		r = file_remove(src);
+		if (r) return errno;
 	}
 	free(name);
-	free(dest_dir);
-	return r;
+	free(dst_dir);
+	return 0;
 }
 
 /* On failure, last errno value is returned.
@@ -170,23 +171,21 @@ int file_remove(const char* src) {
 int file_copy(const char* src, const char* dest) {
 	syslog(LOG_DEBUG, "file_copy(\"%s\", \"%s\")", src, dest);
 	struct stat srcs;
-	lstat(src, &srcs);
+	if (lstat(src, &srcs)) return errno;
 	if ((srcs.st_mode & S_IFMT) == S_IFDIR) {
-		syslog(LOG_DEBUG, "it's a directory");
 		dir_make(dest);
 		struct file_record** fl = NULL;
 		int fn = 0;
 		scan_dir(src, &fl, &fn);
 		char* src_path = malloc(PATH_MAX);
 		char* dst_path = malloc(PATH_MAX);
-		for (int i = 0; i < fn; i++) {
+		for (int i = 0; i < fn; ++i) {
 			strcpy(src_path, src);
 			strcpy(dst_path, dest);
 			enter_dir(src_path, fl[i]->file_name);
 			enter_dir(dst_path, fl[i]->file_name);
 			int r;
 			if ((r = file_copy(src_path, dst_path))) {
-				syslog(LOG_ERR, "recursive call of file_copy(\"%s\", \"%s\") failed, returning %d", src_path, dst_path, r);
 				return r;
 			}
 		}
@@ -195,37 +194,22 @@ int file_copy(const char* src, const char* dest) {
 		free(dst_path);
 	}
 	else {
-		syslog(LOG_DEBUG, "it's a file");
 		FILE* input_file = fopen(src, "rb");
-		if (!input_file) {
-			syslog(LOG_ERR, "error opening input file");
-			return -1;
-		}
+		if (!input_file) return errno;
 		FILE* output_file = fopen(dest, "wb");
 		if (!output_file) {
-			syslog(LOG_ERR, "error opening output file");
-			fclose(input_file);
-			return -1;
+			int e = errno;
+			fclose(input_file); // TODO fclose() can fail and set errno; how to handle that?
+			return e;
 		}
 		char* buffer = malloc(BUFSIZ);
 		int rr, wr, acc = 0;
 		while ((rr = fread(buffer, 1, BUFSIZ, input_file)) != 0) {
 			wr = fwrite(buffer, 1, rr, output_file);
-			if (ferror(output_file)) {
-				syslog(LOG_ERR, "file error");
-				// An error occured
-				// TODO handle
-			}
+			if (ferror(output_file) || wr != rr) return -1; // TODO
 			acc += wr;
-			if (wr != rr) {
-				syslog(LOG_DEBUG, "something weird");
-			}
 		}
-		if (!feof(input_file) || ferror(input_file)) {
-			syslog(LOG_ERR, "file error");
-			// An error occured
-			// TODO handle
-		}
+		if (!feof(input_file) || ferror(input_file)) return -1; // TODO
 		fclose(output_file);
 		fclose(input_file);
 		free(buffer);
@@ -233,7 +217,10 @@ int file_copy(const char* src, const char* dest) {
 	return 0;
 }
 
-int dir_make(const char* name) {
-	syslog(LOG_DEBUG, "dir_make(\"%s\")", name);
-	return mkdir(name, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+int dir_make(const char* path) {
+	syslog(LOG_DEBUG, "dir_make(\"%s\")", path);
+	if (mkdir(path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)) {
+		return errno;
+	}
+	return 0;
 }
