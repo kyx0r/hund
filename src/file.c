@@ -132,7 +132,8 @@ int file_move(const char* src, const char* dest) {
 		r = rename(src, dest);
 	}
 	else {
-		// TODO
+		file_copy(src, dest);
+		file_remove(src);
 	}
 	free(name);
 	free(dest_dir);
@@ -170,41 +171,72 @@ int file_remove(const char* src) {
 }
 
 int file_copy(const char* src, const char* dest) {
-	FILE* input_file = fopen(src, "rb");
-	if (!input_file) {
-		return -1;
+	syslog(LOG_DEBUG, "file_copy(\"%s\", \"%s\")", src, dest);
+	struct stat srcs;
+	lstat(src, &srcs);
+	if ((srcs.st_mode & S_IFMT) == S_IFDIR) {
+		syslog(LOG_DEBUG, "it's a directory");
+		dir_make(dest);
+		struct file_record** fl = NULL;
+		int fn = 0;
+		scan_dir(src, &fl, &fn);
+		char* src_path = malloc(PATH_MAX);
+		char* dst_path = malloc(PATH_MAX);
+		for (int i = 0; i < fn; i++) {
+			strcpy(src_path, src);
+			strcpy(dst_path, dest);
+			enter_dir(src_path, fl[i]->file_name);
+			enter_dir(dst_path, fl[i]->file_name);
+			int r;
+			if ((r = file_copy(src_path, dst_path))) {
+				syslog(LOG_ERR, "recursive call of file_copy(\"%s\", \"%s\") failed, returning %d", src_path, dst_path, r);
+				return r;
+			}
+		}
+		delete_file_list(&fl, &fn);
+		free(src_path);
+		free(dst_path);
 	}
-	FILE* output_file = fopen(dest, "wb");
-	if (!output_file) {
-		fclose(input_file);
-		return -1;
-	}
-	const size_t buffer_size = 4096;
-	char* buffer = malloc(buffer_size);
-	int rr, wr, acc = 0;
-	while ((rr = fread(buffer, 1, buffer_size, input_file)) != 0) {
-		wr = fwrite(buffer, 1, rr, output_file);
-		if (ferror(output_file)) {
+	else {
+		syslog(LOG_DEBUG, "it's a file");
+		FILE* input_file = fopen(src, "rb");
+		if (!input_file) {
+			syslog(LOG_ERR, "error opening input file");
+			return -1;
+		}
+		FILE* output_file = fopen(dest, "wb");
+		if (!output_file) {
+			syslog(LOG_ERR, "error opening output file");
+			fclose(input_file);
+			return -1;
+		}
+		char* buffer = malloc(BUFSIZ);
+		int rr, wr, acc = 0;
+		while ((rr = fread(buffer, 1, BUFSIZ, input_file)) != 0) {
+			wr = fwrite(buffer, 1, rr, output_file);
+			if (ferror(output_file)) {
+				syslog(LOG_ERR, "file error");
+				// An error occured
+				// TODO handle
+			}
+			acc += wr;
+			if (wr != rr) {
+				syslog(LOG_DEBUG, "something weird");
+			}
+		}
+		if (!feof(input_file) || ferror(input_file)) {
 			syslog(LOG_ERR, "file error");
 			// An error occured
 			// TODO handle
 		}
-		acc += wr;
-		if (wr != rr) {
-			syslog(LOG_DEBUG, "something weird");
-		}
+		fclose(output_file);
+		fclose(input_file);
+		free(buffer);
 	}
-	if (!feof(input_file) || ferror(input_file)) {
-		syslog(LOG_ERR, "file error");
-		// An error occured
-		// TODO handle
-	}
-	fclose(output_file);
-	fclose(input_file);
-	free(buffer);
 	return 0;
 }
 
 int dir_make(const char* name) {
+	syslog(LOG_DEBUG, "dir_make(\"%s\")", name);
 	return mkdir(name, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 }
