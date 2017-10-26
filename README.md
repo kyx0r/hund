@@ -7,8 +7,9 @@ I want to learn new things. If you find Hund useful, it's a huge plus.
 - Resize window
 - File type recognition (indicated by color and symbol)
 - Follow symlinks
-- Move/remove/copy single file
-- Create/move directory
+- Move/remove/copy file/directory
+- Create directory
+- Find file (exact match)
 #### UI
 Hund uses dual-panel view just like GNU Midnight Commander does. And it uses ncurses too.
 #### Be careful
@@ -25,6 +26,7 @@ Commands are vimish
 - `rr` rescan and refresh active view
 - `mk` create directory
 - `TAB` change active view
+- `/` find file in working directory
 - `qq` exit
 - `ESC` reset command
 #### Name
