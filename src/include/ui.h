@@ -47,6 +47,7 @@ enum command {
 	CMD_ENTRY_UP,
 	CMD_ENTRY_DOWN,
 	CMD_CREATE_DIR,
+	CMD_FIND,
 };
 
 #define MAX_KEYSEQ_LENGTH 4
@@ -72,6 +73,7 @@ static const struct key2cmd key_mapping[] = {
 	{ .ks = { 'd', 0, 0, 0 }, .d = "up dir", .m = MODE_MANAGER, .c = CMD_UP_DIR },
 	{ .ks = { 'i', 0, 0, 0 }, .d = "enter dir", .m = MODE_MANAGER, .c = CMD_ENTER_DIR },
 	{ .ks = { 'e', 0, 0, 0 }, .d = "enter dir", .m = MODE_MANAGER, .c = CMD_ENTER_DIR },
+	{ .ks = { '/', 0, 0, 0 }, .d = "find", .m = MODE_MANAGER, .c = CMD_FIND },
 
 	{ .ks = { 'x', 'x', 0, 0 }, .d = "quit", .m = MODE_MANAGER, .c = CMD_QUIT },
 	{ .ks = { 'x', 'y', 0, 0 }, .d = "quit", .m = MODE_MANAGER, .c = CMD_QUIT },

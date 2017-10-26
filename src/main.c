@@ -55,7 +55,8 @@ enum task_type {
 	TASK_MKDIR,
 	TASK_RM,
 	TASK_COPY,
-	TASK_MOVE
+	TASK_MOVE,
+	TASK_FIND,
 };
 
 enum task_state {
@@ -73,9 +74,9 @@ struct task {
 };
 
 int main(int argc, char* argv[])  {
-	static const char* help = "Usage: hund [OPTION]...\n"
+	static const char* help = "Usage: hund [OPTION] [left panel] [right panel]\n"
 	"Options:\n"
-	"  -c, --chdir\t\tchange initial directory\n"
+	"  -c, --chdir=PATH\t\tchange initial directory\n"
 	"  -v, --verbose\t\tbe verbose\n"
 	"  -h, --help\t\tdisplay this help message\n";
 
@@ -105,8 +106,16 @@ int main(int argc, char* argv[])  {
 		}
 	}
 
+	char* init_wd[2] = { NULL, NULL };
+	int init_wd_top = 0;
 	while (optind < argc) {
-		printf("non-option argument at index %d: %s\n", optind, argv[optind]);
+		if (init_wd_top < 2) {
+			init_wd[init_wd_top] = argv[optind];
+			init_wd_top += 1;
+		}
+		else {
+			//
+		}
 		optind += 1;
 	}
 
@@ -115,13 +124,18 @@ int main(int argc, char* argv[])  {
 	
 	struct ui i;
 	ui_init(&i);
+
 	struct file_view* pv = &i.fvs[0];
 	struct file_view* sv = &i.fvs[1];
-
-	get_cwd(pv->wd);
-	get_cwd(sv->wd);
-	scan_dir(pv->wd, &pv->file_list, &pv->num_files);
-	scan_dir(sv->wd, &sv->file_list, &sv->num_files);
+	for (int v = 0; v < 2; ++v) {
+		if (init_wd[v]) {
+			strcpy(i.fvs[v].wd, init_wd[v]);
+		}
+		else {
+			get_cwd(i.fvs[v].wd);
+		}
+		scan_dir(i.fvs[v].wd, &i.fvs[v].file_list, &i.fvs[v].num_files);
+	}
 
 	struct task t = (struct task) {
 		.t = TASK_NONE,
@@ -195,6 +209,12 @@ int main(int argc, char* argv[])  {
 				strcpy(t.src, pv->wd);
 				strcat(t.src, "/");
 				prompt_open(&i, "new directory name", t.src+strlen(t.src), NAME_MAX);
+				break;
+			case CMD_FIND:
+				t.src = calloc(NAME_MAX, sizeof(char));
+				t.t = TASK_FIND;
+				t.s = TASK_STATE_GATHERING_DATA;
+				prompt_open(&i, "find in current directory", t.src, NAME_MAX);
 				break;
 			case CMD_REFRESH:
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
@@ -287,6 +307,17 @@ int main(int argc, char* argv[])  {
 					pv->selection -= 1;
 				}
 				break;
+			case TASK_FIND:
+				syslog(LOG_DEBUG, "task_find \"%s\"", t.src);
+				{
+				int i = file_index(pv->file_list, pv->num_files, t.src);
+				if (i >= 0) {
+					pv->selection = i;
+				}
+				free(t.src);
+				t.src = NULL;
+				}
+				break;
 			case TASK_NONE:
 				break;
 			}
@@ -296,8 +327,9 @@ int main(int argc, char* argv[])  {
 		ui_update_geometry(&i);
 		ui_draw(&i);
 	}
+
 	ui_end(&i);
-	syslog(LOG_DEBUG, "exit");
+	syslog(LOG_NOTICE, "hund finished");
 	closelog();
 	exit(EXIT_SUCCESS);
 }
