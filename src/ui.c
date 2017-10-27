@@ -29,11 +29,12 @@ void ui_init(struct ui* const i) {
 	}
 	start_color();
 	noecho();
+	//cbreak();
 	//nonl();
 	//raw();
-	intrflush(stdscr, FALSE);
+	//intrflush(stdscr, FALSE);
 	keypad(stdscr, TRUE);
-	timeout(100);
+	timeout(DEFAULT_GETCH_TIMEOUT);
 	curs_set(0);
 
 	init_pair(1, COLOR_WHITE, COLOR_BLACK);
@@ -113,11 +114,10 @@ void ui_draw(struct ui* const i) {
 	for (int v = 0; v < 2; v++) {
 		struct file_view* s = &i->fvs[v];
 		PANEL* p = i->fvp[v];
-		int ph, pw;
-		getmaxyx(panel_window(p), ph, pw);
-		if (s->selection == -1) {
-			s->selection = 0;
-		}
+		int _ph, _pw;
+		getmaxyx(panel_window(p), _ph, _pw);
+		if (_ph < 0 || _ph < 0) return; // these may be -1
+		fnum_t ph = _ph, pw = _pw;
 		WINDOW* w = panel_window(p);
 		wborder(w, '|', '|', '-', '-', '+', '+', '+', '+');
 		struct passwd* pwd = get_pwd();
@@ -142,8 +142,8 @@ void ui_draw(struct ui* const i) {
 		else {
 			s->view_offset = s->selection - ph/2 + 1;
 		}
-		int view_row = 1; // Skipping border
-		int ei = s->view_offset; // Entry Index
+		unsigned view_row = 1; // Skipping border
+		fnum_t ei = s->view_offset; // Entry Index
 		while (ei < s->num_files && view_row < ph-1) {
 			// Current File Record
 			const struct file_record* cfr = s->file_list[ei];
@@ -184,8 +184,8 @@ void ui_draw(struct ui* const i) {
 				color_pair_enabled = 1;
 				break;
 			}
-			const int fnlen = strlen(cfr->file_name); // File Name Length
-			int enlen; // entry length
+			const size_t fnlen = strlen(cfr->file_name); // File Name Length
+			size_t enlen; // entry length
 			int padding;
 			if (fnlen > pw - 3) {
 				// If file name can't fit in line, its just cut
@@ -212,14 +212,15 @@ void ui_draw(struct ui* const i) {
 			mvwprintw(w, view_row, 1, "%*c", pw-2, ' ');
 			view_row += 1;
 		}
-		mvwprintw(w, view_row, 2, "files: %d, size: %dB",
-				s->num_files, (s->selection < s->num_files ? s->file_list[s->selection]->s.st_size : 0));
+		mvwprintw(w, view_row, 2, "%d/%d, %uB", s->selection+1, s->num_files,
+				(s->selection < s->num_files ? s->file_list[s->selection]->s.st_size : 0));
+		// TODO permissions, owner, group...
 		wrefresh(w);
 	}
 	WINDOW* hw = panel_window(i->hint);
 	mvwprintw(hw, 0, 0, "%*c", i->scrw-1, ' ');
 	wmove(hw, 0, 0);
-	for (int x = 0; x < i->kml; x++) {
+	for (int x = 0; x < i->kml; ++x) {
 		if (i->mks[x]) {
 			int c = 0;
 			wprintw(hw, " ");
@@ -278,7 +279,7 @@ void ui_update_geometry(struct ui* const i) {
 	i->scrw = newscrw;
 	int w[2] = { i->scrw/2, i->scrw - w[0] };
 	int px[2] = { 0, w[0] };
-	for (int x = 0; x < 2; x++) {
+	for (int x = 0; x < 2; ++x) {
 		PANEL* p = i->fvp[x];
 		WINDOW* ow = panel_window(p);
 		wresize(ow, i->scrh-1, w[x]);
@@ -306,8 +307,8 @@ void prompt_open(struct ui* i, char* ptt, char* ptb, int ptbs) {
 	i->m = MODE_PROMPT;
 	WINDOW* fw = newwin(1, 1, 0, 0);
 	PANEL* fp = new_panel(fw);
-	keypad(fw, TRUE);
-	wtimeout(fw, 100);
+	//keypad(fw, TRUE);
+	//wtimeout(fw, DEFAULT_GETCH_TIMEOUT);
 	i->prompt = fp;
 	i->prompt_title = ptt;
 	i->prompt_textbox = ptb;
@@ -330,14 +331,25 @@ enum command get_cmd(struct ui* i) {
 	static int keyseq[MAX_KEYSEQ_LENGTH] = { 0 };
 	static int ksi = 0;
 	int c = getch();
-	//syslog(LOG_DEBUG, "%d, (%d) %d %d %d %d", c, ksi, keyseq[0], keyseq[1], keyseq[2], keyseq[3]);
+	syslog(LOG_DEBUG, "%d, (%d) %d %d %d %d", c, ksi, keyseq[0], keyseq[1], keyseq[2], keyseq[3]);
 
 	if (c == -1 && !ksi) return CMD_NONE;
 	if (c == 27) {
-		memset(i->mks, 0, i->kml*sizeof(int));
-		memset(keyseq, 0, sizeof(keyseq));
-		ksi = 0;
-		return CMD_NONE;
+		syslog(LOG_DEBUG, "esc?");
+		//timeout();
+		int cc = getch();
+		//timeout(DEFAULT_GETCH_TIMEOUT);
+		if (cc == -1) {
+			syslog(LOG_DEBUG, "esc");
+			memset(i->mks, 0, i->kml*sizeof(int));
+			memset(keyseq, 0, sizeof(keyseq));
+			ksi = 0;
+			return CMD_NONE;
+		}
+		else {
+			syslog(LOG_DEBUG, "alt");
+			return CMD_NONE;
+		}
 	}
 	if (c != -1 || !ksi) {
 		keyseq[ksi] = c;

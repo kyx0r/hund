@@ -36,7 +36,7 @@ static int file_sort(const struct dirent** a, const struct dirent** b) {
  * putting data into variables passed in arguments.
  * TODO it can fail too; to error handling
  */
-void scan_dir(const char* wd, struct file_record*** file_list, int* num_files) {
+void scan_dir(const char* wd, struct file_record*** file_list, fnum_t* num_files) {
 	delete_file_list(file_list, num_files);
 	struct dirent** namelist;
 	DIR* dir = opendir(wd);
@@ -45,14 +45,18 @@ void scan_dir(const char* wd, struct file_record*** file_list, int* num_files) {
 	*file_list = malloc(sizeof(struct file_record*) * (*num_files));
 	char* path = malloc(PATH_MAX);
 	char* link_path = malloc(PATH_MAX);
-	for (int i = 0; i < (*num_files); i++) {
+	for (fnum_t i = 0; i < (*num_files); ++i) {
 		strcpy(path, wd);
 		enter_dir(path, namelist[i]->d_name);
 		(*file_list)[i] = malloc(sizeof(struct file_record));
 		struct file_record* const fr = (*file_list)[i];
 		fr->file_name = strdup(namelist[i]->d_name);
 		fr->link_path = NULL;
-		if (!lstat(path, &fr->s)) {
+		if (lstat(path, &fr->s)) {
+			fr->t = UNKNOWN;
+			continue;
+		}
+		else {
 			switch (fr->s.st_mode & S_IFMT) {
 			case S_IFBLK: fr->t = BLOCK; break;
 			case S_IFCHR: fr->t = CHARACTER; break;
@@ -72,11 +76,6 @@ void scan_dir(const char* wd, struct file_record*** file_list, int* num_files) {
 				fr->link_path[lp_len] = 0; // NULL terminator
 			}
 		}
-		else {
-			syslog(LOG_ERR, "lstat(\"%s\"), called in scan_dir() failed", path);
-			fr->t = UNKNOWN;
-			continue;
-		}
 		// I'm keeping d_name, don't need the rest
 		free(namelist[i]);
 	}
@@ -85,9 +84,9 @@ void scan_dir(const char* wd, struct file_record*** file_list, int* num_files) {
 	free(namelist);
 }
 
-void delete_file_list(struct file_record*** file_list, int* num_files) {
+void delete_file_list(struct file_record*** file_list, fnum_t* num_files) {
 	if (*num_files) {
-		for (int i = 0; i < *num_files; i++) {
+		for (fnum_t i = 0; i < *num_files; i++) {
 			free((*file_list)[i]->file_name);
 			free((*file_list)[i]->link_path);
 			free((*file_list)[i]);
@@ -99,14 +98,29 @@ void delete_file_list(struct file_record*** file_list, int* num_files) {
 }
 
 /* Finds file with given name and returns it's position in file_list
- * If not found, returns -1;
+ * If not found, leaves SELection unchanged
  */
-int file_index(struct file_record** fl, int nf, const char* name) {
-	int i = 0;
+void file_index(struct file_record** fl, fnum_t nf, const char* name, fnum_t* sel) {
+	fnum_t i = 0;
 	while (i < nf && strcmp(fl[i]->file_name, name)) {
 		i += 1;
 	}
-	return (i != nf) ? i : -1;
+	if (i != nf) {
+		*sel = i;
+	}
+}
+
+/* Unlike file_index() it does not look for exact match
+ * If nothing found, does not modify SELection
+ */
+void file_find(struct file_record** fl, fnum_t nf, const char* name, fnum_t* sel) {
+	fnum_t i = 0;
+	while (i < nf && strncmp(fl[i]->file_name, name, strlen(name))) {
+		i += 1;
+	}
+	if (i != nf) {
+		*sel = i;
+	}
 }
 
 int file_move(const char* src, const char* dst) {
@@ -150,10 +164,10 @@ int file_remove(const char* src) {
 	if (lstat(src, &s)) return errno;
 	if ((s.st_mode & S_IFMT) == S_IFDIR) {
 		struct file_record** fl = NULL;
-		int fn = 0;
+		fnum_t fn = 0;
 		scan_dir(src, &fl, &fn);
 		char* path = malloc(PATH_MAX);
-		for (int i = 0; i < fn; ++i) {
+		for (fnum_t i = 0; i < fn; ++i) {
 			// TODO minimalize copying paths if possible
 			strcpy(path, src);
 			enter_dir(path, fl[i]->file_name);
@@ -175,11 +189,11 @@ int file_copy(const char* src, const char* dest) {
 	if ((srcs.st_mode & S_IFMT) == S_IFDIR) {
 		dir_make(dest);
 		struct file_record** fl = NULL;
-		int fn = 0;
+		fnum_t fn = 0;
 		scan_dir(src, &fl, &fn);
 		char* src_path = malloc(PATH_MAX);
 		char* dst_path = malloc(PATH_MAX);
-		for (int i = 0; i < fn; ++i) {
+		for (fnum_t i = 0; i < fn; ++i) {
 			strcpy(src_path, src);
 			strcpy(dst_path, dest);
 			enter_dir(src_path, fl[i]->file_name);

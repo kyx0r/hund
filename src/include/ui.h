@@ -29,9 +29,12 @@
 
 #include "file.h"
 
+#define DEFAULT_GETCH_TIMEOUT 500
+
 enum mode {
 	MODE_MANAGER,
-	MODE_PROMPT
+	MODE_PROMPT,
+	//MODE_FIND, // Moves selection to matching file as user types
 };
 
 enum command {
@@ -92,9 +95,9 @@ static const struct key2cmd key_mapping[] = {
 struct file_view {
 	char wd[PATH_MAX];
 	struct file_record** file_list;
-	int num_files;
-	int selection;
-	int view_offset;
+	fnum_t num_files;
+	fnum_t selection;
+	fnum_t view_offset;
 };
 
 /* UI is intended only to handle drawing functions

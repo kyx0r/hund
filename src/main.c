@@ -26,30 +26,6 @@
 
 #include "include/ui.h"
 
-static void go_up_dir(struct file_view* v) {
-	char* prevdir = malloc(NAME_MAX);
-	current_dir(v->wd, prevdir);
-	int r = up_dir(v->wd);
-	if (!r) {
-		scan_dir(v->wd, &v->file_list, &v->num_files);
-		v->selection = file_index(v->file_list, v->num_files, prevdir);
-	}
-	free(prevdir);
-}
-
-static void go_enter_dir(struct file_view* v) {
-	if (v->file_list[v->selection]->t == DIRECTORY) {
-		enter_dir(v->wd, v->file_list[v->selection]->file_name);
-		v->selection = 0;
-		scan_dir(v->wd, &v->file_list, &v->num_files);
-	}
-	else if (v->file_list[v->selection]->t == LINK) {
-		enter_dir(v->wd, v->file_list[v->selection]->link_path);
-		v->selection = 0;
-		scan_dir(v->wd, &v->file_list, &v->num_files);
-	}
-}
-
 enum task_type {
 	TASK_NONE = 0,
 	TASK_MKDIR,
@@ -146,6 +122,8 @@ int main(int argc, char* argv[])  {
 
 	bool run = true;
 	while (run) {
+		ui_update_geometry(&i);
+		ui_draw(&i);
 		if (i.m == MODE_MANAGER) {
 			switch (get_cmd(&i)) {
 			case CMD_QUIT:
@@ -168,10 +146,28 @@ int main(int argc, char* argv[])  {
 				}
 				break;
 			case CMD_ENTER_DIR:
-				go_enter_dir(pv);
+				if (pv->file_list[pv->selection]->t == DIRECTORY) {
+					enter_dir(pv->wd, pv->file_list[pv->selection]->file_name);
+					pv->selection = 0;
+					scan_dir(pv->wd, &pv->file_list, &pv->num_files);
+				}
+				else if (pv->file_list[pv->selection]->t == LINK) {
+					enter_dir(pv->wd, pv->file_list[pv->selection]->link_path);
+					pv->selection = 0;
+					scan_dir(pv->wd, &pv->file_list, &pv->num_files);
+				}
 				break;
 			case CMD_UP_DIR:
-				go_up_dir(pv);
+				{
+				char* prevdir = malloc(NAME_MAX);
+				current_dir(pv->wd, prevdir);
+				int r = up_dir(pv->wd);
+				if (!r) {
+					scan_dir(pv->wd, &pv->file_list, &pv->num_files);
+					file_index(pv->file_list, pv->num_files, prevdir, &pv->selection);
+				}
+				free(prevdir);
+				}
 				break;
 			case CMD_COPY:
 				t.src = calloc(PATH_MAX, sizeof(char));
@@ -229,12 +225,20 @@ int main(int argc, char* argv[])  {
 			wmove(pw, 1, i.prompt_textbox_top+1);
 			int c = wgetch(pw);
 			if (c == -1);
+			else if (c == 27) { // 27 waits for second input (then it's ALT-KEY)
+				syslog(LOG_DEBUG, "abort prompt");
+				if (t.src) free(t.src);
+				if (t.dst) free(t.dst);
+				t.t = TASK_NONE;
+				t.s = TASK_STATE_CLEAN;
+				prompt_close(&i, MODE_MANAGER);
+			}
 			else if (c == '\n') {
 				syslog(LOG_DEBUG, "exit prompt");
-				prompt_close(&i, MODE_MANAGER);
 				if (t.t != TASK_NONE && t.s == TASK_STATE_GATHERING_DATA) {
 					t.s = TASK_STATE_DATA_GATHERED;
 				}
+				prompt_close(&i, MODE_MANAGER);
 			}
 			else if (c == KEY_BACKSPACE) {
 				if (i.prompt_textbox_top > 0) {
@@ -261,9 +265,8 @@ int main(int argc, char* argv[])  {
 					syslog(LOG_ERR, "dir_make(\"%s\") failed: %s", t.src, strerror(err));
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
-				pv->selection = file_index(pv->file_list, pv->num_files, i.prompt_textbox);
-				free(t.src);
-				t.src = NULL;
+				file_index(pv->file_list, pv->num_files, i.prompt_textbox, &pv->selection);
+				t.s = TASK_STATE_FINISHED;
 				break;
 			case TASK_RM:
 				syslog(LOG_DEBUG, "task_rmdir %s", t.src);
@@ -271,12 +274,11 @@ int main(int argc, char* argv[])  {
 				if (err) {
 					syslog(LOG_ERR, "file_remove(\"%s\") failed: %s", t.src, strerror(err));
 				}
-				free(t.src);
-				t.src = NULL;
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				if (pv->selection >= pv->num_files) {
 					pv->selection -= 1;
 				}
+				t.s = TASK_STATE_FINISHED;
 				break;
 			case TASK_COPY:
 				syslog(LOG_DEBUG, "task_copy %s -> %s", t.src, t.dst);
@@ -285,11 +287,9 @@ int main(int argc, char* argv[])  {
 					syslog(LOG_ERR, "file_copy(\"%s\", \"%s\") failed: %s",
 							t.src, t.dst, strerror(err));
 				}
-				free(t.src);
-				free(t.dst);
-				t.src = t.dst = NULL;
 				//scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				scan_dir(sv->wd, &sv->file_list, &sv->num_files);
+				t.s = TASK_STATE_FINISHED;
 				break;
 			case TASK_MOVE:
 				syslog(LOG_DEBUG, "task_move %s -> %s", t.src, t.dst);
@@ -298,35 +298,39 @@ int main(int argc, char* argv[])  {
 					syslog(LOG_ERR, "file_move(\"%s\", \"%s\") failed: %s",
 							t.src, t.dst, strerror(err));
 				}
-				free(t.src);
-				free(t.dst);
-				t.src = t.dst = NULL;
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				scan_dir(sv->wd, &sv->file_list, &sv->num_files);
 				if (pv->selection >= pv->num_files) {
 					pv->selection -= 1;
 				}
+				t.s = TASK_STATE_FINISHED;
 				break;
 			case TASK_FIND:
 				syslog(LOG_DEBUG, "task_find \"%s\"", t.src);
-				{
-				int i = file_index(pv->file_list, pv->num_files, t.src);
-				if (i >= 0) {
-					pv->selection = i;
-				}
-				free(t.src);
-				t.src = NULL;
-				}
+				file_find(pv->file_list, pv->num_files, t.src, &pv->selection);
+				t.s = TASK_STATE_FINISHED;
 				break;
 			case TASK_NONE:
 				break;
 			}
-			t.s = TASK_STATE_FINISHED;
 		}
 
-		ui_update_geometry(&i);
-		ui_draw(&i);
-	}
+		if (t.s == TASK_STATE_EXECUTING) {
+			/* TODO
+			 * This state is for later.
+			 * Copying, moving, listing etc. is going to be iterative.
+			 * So that tasks can be paused, stopped or changed anytime.
+			 */
+		}
+
+		if (t.s == TASK_STATE_FINISHED) {
+			if (t.src) free(t.src);
+			if (t.dst) free(t.dst);
+			t.src = t.dst = NULL;
+			t.s = TASK_STATE_CLEAN;
+			t.t = TASK_NONE;
+		}
+	} // while (run)
 
 	ui_end(&i);
 	syslog(LOG_NOTICE, "hund finished");

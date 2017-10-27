@@ -44,6 +44,8 @@
 
 #include "path.h"
 
+typedef unsigned int fnum_t; // Number of Files
+
 enum file_type {
 	UNKNOWN = 0,
 	BLOCK,
@@ -62,9 +64,10 @@ struct file_record {
 	char* link_path;
 };
 
-void scan_dir(const char*, struct file_record***, int*);
-void delete_file_list(struct file_record***, int*);
-int file_index(struct file_record**, int, const char*);
+void scan_dir(const char*, struct file_record***, fnum_t*);
+void delete_file_list(struct file_record***, fnum_t*);
+void file_index(struct file_record**, fnum_t, const char*, fnum_t*);
+void file_find(struct file_record**, fnum_t, const char*, fnum_t*);
 
 int file_move(const char*, const char*);
 int file_remove(const char*);
