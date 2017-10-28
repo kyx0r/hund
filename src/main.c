@@ -104,13 +104,12 @@ int main(int argc, char* argv[])  {
 	struct file_view* pv = &i.fvs[0];
 	struct file_view* sv = &i.fvs[1];
 	for (int v = 0; v < 2; ++v) {
+		get_cwd(i.fvs[v].wd);
 		if (init_wd[v]) {
-			strcpy(i.fvs[v].wd, init_wd[v]);
-		}
-		else {
-			get_cwd(i.fvs[v].wd);
+			enter_dir(i.fvs[v].wd, init_wd[v]);
 		}
 		scan_dir(i.fvs[v].wd, &i.fvs[v].file_list, &i.fvs[v].num_files);
+		//syslog(LOG_DEBUG, "%s", i.fvs[v].wd);
 	}
 
 	struct task t = (struct task) {
@@ -237,7 +236,7 @@ int main(int argc, char* argv[])  {
 			default:
 				break;
 			}
-		}
+		} // MODE_MANGER
 		else if (i.m == MODE_CHMOD) {
 			switch (get_cmd(&i)) {
 			case CMD_RETURN:
@@ -262,7 +261,7 @@ int main(int argc, char* argv[])  {
 			case CMD_TOGGLE_OX: TOGGLE_MODE_BIT(i.chmod_mode, S_IXOTH); break;
 			default: break;
 			}
-		}
+		} // MODE_CHMOD
 		else if (i.m == MODE_FIND) {
 			curs_set(2);
 			WINDOW* hw = panel_window(i.hint);
@@ -285,7 +284,7 @@ int main(int argc, char* argv[])  {
 				file_find(pv->file_list, pv->num_files, i.find, &pv->selection);
 			}
 			curs_set(0);
-		}
+		} // MODE_FIND
 		else if (i.m ==	MODE_PROMPT) {
 			curs_set(2);
 			WINDOW* hw = panel_window(i.hint);
@@ -307,7 +306,7 @@ int main(int argc, char* argv[])  {
 				i.m = MODE_MANAGER;
 			}
 			curs_set(0);
-		}
+		} // MODE_PROMPT
 
 		if (t.s == TASK_STATE_DATA_GATHERED) {
 			t.s = TASK_STATE_EXECUTING;
@@ -364,22 +363,20 @@ int main(int argc, char* argv[])  {
 				break;
 			}
 		}
-
-		if (t.s == TASK_STATE_EXECUTING) {
+		else if (t.s == TASK_STATE_EXECUTING) {
 			/* TODO
 			 * This state is for later.
 			 * Copying, moving, listing etc. is going to be iterative.
 			 * So that tasks can be paused, stopped or changed anytime.
 			 */
 		}
-
-		if (t.s == TASK_STATE_FINISHED) {
+		else if (t.s == TASK_STATE_FINISHED) {
 			if (t.src) free(t.src);
 			if (t.dst) free(t.dst);
 			t.src = t.dst = NULL;
 			t.s = TASK_STATE_CLEAN;
 			t.t = TASK_NONE;
-		}
+		} // task state
 	} // while (run)
 
 	ui_end(&i);

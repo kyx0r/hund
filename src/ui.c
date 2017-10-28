@@ -118,14 +118,14 @@ void ui_end(struct ui* const i) {
 }
 
 void ui_draw(struct ui* const i) {
-	for (int v = 0; v < 2; v++) {
+	for (int v = 0; v < 2; ++v) {
 		struct file_view* s = &i->fvs[v];
 		PANEL* p = i->fvp[v];
 		int _ph, _pw;
-		getmaxyx(panel_window(p), _ph, _pw);
+		WINDOW* w = panel_window(p);
+		getmaxyx(w, _ph, _pw);
 		if (_ph < 0 || _ph < 0) return; // these may be -1
 		fnum_t ph = _ph, pw = _pw;
-		WINDOW* w = panel_window(p);
 		box(w, 0, 0);
 		//wborder(w, '|', '|', '-', '-', '+', '+', '+', '+');
 		struct passwd* pwd = get_pwd();
@@ -220,15 +220,17 @@ void ui_draw(struct ui* const i) {
 			mvwprintw(w, view_row, 1, "%*c", pw-2, ' ');
 			view_row += 1;
 		}
-		mvwprintw(w, view_row, 2, "%d/%d, %uB, %o", s->selection+1, s->num_files,
-				(s->selection < s->num_files ? s->file_list[s->selection]->s.st_size : 0),
-				s->file_list[s->selection]->s.st_mode);
-		// TODO permissions, owner, group...
+		if (s->num_files) {
+			mvwprintw(w, view_row, 2, "%d/%d, %uB, %o", s->selection+1, s->num_files,
+					(s->selection < s->num_files ? s->file_list[s->selection]->s.st_size : 0),
+					s->file_list[s->selection]->s.st_mode);
+		}
 		wrefresh(w);
 	}
 	WINDOW* hw = panel_window(i->hint);
 	mvwprintw(hw, 0, 0, "%*c", i->scrw-1, ' ');
 	wmove(hw, 0, 0);
+
 	if (i->m == MODE_FIND) {
 		mvwprintw(hw, 0, 1, "/%s", i->find);
 	}
@@ -264,8 +266,6 @@ void ui_draw(struct ui* const i) {
 		WINDOW* cw = panel_window(i->chmod_panel);
 		box(cw, 0, 0);
 		//wborder(cw, '|', '|', '-', '-', '+', '+', '+', '+');
-		int w, h;
-		getmaxyx(cw, h, w);
 		mode_t m = i->chmod_mode;
 		struct passwd* pwd = get_pwd();
 		struct group* grp = getgrgid(pwd->pw_gid);
@@ -428,12 +428,13 @@ enum command get_cmd(struct ui* i) {
  * If keeps gathering, returns 1.
  */
 int fill_textbox(char* buf, char** buftop, size_t bsize, int c) {
+	syslog(LOG_DEBUG, "fill_textbox %d", c);
 	if (c == -1) return 1;
 	else if (c == 27) {
 		// evil ESC
 		return -1;
 	}
-	else if (c == '\n') return 0;
+	else if (c == '\n' || c == '\r') return 0;
 	else if (c == KEY_BACKSPACE) {
 		if (*buftop - buf > 0) {
 			**buftop = 0;
