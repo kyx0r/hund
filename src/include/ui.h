@@ -34,7 +34,7 @@
 enum mode {
 	MODE_MANAGER,
 	MODE_PROMPT,
-	//MODE_FIND, // Moves selection to matching file as user types
+	MODE_FIND,
 };
 
 enum command {
@@ -111,10 +111,14 @@ struct ui {
 	struct file_view fvs[2]; // Dunno where to put it
 	char* prompt_title;
 	char* prompt_textbox;
-	int prompt_textbox_top;
-	int prompt_textbox_size;
+	char* prompt_textbox_top;
+	size_t prompt_textbox_size;
 	PANEL* prompt;
 	PANEL* hint;
+	char* find;
+	char* find_top;
+	size_t find_size;
+	fnum_t find_init; // Selection before find command
 	int kml;
 	int* mks; // Matching Key Sequence
 };
@@ -126,5 +130,6 @@ void ui_update_geometry(struct ui* const);
 void prompt_open(struct ui* i, char* ptt, char* ptb, int ptbs);
 void prompt_close(struct ui*, enum mode);
 enum command get_cmd(struct ui*);
+int fill_textbox(char* buf, char** buftop, size_t bsize, int c);
 
 #endif

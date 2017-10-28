@@ -67,9 +67,13 @@ void ui_init(struct ui* const i) {
 	i->m = MODE_MANAGER;
 	i->prompt_title = NULL;
 	i->prompt_textbox = NULL;
-	i->prompt_textbox_top = 0;
+	i->prompt_textbox_top = NULL;
 	i->prompt_textbox_size = 0;
 	i->prompt = NULL;
+	i->find = NULL;
+	i->find_top = NULL;
+	i->find_size = 0;
+	i->find_init = 0;
 	WINDOW* hw = newwin(1, 1, 0, 0);
 	i->hint = new_panel(hw);
 	i->kml = 0;
@@ -220,27 +224,32 @@ void ui_draw(struct ui* const i) {
 	WINDOW* hw = panel_window(i->hint);
 	mvwprintw(hw, 0, 0, "%*c", i->scrw-1, ' ');
 	wmove(hw, 0, 0);
-	for (int x = 0; x < i->kml; ++x) {
-		if (i->mks[x]) {
-			int c = 0;
-			wprintw(hw, " ");
-			int k;
-			while ((k = key_mapping[x].ks[c])) {
-				switch (k) {
-				case '\t':
-					wprintw(hw, "TAB");
-					break;
-				default:
-					wprintw(hw, "%c", key_mapping[x].ks[c]);
-					break;
-				}
-				c += 1;
-			}
-			wattron(hw, COLOR_PAIR(4));
-			wprintw(hw, "%s", key_mapping[x].d);
-			wattroff(hw, COLOR_PAIR(4));
-		}
+	if (i->m == MODE_FIND) {
+		mvwprintw(hw, 0, 1, "/%s", i->find);
 	}
+	else {
+		for (int x = 0; x < i->kml; ++x) {
+			if (i->mks[x]) {
+				int c = 0;
+				wprintw(hw, " ");
+				int k;
+				while ((k = key_mapping[x].ks[c])) {
+					switch (k) {
+					case '\t':
+						wprintw(hw, "TAB");
+						break;
+					default:
+						wprintw(hw, "%c", key_mapping[x].ks[c]);
+						break;
+					}
+					c += 1;
+				}
+				wattron(hw, COLOR_PAIR(4));
+				wprintw(hw, "%s", key_mapping[x].d);
+				wattroff(hw, COLOR_PAIR(4));
+			}
+		}
+		}
 	wrefresh(hw);
 	if (i->prompt) {
 		WINDOW* pw = panel_window(i->prompt);
@@ -251,7 +260,7 @@ void ui_draw(struct ui* const i) {
 		int padding = (w-2)-strlen(i->prompt_textbox);
 		if (padding <= 0) padding = 0;
 		mvwprintw(pw, 1, 1, "%.*s%*c", w-2, i->prompt_textbox, padding, ' ');
-		wmove(pw, 1, i->prompt_textbox_top);
+		//wmove(pw, 1, i->prompt_textbox_top-i->prompt_textbox+1);
 		wrefresh(pw);
 	}
 	update_panels();
@@ -313,7 +322,7 @@ void prompt_open(struct ui* i, char* ptt, char* ptb, int ptbs) {
 	i->prompt_title = ptt;
 	i->prompt_textbox = ptb;
 	// strlen() instead of 0: allows initial string to contain something
-	i->prompt_textbox_top = strlen(ptb);
+	i->prompt_textbox_top = i->prompt_textbox + strlen(ptb);
 	i->prompt_textbox_size = ptbs;
 	//memset(i->prompt_textbox, 0, i->prompt_textbox_size);
 	i->scrw = i->scrh = 0; // Forces geometry update
@@ -397,4 +406,32 @@ enum command get_cmd(struct ui* i) {
 		ksi = 0;
 	}
 	return cmd;
+}
+
+/* Gets input to buffer
+ * Responsible for cursor movement (buftop) and guarding buffer bounds (bsize)
+ * If text is ready (enter pressed or something) returns 0,
+ * If aborted, returns -1.
+ * If keeps gathering, returns 1.
+ */
+int fill_textbox(char* buf, char** buftop, size_t bsize, int c) {
+	if (c == -1) return 1;
+	else if (c == 27) {
+		// evil ESC
+		return -1;
+	}
+	else if (c == '\n') return 0;
+	else if (c == KEY_BACKSPACE) {
+		if (*buftop - buf > 0) {
+			**buftop = 0;
+			*buftop -= 1;
+			**buftop = 0;
+		}
+		else return 0;
+	}
+	else if ((size_t)(*buftop - buf) < bsize) {
+		**buftop = c;
+		*buftop += 1;
+	}
+	return 1;
 }

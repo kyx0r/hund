@@ -32,7 +32,6 @@ enum task_type {
 	TASK_RM,
 	TASK_COPY,
 	TASK_MOVE,
-	TASK_FIND,
 };
 
 enum task_state {
@@ -207,10 +206,11 @@ int main(int argc, char* argv[])  {
 				prompt_open(&i, "new directory name", t.src+strlen(t.src), NAME_MAX);
 				break;
 			case CMD_FIND:
-				t.src = calloc(NAME_MAX, sizeof(char));
-				t.t = TASK_FIND;
-				t.s = TASK_STATE_GATHERING_DATA;
-				prompt_open(&i, "find in current directory", t.src, NAME_MAX);
+				i.find = calloc(NAME_MAX, 1);
+				i.find_top = i.find;
+				i.find_size = NAME_MAX;
+				i.find_init = pv->selection;
+				i.m = MODE_FIND;
 				break;
 			case CMD_REFRESH:
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
@@ -219,37 +219,45 @@ int main(int argc, char* argv[])  {
 				break;
 			}
 		}
+		else if (i.m == MODE_FIND) {
+			int c = getch();
+			syslog(LOG_DEBUG, "find: getch = %d", c);
+			int r = fill_textbox(i.find, &i.find_top, i.find_size, c);
+			if (r == -1) {
+				pv->selection = i.find_init;
+				i.m = MODE_MANAGER;
+				free(i.find);
+				i.find = NULL;
+			}
+			else if (r == 0) {
+				i.m = MODE_MANAGER;
+				free(i.find);
+				i.find = NULL;
+			}
+			else {
+				file_find(pv->file_list, pv->num_files, i.find, &pv->selection);
+			}
+		}
 		else if (i.m ==	MODE_PROMPT) {
 			curs_set(2);
 			WINDOW* pw = panel_window(i.prompt);
-			wmove(pw, 1, i.prompt_textbox_top+1);
+			wmove(pw, 1, i.prompt_textbox_top-i.prompt_textbox+1);
 			int c = wgetch(pw);
-			if (c == -1);
-			else if (c == 27) { // 27 waits for second input (then it's ALT-KEY)
-				syslog(LOG_DEBUG, "abort prompt");
-				if (t.src) free(t.src);
-				if (t.dst) free(t.dst);
-				t.t = TASK_NONE;
-				t.s = TASK_STATE_CLEAN;
-				prompt_close(&i, MODE_MANAGER);
-			}
-			else if (c == '\n') {
+			int r = fill_textbox(i.prompt_textbox, &i.prompt_textbox_top, i.prompt_textbox_size, c);
+			if (!r) {
 				syslog(LOG_DEBUG, "exit prompt");
 				if (t.t != TASK_NONE && t.s == TASK_STATE_GATHERING_DATA) {
 					t.s = TASK_STATE_DATA_GATHERED;
 				}
 				prompt_close(&i, MODE_MANAGER);
 			}
-			else if (c == KEY_BACKSPACE) {
-				if (i.prompt_textbox_top > 0) {
-					i.prompt_textbox[i.prompt_textbox_top-1] = 0;
-					i.prompt_textbox_top -= 1;
-				}
-			}
-			else if (i.prompt_textbox_top < i.prompt_textbox_size) {
-				//syslog(LOG_DEBUG, "input: %d", c);
-				i.prompt_textbox[i.prompt_textbox_top] = c;
-				i.prompt_textbox_top += 1;
+			else if (r == -1) {
+				syslog(LOG_DEBUG, "abort prompt");
+				if (t.src) free(t.src);
+				if (t.dst) free(t.dst);
+				t.t = TASK_NONE;
+				t.s = TASK_STATE_CLEAN;
+				prompt_close(&i, MODE_MANAGER);
 			}
 			curs_set(0);
 		}
@@ -303,11 +311,6 @@ int main(int argc, char* argv[])  {
 				if (pv->selection >= pv->num_files) {
 					pv->selection -= 1;
 				}
-				t.s = TASK_STATE_FINISHED;
-				break;
-			case TASK_FIND:
-				syslog(LOG_DEBUG, "task_find \"%s\"", t.src);
-				file_find(pv->file_list, pv->num_files, t.src, &pv->selection);
 				t.s = TASK_STATE_FINISHED;
 				break;
 			case TASK_NONE:
