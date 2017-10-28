@@ -27,6 +27,7 @@ Hund is very young at the moment and it can mess your files up if you trust it t
 - `mv` move highlighted file from active view to the other view
 - `rm` remove highlighted file
 - `rr` rescan active view
+- `rn` rename highlighted file
 - `mk` create directory
 - `/` find file in working directory
 	- `(any characters)` enter name of searched file
