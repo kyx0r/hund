@@ -65,13 +65,9 @@ void ui_init(struct ui* const i) {
 	i->scrw = i->scrh = 0;
 	i->active_view = 0;
 	i->m = MODE_MANAGER;
-	i->prompt_title = NULL;
 	i->prompt_textbox = NULL;
 	i->prompt_textbox_top = NULL;
 	i->prompt_textbox_size = 0;
-	i->prompt = NULL;
-	i->prompt_h = 3;
-	i->prompt_w = 40;
 	i->find = NULL;
 	i->find_top = NULL;
 	i->find_size = 0;
@@ -80,6 +76,8 @@ void ui_init(struct ui* const i) {
 	i->chmod_mode = 0;
 	i->chmod_path = NULL;
 	WINDOW* hw = newwin(1, 1, 0, 0);
+	keypad(hw, TRUE);
+	wtimeout(hw, DEFAULT_GETCH_TIMEOUT);
 	i->hint = new_panel(hw);
 	i->kml = 0;
 	while (key_mapping[i->kml].ks[0]) {
@@ -109,9 +107,6 @@ void ui_end(struct ui* const i) {
 		del_panel(p);
 		delwin(w);
 	}
-	WINDOW* pw = panel_window(i->prompt);
-	del_panel(i->prompt);
-	delwin(pw);
 	WINDOW* hw = panel_window(i->hint);
 	del_panel(i->hint);
 	delwin(hw);
@@ -237,6 +232,9 @@ void ui_draw(struct ui* const i) {
 	if (i->m == MODE_FIND) {
 		mvwprintw(hw, 0, 1, "/%s", i->find);
 	}
+	else if (i->m == MODE_PROMPT) {
+		mvwprintw(hw, 0, 1, "%s", i->prompt_textbox);
+	}
 	else {
 		for (int x = 0; x < i->kml; ++x) {
 			if (i->mks[x]) {
@@ -261,20 +259,6 @@ void ui_draw(struct ui* const i) {
 		}
 	}
 	wrefresh(hw);
-
-	if (i->prompt) {
-		WINDOW* pw = panel_window(i->prompt);
-		box(pw, 0, 0);
-		//wborder(pw, '|', '|', '-', '-', '+', '+', '+', '+');
-		mvwprintw(pw, 0, 1, "%s", i->prompt_title);
-		int w, h;
-		getmaxyx(pw, h, w);
-		int padding = (w-2)-strlen(i->prompt_textbox);
-		if (padding <= 0) padding = 0;
-		mvwprintw(pw, 1, 1, "%.*s%*c", w-2, i->prompt_textbox, padding, ' ');
-		//wmove(pw, 1, i->prompt_textbox_top-i->prompt_textbox+1);
-		wrefresh(pw);
-	}
 
 	if (i->chmod_panel) {
 		WINDOW* cw = panel_window(i->chmod_panel);
@@ -333,13 +317,6 @@ void ui_update_geometry(struct ui* const i) {
 	wresize(hw, 1, i->scrw);
 	move_panel(i->hint, i->scrh-1, 0);
 
-	if (i->prompt) {
-		WINDOW* pw = panel_window(i->prompt);
-		PANEL* pp = i->prompt;
-		wresize(pw, i->prompt_h, i->prompt_w);
-		move_panel(pp, (i->scrh-i->prompt_h)/2, (i->scrw-i->prompt_w)/2);
-	}
-
 	if (i->chmod_panel) {
 		const int cpw = 40;
 		const int cph = 15;
@@ -348,30 +325,6 @@ void ui_update_geometry(struct ui* const i) {
 		wresize(cw, cph, cpw);
 		move_panel(cp, (i->scrh-cph)/2, (i->scrw-cpw)/2);
 	}
-}
-
-void prompt_open(struct ui* i, char* ptt, char* ptb, int ptbs) {
-	i->m = MODE_PROMPT;
-	WINDOW* fw = newwin(1, 1, 0, 0);
-	PANEL* fp = new_panel(fw);
-	//keypad(fw, TRUE);
-	//wtimeout(fw, DEFAULT_GETCH_TIMEOUT);
-	i->prompt = fp;
-	i->prompt_title = ptt;
-	i->prompt_textbox = ptb;
-	// strlen() instead of 0: allows initial string to contain something
-	i->prompt_textbox_top = i->prompt_textbox + strlen(ptb);
-	i->prompt_textbox_size = ptbs;
-	//memset(i->prompt_textbox, 0, i->prompt_textbox_size);
-	i->scrw = i->scrh = 0; // Forces geometry update
-}
-
-void prompt_close(struct ui* i, enum mode new_mode) {
-	WINDOW* fw = panel_window(i->prompt);
-	del_panel(i->prompt);
-	delwin(fw);
-	i->prompt = NULL;
-	i->m = new_mode;
 }
 
 void chmod_open(struct ui* i, char* path, mode_t m) {

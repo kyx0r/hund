@@ -104,8 +104,8 @@ static const struct key2cmd key_mapping[] = {
 	/* MODE_CHMOD */
 	{ .ks = { 'q', 'q', 0, 0 }, .d = "return", .m = MODE_CHMOD, .c = CMD_RETURN  },
 	{ .ks = { 'c', 'h', 0, 0 }, .d = "change", .m = MODE_CHMOD, .c = CMD_CHANGE  },
-	{ .ks = { 'u', 'i', 0, 0 }, .d = "set user id on execution", .m = MODE_CHMOD, .c = CMD_TOGGLE_UIOX  },
-	{ .ks = { 'g', 'i', 0, 0 }, .d = "set group id on execution", .m = MODE_CHMOD, .c = CMD_TOGGLE_GIOX  },
+	{ .ks = { 'u', 'i', 0, 0 }, .d = "toggle set user id on execution", .m = MODE_CHMOD, .c = CMD_TOGGLE_UIOX  },
+	{ .ks = { 'g', 'i', 0, 0 }, .d = "toggle set group id on execution", .m = MODE_CHMOD, .c = CMD_TOGGLE_GIOX  },
 	{ .ks = { 'o', 's', 0, 0 }, .d = "toggle sticky bit", .m = MODE_CHMOD, .c = CMD_TOGGLE_SB  },
 	{ .ks = { 'u', 'r', 0, 0 }, .d = "toggle user read", .m = MODE_CHMOD, .c = CMD_TOGGLE_UR  },
 	{ .ks = { 'u', 'w', 0, 0 }, .d = "toggle user write", .m = MODE_CHMOD, .c = CMD_TOGGLE_UW  },
@@ -144,13 +144,9 @@ struct ui {
 	enum mode m;
 	PANEL* fvp[2];
 	struct file_view fvs[2]; // Dunno where to put it
-	char* prompt_title;
 	char* prompt_textbox;
 	char* prompt_textbox_top;
 	size_t prompt_textbox_size;
-	PANEL* prompt;
-	int prompt_w;
-	int prompt_h;
 	PANEL* hint;
 	char* find;
 	char* find_top;
@@ -168,8 +164,8 @@ void ui_init(struct ui* const);
 void ui_end(struct ui* const);
 void ui_draw(struct ui* const);
 void ui_update_geometry(struct ui* const);
-void prompt_open(struct ui* i, char* ptt, char* ptb, int ptbs);
-void prompt_close(struct ui*, enum mode);
+//void prompt_open(struct ui* i, char* ptt, char* ptb, int ptbs);
+//void prompt_close(struct ui*, enum mode);
 void chmod_open(struct ui*, char*, mode_t);
 void chmod_close(struct ui*, enum mode);
 enum command get_cmd(struct ui*);

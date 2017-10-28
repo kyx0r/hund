@@ -178,7 +178,9 @@ int main(int argc, char* argv[])  {
 				strcat(t.dst, "/");
 				t.t = TASK_COPY;
 				t.s = TASK_STATE_GATHERING_DATA;
-				prompt_open(&i, "copy name", t.dst+strlen(t.dst), NAME_MAX);
+				i.m = MODE_PROMPT;
+				i.prompt_textbox_top = i.prompt_textbox = t.dst+strlen(t.dst);
+				i.prompt_textbox_size = NAME_MAX;
 				break;
 			case CMD_MOVE:
 				t.src = calloc(PATH_MAX, sizeof(char));
@@ -204,7 +206,9 @@ int main(int argc, char* argv[])  {
 				t.s = TASK_STATE_GATHERING_DATA;
 				strcpy(t.src, pv->wd);
 				strcat(t.src, "/");
-				prompt_open(&i, "new directory name", t.src+strlen(t.src), NAME_MAX);
+				i.prompt_textbox_top = i.prompt_textbox = t.src+strlen(t.src);
+				i.prompt_textbox_size = NAME_MAX;
+				i.m = MODE_PROMPT;
 				break;
 			case CMD_FIND:
 				i.find = calloc(NAME_MAX, 1);
@@ -242,6 +246,7 @@ int main(int argc, char* argv[])  {
 			case CMD_CHANGE:
 				chmod(i.chmod_path, i.chmod_mode);
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
+				chmod_close(&i, MODE_MANAGER);
 				break;
 			case CMD_TOGGLE_UIOX: TOGGLE_MODE_BIT(i.chmod_mode, S_ISUID); break;
 			case CMD_TOGGLE_GIOX: TOGGLE_MODE_BIT(i.chmod_mode, S_ISGID); break;
@@ -259,7 +264,11 @@ int main(int argc, char* argv[])  {
 			}
 		}
 		else if (i.m == MODE_FIND) {
-			int c = getch();
+			curs_set(2);
+			WINDOW* hw = panel_window(i.hint);
+			wmove(hw, 1, i.prompt_textbox_top-i.prompt_textbox+1);
+			wrefresh(hw);
+			int c = wgetch(hw);
 			int r = fill_textbox(i.find, &i.find_top, i.find_size, c);
 			if (r == -1) {
 				pv->selection = i.find_init;
@@ -275,27 +284,27 @@ int main(int argc, char* argv[])  {
 			else {
 				file_find(pv->file_list, pv->num_files, i.find, &pv->selection);
 			}
+			curs_set(0);
 		}
 		else if (i.m ==	MODE_PROMPT) {
 			curs_set(2);
-			WINDOW* pw = panel_window(i.prompt);
-			wmove(pw, 1, i.prompt_textbox_top-i.prompt_textbox+1);
-			int c = wgetch(pw);
+			WINDOW* hw = panel_window(i.hint);
+			wmove(hw, 1, i.prompt_textbox_top-i.prompt_textbox+1);
+			wrefresh(hw);
+			int c = wgetch(hw);
 			int r = fill_textbox(i.prompt_textbox, &i.prompt_textbox_top, i.prompt_textbox_size, c);
 			if (!r) {
-				syslog(LOG_DEBUG, "exit prompt");
 				if (t.t != TASK_NONE && t.s == TASK_STATE_GATHERING_DATA) {
 					t.s = TASK_STATE_DATA_GATHERED;
 				}
-				prompt_close(&i, MODE_MANAGER);
+				i.m = MODE_MANAGER;
 			}
 			else if (r == -1) {
-				syslog(LOG_DEBUG, "abort prompt");
 				if (t.src) free(t.src);
 				if (t.dst) free(t.dst);
 				t.t = TASK_NONE;
 				t.s = TASK_STATE_CLEAN;
-				prompt_close(&i, MODE_MANAGER);
+				i.m = MODE_MANAGER;
 			}
 			curs_set(0);
 		}
