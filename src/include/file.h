@@ -44,6 +44,24 @@
 
 #include "path.h"
 
+// If bit is set, unset it and vice versa
+#define TOGGLE_MODE_BIT(M, B) if ((M) & (B)) { (M) &= ~(B); } else { (M) |= (B); }
+
+static char* mode_bit_meaning[] = {
+	"execute/sears by others",
+	"write by others",
+	"read by others",
+	"execute/search by group",
+	"write by group",
+	"read by group",
+	"execute/search by user",
+	"write by user",
+	"read by user",
+	"sticky bit",
+	"set group ID on execution",
+	"set user ID on execution"
+};
+
 typedef unsigned int fnum_t; // Number of Files
 
 enum file_type {
