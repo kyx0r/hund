@@ -30,6 +30,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <pwd.h>
+#include <grp.h>
 
 void get_cwd(char[PATH_MAX]);
 struct passwd* get_pwd(void);

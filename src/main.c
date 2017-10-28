@@ -17,6 +17,7 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -212,16 +213,53 @@ int main(int argc, char* argv[])  {
 				i.find_init = pv->selection;
 				i.m = MODE_FIND;
 				break;
+			case CMD_ENTRY_FIRST:
+				pv->selection = 0;
+				break;
+			case CMD_ENTRY_LAST:
+				pv->selection = pv->num_files-1;
+				break;
+			case CMD_CHMOD:
+				i.chmod_path = malloc(PATH_MAX);
+				strcpy(i.chmod_path, pv->wd);
+				enter_dir(i.chmod_path,
+						pv->file_list[pv->selection]->file_name);
+				chmod_open(&i, i.chmod_path,
+						pv->file_list[pv->selection]->s.st_mode);
+				break;
 			case CMD_REFRESH:
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				break;
-			case CMD_NONE:
+			default:
 				break;
+			}
+		}
+		else if (i.m == MODE_CHMOD) {
+			switch (get_cmd(&i)) {
+			case CMD_RETURN:
+				chmod_close(&i, MODE_MANAGER);
+				break;
+			case CMD_CHANGE:
+				chmod(i.chmod_path, i.chmod_mode);
+				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
+				break;
+			case CMD_TOGGLE_UIOX: TOGGLE_MODE_BIT(i.chmod_mode, S_ISUID); break;
+			case CMD_TOGGLE_GIOX: TOGGLE_MODE_BIT(i.chmod_mode, S_ISGID); break;
+			case CMD_TOGGLE_SB: TOGGLE_MODE_BIT(i.chmod_mode, S_ISVTX); break;
+			case CMD_TOGGLE_UR: TOGGLE_MODE_BIT(i.chmod_mode, S_IRUSR); break;
+			case CMD_TOGGLE_UW: TOGGLE_MODE_BIT(i.chmod_mode, S_IWUSR); break;
+			case CMD_TOGGLE_UX: TOGGLE_MODE_BIT(i.chmod_mode, S_IXUSR); break;
+			case CMD_TOGGLE_GR: TOGGLE_MODE_BIT(i.chmod_mode, S_IRGRP); break;
+			case CMD_TOGGLE_GW: TOGGLE_MODE_BIT(i.chmod_mode, S_IWGRP); break;
+			case CMD_TOGGLE_GX: TOGGLE_MODE_BIT(i.chmod_mode, S_IXGRP); break;
+			case CMD_TOGGLE_OR: TOGGLE_MODE_BIT(i.chmod_mode, S_IROTH); break;
+			case CMD_TOGGLE_OW: TOGGLE_MODE_BIT(i.chmod_mode, S_IWOTH); break;
+			case CMD_TOGGLE_OX: TOGGLE_MODE_BIT(i.chmod_mode, S_IXOTH); break;
+			default: break;
 			}
 		}
 		else if (i.m == MODE_FIND) {
 			int c = getch();
-			syslog(LOG_DEBUG, "find: getch = %d", c);
 			int r = fill_textbox(i.find, &i.find_top, i.find_size, c);
 			if (r == -1) {
 				pv->selection = i.find_init;

@@ -35,6 +35,7 @@ enum mode {
 	MODE_MANAGER,
 	MODE_PROMPT,
 	MODE_FIND,
+	MODE_CHMOD,
 };
 
 enum command {
@@ -50,7 +51,25 @@ enum command {
 	CMD_ENTRY_UP,
 	CMD_ENTRY_DOWN,
 	CMD_CREATE_DIR,
+	CMD_ENTRY_FIRST,
+	CMD_ENTRY_LAST,
 	CMD_FIND,
+
+	CMD_CHMOD,
+	CMD_RETURN,
+	CMD_CHANGE,
+	CMD_TOGGLE_UIOX,
+	CMD_TOGGLE_GIOX,
+	CMD_TOGGLE_SB,
+	CMD_TOGGLE_UR,
+	CMD_TOGGLE_UW,
+	CMD_TOGGLE_UX,
+	CMD_TOGGLE_GR,
+	CMD_TOGGLE_GW,
+	CMD_TOGGLE_GX,
+	CMD_TOGGLE_OR,
+	CMD_TOGGLE_OW,
+	CMD_TOGGLE_OX,
 };
 
 #define MAX_KEYSEQ_LENGTH 4
@@ -63,7 +82,10 @@ struct key2cmd {
 };
 
 static const struct key2cmd key_mapping[] = {
+	/* MODE_MANAGER */
 	{ .ks = { 'q', 'q', 0, 0 }, .d = "quit", .m = MODE_MANAGER, .c = CMD_QUIT  },
+	{ .ks = { 'g', 'g', 0, 0 }, .d = "top", .m = MODE_MANAGER, .c = CMD_ENTRY_FIRST  },
+	{ .ks = { 'G', 0, 0, 0 }, .d = "bottom", .m = MODE_MANAGER, .c = CMD_ENTRY_LAST  },
 	{ .ks = { 'j', 0, 0, 0 }, .d = "down", .m = MODE_MANAGER, .c = CMD_ENTRY_DOWN },
 	{ .ks = { 'k', 0, 0, 0 }, .d = "up", .m = MODE_MANAGER, .c = CMD_ENTRY_UP },
 	{ .ks = { 'c', 'p', 0, 0 }, .d = "copy", .m = MODE_MANAGER, .c = CMD_COPY },
@@ -77,10 +99,23 @@ static const struct key2cmd key_mapping[] = {
 	{ .ks = { 'i', 0, 0, 0 }, .d = "enter dir", .m = MODE_MANAGER, .c = CMD_ENTER_DIR },
 	{ .ks = { 'e', 0, 0, 0 }, .d = "enter dir", .m = MODE_MANAGER, .c = CMD_ENTER_DIR },
 	{ .ks = { '/', 0, 0, 0 }, .d = "find", .m = MODE_MANAGER, .c = CMD_FIND },
+	{ .ks = { 'c', 'h', 0, 0 }, .d = "chmod", .m = MODE_MANAGER, .c = CMD_CHMOD },
 
-	{ .ks = { 'x', 'x', 0, 0 }, .d = "quit", .m = MODE_MANAGER, .c = CMD_QUIT },
-	{ .ks = { 'x', 'y', 0, 0 }, .d = "quit", .m = MODE_MANAGER, .c = CMD_QUIT },
-	{ .ks = { 'x', 'z', 0, 0 }, .d = "quit", .m = MODE_MANAGER, .c = CMD_QUIT },
+	/* MODE_CHMOD */
+	{ .ks = { 'q', 'q', 0, 0 }, .d = "return", .m = MODE_CHMOD, .c = CMD_RETURN  },
+	{ .ks = { 'c', 'h', 0, 0 }, .d = "change", .m = MODE_CHMOD, .c = CMD_CHANGE  },
+	{ .ks = { 'u', 'i', 0, 0 }, .d = "set user id on execution", .m = MODE_CHMOD, .c = CMD_TOGGLE_UIOX  },
+	{ .ks = { 'g', 'i', 0, 0 }, .d = "set group id on execution", .m = MODE_CHMOD, .c = CMD_TOGGLE_GIOX  },
+	{ .ks = { 'o', 's', 0, 0 }, .d = "toggle sticky bit", .m = MODE_CHMOD, .c = CMD_TOGGLE_SB  },
+	{ .ks = { 'u', 'r', 0, 0 }, .d = "toggle user read", .m = MODE_CHMOD, .c = CMD_TOGGLE_UR  },
+	{ .ks = { 'u', 'w', 0, 0 }, .d = "toggle user write", .m = MODE_CHMOD, .c = CMD_TOGGLE_UW  },
+	{ .ks = { 'u', 'x', 0, 0 }, .d = "toggle user execute", .m = MODE_CHMOD, .c = CMD_TOGGLE_UX  },
+	{ .ks = { 'g', 'r', 0, 0 }, .d = "toggle group read", .m = MODE_CHMOD, .c = CMD_TOGGLE_GR  },
+	{ .ks = { 'g', 'w', 0, 0 }, .d = "toggle group write", .m = MODE_CHMOD, .c = CMD_TOGGLE_GW  },
+	{ .ks = { 'g', 'x', 0, 0 }, .d = "toggle group execute", .m = MODE_CHMOD, .c = CMD_TOGGLE_GX  },
+	{ .ks = { 'o', 'r', 0, 0 }, .d = "toggle other read", .m = MODE_CHMOD, .c = CMD_TOGGLE_OR  },
+	{ .ks = { 'o', 'w', 0, 0 }, .d = "toggle other write", .m = MODE_CHMOD, .c = CMD_TOGGLE_OW  },
+	{ .ks = { 'o', 'x', 0, 0 }, .d = "toggle other execute", .m = MODE_CHMOD, .c = CMD_TOGGLE_OX  },
 
 	{ .ks = { 0, 0, 0, 0 }, .d = NULL, .m = 0, .c = CMD_NONE } // Null terminator
 	/* TODO if it's global static and const it's size is known at compile time;
@@ -114,6 +149,8 @@ struct ui {
 	char* prompt_textbox_top;
 	size_t prompt_textbox_size;
 	PANEL* prompt;
+	int prompt_w;
+	int prompt_h;
 	PANEL* hint;
 	char* find;
 	char* find_top;
@@ -121,6 +158,10 @@ struct ui {
 	fnum_t find_init; // Selection before find command
 	int kml;
 	int* mks; // Matching Key Sequence
+
+	PANEL* chmod_panel;
+	mode_t chmod_mode;
+	char* chmod_path;
 };
 
 void ui_init(struct ui* const);
@@ -129,6 +170,8 @@ void ui_draw(struct ui* const);
 void ui_update_geometry(struct ui* const);
 void prompt_open(struct ui* i, char* ptt, char* ptb, int ptbs);
 void prompt_close(struct ui*, enum mode);
+void chmod_open(struct ui*, char*, mode_t);
+void chmod_close(struct ui*, enum mode);
 enum command get_cmd(struct ui*);
 int fill_textbox(char* buf, char** buftop, size_t bsize, int c);
 

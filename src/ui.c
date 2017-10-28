@@ -58,7 +58,7 @@ void ui_init(struct ui* const i) {
 		.selection = 0,
 		.view_offset = 0,
 	};
-	for (int x = 0; x < 2; x++) {
+	for (int x = 0; x < 2; ++x) {
 		WINDOW* tmpwin = newwin(1, 1, 0, 0);
 		i->fvp[x] = new_panel(tmpwin);
 	}
@@ -70,10 +70,15 @@ void ui_init(struct ui* const i) {
 	i->prompt_textbox_top = NULL;
 	i->prompt_textbox_size = 0;
 	i->prompt = NULL;
+	i->prompt_h = 3;
+	i->prompt_w = 40;
 	i->find = NULL;
 	i->find_top = NULL;
 	i->find_size = 0;
 	i->find_init = 0;
+	i->chmod_panel = NULL;
+	i->chmod_mode = 0;
+	i->chmod_path = NULL;
 	WINDOW* hw = newwin(1, 1, 0, 0);
 	i->hint = new_panel(hw);
 	i->kml = 0;
@@ -110,6 +115,9 @@ void ui_end(struct ui* const i) {
 	WINDOW* hw = panel_window(i->hint);
 	del_panel(i->hint);
 	delwin(hw);
+	WINDOW* cw = panel_window(i->chmod_panel);
+	del_panel(i->chmod_panel);
+	delwin(cw);
 	free(i->mks);
 	endwin();
 }
@@ -123,7 +131,8 @@ void ui_draw(struct ui* const i) {
 		if (_ph < 0 || _ph < 0) return; // these may be -1
 		fnum_t ph = _ph, pw = _pw;
 		WINDOW* w = panel_window(p);
-		wborder(w, '|', '|', '-', '-', '+', '+', '+', '+');
+		box(w, 0, 0);
+		//wborder(w, '|', '|', '-', '-', '+', '+', '+', '+');
 		struct passwd* pwd = get_pwd();
 		char* pretty = malloc(PATH_MAX);
 		strcpy(pretty, s->wd);
@@ -216,8 +225,9 @@ void ui_draw(struct ui* const i) {
 			mvwprintw(w, view_row, 1, "%*c", pw-2, ' ');
 			view_row += 1;
 		}
-		mvwprintw(w, view_row, 2, "%d/%d, %uB", s->selection+1, s->num_files,
-				(s->selection < s->num_files ? s->file_list[s->selection]->s.st_size : 0));
+		mvwprintw(w, view_row, 2, "%d/%d, %uB, %o", s->selection+1, s->num_files,
+				(s->selection < s->num_files ? s->file_list[s->selection]->s.st_size : 0),
+				s->file_list[s->selection]->s.st_mode);
 		// TODO permissions, owner, group...
 		wrefresh(w);
 	}
@@ -249,11 +259,13 @@ void ui_draw(struct ui* const i) {
 				wattroff(hw, COLOR_PAIR(4));
 			}
 		}
-		}
+	}
 	wrefresh(hw);
+
 	if (i->prompt) {
 		WINDOW* pw = panel_window(i->prompt);
-		wborder(pw, '|', '|', '-', '-', '+', '+', '+', '+');
+		box(pw, 0, 0);
+		//wborder(pw, '|', '|', '-', '-', '+', '+', '+', '+');
 		mvwprintw(pw, 0, 1, "%s", i->prompt_title);
 		int w, h;
 		getmaxyx(pw, h, w);
@@ -263,6 +275,27 @@ void ui_draw(struct ui* const i) {
 		//wmove(pw, 1, i->prompt_textbox_top-i->prompt_textbox+1);
 		wrefresh(pw);
 	}
+
+	if (i->chmod_panel) {
+		WINDOW* cw = panel_window(i->chmod_panel);
+		box(cw, 0, 0);
+		//wborder(cw, '|', '|', '-', '-', '+', '+', '+', '+');
+		int w, h;
+		getmaxyx(cw, h, w);
+		mode_t m = i->chmod_mode;
+		struct passwd* pwd = get_pwd();
+		struct group* grp = getgrgid(pwd->pw_gid);
+		if (grp) {
+			mvwprintw(cw, 1, 2, "%o %s %s", m, pwd->pw_name, grp->gr_name);
+		}
+		for (int i = 0; i < 12; ++i) {
+			char s = (m & (mode_t)1 ? 'x' : ' ');
+			mvwprintw(cw, 13-i, 2, "[%c] %s", s, mode_bit_meaning[i]);
+			m >>= 1;
+		}
+		wrefresh(cw);
+	}
+
 	update_panels();
 	doupdate();
 	refresh();
@@ -301,14 +334,19 @@ void ui_update_geometry(struct ui* const i) {
 	move_panel(i->hint, i->scrh-1, 0);
 
 	if (i->prompt) {
-		const int box_w = 40;
-		const int box_h = 3;
-		int scrh, scrw;
 		WINDOW* pw = panel_window(i->prompt);
 		PANEL* pp = i->prompt;
-		getmaxyx(stdscr, scrh, scrw);
-		wresize(pw, box_h, box_w);
-		move_panel(pp, (scrh-box_h)/2, (scrw-box_w)/2);
+		wresize(pw, i->prompt_h, i->prompt_w);
+		move_panel(pp, (i->scrh-i->prompt_h)/2, (i->scrw-i->prompt_w)/2);
+	}
+
+	if (i->chmod_panel) {
+		const int cpw = 40;
+		const int cph = 15;
+		WINDOW* cw = panel_window(i->chmod_panel);
+		PANEL* cp = i->chmod_panel;
+		wresize(cw, cph, cpw);
+		move_panel(cp, (i->scrh-cph)/2, (i->scrw-cpw)/2);
 	}
 }
 
@@ -330,10 +368,32 @@ void prompt_open(struct ui* i, char* ptt, char* ptb, int ptbs) {
 
 void prompt_close(struct ui* i, enum mode new_mode) {
 	WINDOW* fw = panel_window(i->prompt);
-	delwin(fw);
 	del_panel(i->prompt);
+	delwin(fw);
 	i->prompt = NULL;
 	i->m = new_mode;
+}
+
+void chmod_open(struct ui* i, char* path, mode_t m) {
+	syslog(LOG_DEBUG, "chmod %s", path);
+	i->chmod_path = path;
+	i->chmod_mode = m;
+	WINDOW* cw = newwin(1, 1, 0, 0);
+	PANEL* cp = new_panel(cw);
+	i->chmod_panel = cp;
+	i->m = MODE_CHMOD;
+	i->scrw = i->scrh = 0; // Forces geometry update
+}
+
+void chmod_close(struct ui* i, enum mode m) {
+	WINDOW* cw = panel_window(i->chmod_panel);
+	del_panel(i->chmod_panel);
+	delwin(cw);
+	i->chmod_panel = NULL;
+	free(i->chmod_path);
+	i->chmod_path = NULL;
+	i->chmod_mode = 0;
+	i->m = m;
 }
 
 enum command get_cmd(struct ui* i) {
@@ -367,7 +427,7 @@ enum command get_cmd(struct ui* i) {
 
 	memset(i->mks, 0, i->kml*sizeof(int));
 	for (int c = 0; c < i->kml; c++) {
-		if (key_mapping[c].m != i->m) break;
+		if (key_mapping[c].m != i->m) continue;
 		int s = 0;
 		while (keyseq[s]) {
 			/* mks[c] will contain length of matching sequence
@@ -410,7 +470,7 @@ enum command get_cmd(struct ui* i) {
 
 /* Gets input to buffer
  * Responsible for cursor movement (buftop) and guarding buffer bounds (bsize)
- * If text is ready (enter pressed or something) returns 0,
+ * If text is ready (enter pressed) returns 0,
  * If aborted, returns -1.
  * If keeps gathering, returns 1.
  */
