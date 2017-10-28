@@ -33,6 +33,7 @@ enum task_type {
 	TASK_RM,
 	TASK_COPY,
 	TASK_MOVE,
+	TASK_RENAME,
 };
 
 enum task_state {
@@ -50,7 +51,8 @@ struct task {
 };
 
 int main(int argc, char* argv[])  {
-	static const char* help = "Usage: hund [OPTION] [left panel] [right panel]\n"
+	static const char* help = \
+	"Usage: hund [OPTION] [left panel] [right panel]\n"
 	"Options:\n"
 	"  -c, --chdir=PATH\t\tchange initial directory\n"
 	"  -v, --verbose\t\tbe verbose\n"
@@ -163,7 +165,8 @@ int main(int argc, char* argv[])  {
 				int r = up_dir(pv->wd);
 				if (!r) {
 					scan_dir(pv->wd, &pv->file_list, &pv->num_files);
-					file_index(pv->file_list, pv->num_files, prevdir, &pv->selection);
+					file_index(pv->file_list, pv->num_files,
+							prevdir, &pv->selection);
 				}
 				free(prevdir);
 				}
@@ -230,6 +233,23 @@ int main(int argc, char* argv[])  {
 				chmod_open(&i, i.chmod_path,
 						pv->file_list[pv->selection]->s.st_mode);
 				break;
+			case CMD_RENAME:
+				{
+				size_t plen = strlen(pv->wd);
+				size_t fnlen = strlen(pv->file_list[pv->selection]->file_name);
+				t.src = calloc(PATH_MAX, sizeof(char));
+				strcpy(t.src, pv->wd);
+				enter_dir(t.src, pv->file_list[pv->selection]->file_name);
+				t.dst = calloc(PATH_MAX, sizeof(char));
+				strcpy(t.dst, t.src);
+				i.prompt_textbox = t.dst + plen + 1;
+				i.prompt_textbox_top = i.prompt_textbox + fnlen;
+				i.prompt_textbox_size = NAME_MAX;
+				t.t = TASK_RENAME;
+				t.s = TASK_STATE_GATHERING_DATA;
+				i.m = MODE_PROMPT;
+				}
+				break;
 			case CMD_REFRESH:
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				break;
@@ -247,18 +267,18 @@ int main(int argc, char* argv[])  {
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				chmod_close(&i, MODE_MANAGER);
 				break;
-			case CMD_TOGGLE_UIOX: TOGGLE_MODE_BIT(i.chmod_mode, S_ISUID); break;
-			case CMD_TOGGLE_GIOX: TOGGLE_MODE_BIT(i.chmod_mode, S_ISGID); break;
-			case CMD_TOGGLE_SB: TOGGLE_MODE_BIT(i.chmod_mode, S_ISVTX); break;
-			case CMD_TOGGLE_UR: TOGGLE_MODE_BIT(i.chmod_mode, S_IRUSR); break;
-			case CMD_TOGGLE_UW: TOGGLE_MODE_BIT(i.chmod_mode, S_IWUSR); break;
-			case CMD_TOGGLE_UX: TOGGLE_MODE_BIT(i.chmod_mode, S_IXUSR); break;
-			case CMD_TOGGLE_GR: TOGGLE_MODE_BIT(i.chmod_mode, S_IRGRP); break;
-			case CMD_TOGGLE_GW: TOGGLE_MODE_BIT(i.chmod_mode, S_IWGRP); break;
-			case CMD_TOGGLE_GX: TOGGLE_MODE_BIT(i.chmod_mode, S_IXGRP); break;
-			case CMD_TOGGLE_OR: TOGGLE_MODE_BIT(i.chmod_mode, S_IROTH); break;
-			case CMD_TOGGLE_OW: TOGGLE_MODE_BIT(i.chmod_mode, S_IWOTH); break;
-			case CMD_TOGGLE_OX: TOGGLE_MODE_BIT(i.chmod_mode, S_IXOTH); break;
+			case CMD_TOGGLE_UIOX: TOGGLE_BIT(i.chmod_mode, S_ISUID); break;
+			case CMD_TOGGLE_GIOX: TOGGLE_BIT(i.chmod_mode, S_ISGID); break;
+			case CMD_TOGGLE_SB: TOGGLE_BIT(i.chmod_mode, S_ISVTX); break;
+			case CMD_TOGGLE_UR: TOGGLE_BIT(i.chmod_mode, S_IRUSR); break;
+			case CMD_TOGGLE_UW: TOGGLE_BIT(i.chmod_mode, S_IWUSR); break;
+			case CMD_TOGGLE_UX: TOGGLE_BIT(i.chmod_mode, S_IXUSR); break;
+			case CMD_TOGGLE_GR: TOGGLE_BIT(i.chmod_mode, S_IRGRP); break;
+			case CMD_TOGGLE_GW: TOGGLE_BIT(i.chmod_mode, S_IWGRP); break;
+			case CMD_TOGGLE_GX: TOGGLE_BIT(i.chmod_mode, S_IXGRP); break;
+			case CMD_TOGGLE_OR: TOGGLE_BIT(i.chmod_mode, S_IROTH); break;
+			case CMD_TOGGLE_OW: TOGGLE_BIT(i.chmod_mode, S_IWOTH); break;
+			case CMD_TOGGLE_OX: TOGGLE_BIT(i.chmod_mode, S_IXOTH); break;
 			default: break;
 			}
 		} // MODE_CHMOD
@@ -281,7 +301,8 @@ int main(int argc, char* argv[])  {
 				i.find = NULL;
 			}
 			else {
-				file_find(pv->file_list, pv->num_files, i.find, &pv->selection);
+				file_find(pv->file_list,
+						pv->num_files, i.find, &pv->selection);
 			}
 			curs_set(0);
 		} // MODE_FIND
@@ -291,7 +312,8 @@ int main(int argc, char* argv[])  {
 			wmove(hw, 1, i.prompt_textbox_top-i.prompt_textbox+1);
 			wrefresh(hw);
 			int c = wgetch(hw);
-			int r = fill_textbox(i.prompt_textbox, &i.prompt_textbox_top, i.prompt_textbox_size, c);
+			int r = fill_textbox(i.prompt_textbox,
+					&i.prompt_textbox_top, i.prompt_textbox_size, c);
 			if (!r) {
 				if (t.t != TASK_NONE && t.s == TASK_STATE_GATHERING_DATA) {
 					t.s = TASK_STATE_DATA_GATHERED;
@@ -313,20 +335,24 @@ int main(int argc, char* argv[])  {
 			int err;
 			switch (t.t) {
 			case TASK_MKDIR:
-				syslog(LOG_DEBUG, "task_mkdir %s (%s)", t.src, i.prompt_textbox);
+				syslog(LOG_DEBUG, "task_mkdir %s (%s)",
+						t.src, i.prompt_textbox);
 				err = dir_make(t.src);
 				if (err) {
-					syslog(LOG_ERR, "dir_make(\"%s\") failed: %s", t.src, strerror(err));
+					syslog(LOG_ERR, "dir_make(\"%s\") failed: %s",
+							t.src, strerror(err));
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
-				file_index(pv->file_list, pv->num_files, i.prompt_textbox, &pv->selection);
+				file_index(pv->file_list,
+						pv->num_files, i.prompt_textbox, &pv->selection);
 				t.s = TASK_STATE_FINISHED;
 				break;
 			case TASK_RM:
 				syslog(LOG_DEBUG, "task_rmdir %s", t.src);
 				err = file_remove(t.src);
 				if (err) {
-					syslog(LOG_ERR, "file_remove(\"%s\") failed: %s", t.src, strerror(err));
+					syslog(LOG_ERR, "file_remove(\"%s\") failed: %s",
+							t.src, strerror(err));
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				if (pv->selection >= pv->num_files) {
@@ -341,9 +367,24 @@ int main(int argc, char* argv[])  {
 					syslog(LOG_ERR, "file_copy(\"%s\", \"%s\") failed: %s",
 							t.src, t.dst, strerror(err));
 				}
-				//scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				scan_dir(sv->wd, &sv->file_list, &sv->num_files);
 				t.s = TASK_STATE_FINISHED;
+				break;
+			case TASK_RENAME:
+				{
+				syslog(LOG_DEBUG, "task_rename %s -> %s", t.src, t.dst);
+				char named[NAME_MAX];
+				current_dir(t.dst, named);
+				err = rename(t.src, t.dst);
+				if (err) {
+					syslog(LOG_ERR, "rename(\"%s\", \"%s\") failed: %s",
+							t.src, t.dst, strerror(err));
+				}
+				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
+				file_index(pv->file_list, pv->num_files,
+						named, &pv->selection);
+				t.s = TASK_STATE_FINISHED;
+				}
 				break;
 			case TASK_MOVE:
 				syslog(LOG_DEBUG, "task_move %s -> %s", t.src, t.dst);

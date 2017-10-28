@@ -44,8 +44,8 @@
 
 #include "path.h"
 
-// If bit is set, unset it and vice versa
-#define TOGGLE_MODE_BIT(M, B) if ((M) & (B)) { (M) &= ~(B); } else { (M) |= (B); }
+// If bit (B) is set, unset it and vice versa
+#define TOGGLE_BIT(M, B) if ((M) & (B)) { (M) &= ~(B); } else { (M) |= (B); }
 
 /* From LSB to MSB, by bit index */
 static const char* const mode_bit_meaning[] = {

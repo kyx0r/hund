@@ -53,6 +53,7 @@ enum command {
 	CMD_CREATE_DIR,
 	CMD_ENTRY_FIRST,
 	CMD_ENTRY_LAST,
+	CMD_RENAME,
 	CMD_FIND,
 
 	CMD_CHMOD,
@@ -90,6 +91,7 @@ static const struct key2cmd key_mapping[] = {
 	{ .ks = { 'k', 0, 0, 0 }, .d = "up", .m = MODE_MANAGER, .c = CMD_ENTRY_UP },
 	{ .ks = { 'c', 'p', 0, 0 }, .d = "copy", .m = MODE_MANAGER, .c = CMD_COPY },
 	{ .ks = { 'r', 'm', 0, 0 }, .d = "remove", .m = MODE_MANAGER, .c = CMD_REMOVE },
+	{ .ks = { 'r', 'n', 0, 0 }, .d = "rename", .m = MODE_MANAGER, .c = CMD_RENAME },
 	{ .ks = { 'm', 'v', 0, 0 }, .d = "move", .m = MODE_MANAGER, .c = CMD_MOVE },
 	{ .ks = { '\t', 0, 0, 0 }, .d = "switch panel", .m = MODE_MANAGER, .c = CMD_SWITCH_PANEL },
 	{ .ks = { 'r', 'r', 0, 0 }, .d = "refresh", .m = MODE_MANAGER, .c = CMD_REFRESH },
@@ -117,7 +119,7 @@ static const struct key2cmd key_mapping[] = {
 	{ .ks = { 'o', 'w', 0, 0 }, .d = "toggle other write", .m = MODE_CHMOD, .c = CMD_TOGGLE_OW  },
 	{ .ks = { 'o', 'x', 0, 0 }, .d = "toggle other execute", .m = MODE_CHMOD, .c = CMD_TOGGLE_OX  },
 
-	{ .ks = { 0, 0, 0, 0 }, .d = NULL, .m = 0, .c = CMD_NONE } // Null terminator
+	{ .ks = { 0, 0, 0, 0 }, .d = NULL, .m = 0, .c = 0 } // Null terminator
 	/* TODO if it's global static and const it's size is known at compile time;
 	 * get rid of that null terminator
 	 * OR
@@ -125,6 +127,17 @@ static const struct key2cmd key_mapping[] = {
 	 * alter this thing with a config or something
 	 * Where should it be? UI? Probably. But how initialized?
 	 */
+};
+
+static const char type_symbol_mapping[][2] = {
+	[BLOCK] = { '+', 7 },
+	[CHARACTER] = { '-', 7 },
+	[DIRECTORY] = { '/', 3 },
+	[FIFO] = { '|', 1 },
+	[LINK] = { '~', 5 },
+	[REGULAR] = { ' ', 1 },
+	[SOCKET] = { '=', 5 },
+	[UNKNOWN] = { '?', 1 },
 };
 
 struct file_view {
@@ -164,8 +177,6 @@ void ui_init(struct ui* const);
 void ui_end(struct ui* const);
 void ui_draw(struct ui* const);
 void ui_update_geometry(struct ui* const);
-//void prompt_open(struct ui* i, char* ptt, char* ptb, int ptbs);
-//void prompt_close(struct ui*, enum mode);
 void chmod_open(struct ui*, char*, mode_t);
 void chmod_close(struct ui*, enum mode);
 enum command get_cmd(struct ui*);

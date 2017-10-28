@@ -157,41 +157,8 @@ void ui_draw(struct ui* const i) {
 			const struct file_record* cfr = s->file_list[ei];
 			char type_symbol = '?';
 			int color_pair_enabled = 0;
-			switch (cfr->t) {
-			case BLOCK:
-				type_symbol = '+';
-				color_pair_enabled = 7;
-				break;
-			case CHARACTER:
-				type_symbol = '-';
-				color_pair_enabled = 7;
-				break;
-			case DIRECTORY:
-				type_symbol = '/';
-				color_pair_enabled = 3;
-				break;
-			case FIFO:
-				type_symbol = '|';
-				color_pair_enabled = 1;
-				break;
-			case LINK:
-				type_symbol = '~';
-				color_pair_enabled = 5;
-				break;
-			case REGULAR:
-				type_symbol = ' ';
-				color_pair_enabled = 1;
-				break;
-			case SOCKET:
-				type_symbol = '=';
-				color_pair_enabled = 5;
-				break;
-			case UNKNOWN:
-			default:
-				type_symbol = '?';
-				color_pair_enabled = 1;
-				break;
-			}
+			type_symbol = type_symbol_mapping[cfr->t][0];
+			color_pair_enabled = type_symbol_mapping[cfr->t][1];
 			const size_t fnlen = strlen(cfr->file_name); // File Name Length
 			size_t enlen; // entry length
 			int padding;
@@ -208,7 +175,8 @@ void ui_draw(struct ui* const i) {
 				color_pair_enabled += 1;
 			}
 			wattron(w, COLOR_PAIR(color_pair_enabled));
-			mvwprintw(w, view_row, 1, "%c%.*s", type_symbol, enlen, cfr->file_name);
+			mvwprintw(w, view_row, 1, "%c%.*s",
+					type_symbol, enlen, cfr->file_name);
 			if (padding) {
 				mvwprintw(w, view_row, 1 + enlen + 1, "%*c", padding, ' ');
 			}
@@ -221,9 +189,11 @@ void ui_draw(struct ui* const i) {
 			view_row += 1;
 		}
 		if (s->num_files) {
-			mvwprintw(w, view_row, 2, "%d/%d, %uB, %o", s->selection+1, s->num_files,
-					(s->selection < s->num_files ? s->file_list[s->selection]->s.st_size : 0),
-					s->file_list[s->selection]->s.st_mode);
+			const size_t fsize = (s->selection < s->num_files ?
+					s->file_list[s->selection]->s.st_size : 0);
+			mvwprintw(w, view_row, 2, " %u/%u, %uB, %o ",
+					s->selection+1, s->num_files,
+					fsize, s->file_list[s->selection]->s.st_mode);
 		}
 		wrefresh(w);
 	}
@@ -239,25 +209,24 @@ void ui_draw(struct ui* const i) {
 	}
 	else {
 		for (int x = 0; x < i->kml; ++x) {
-			if (i->mks[x]) {
-				int c = 0;
-				wprintw(hw, " ");
-				int k;
-				while ((k = key_mapping[x].ks[c])) {
-					switch (k) {
-					case '\t':
-						wprintw(hw, "TAB");
-						break;
-					default:
-						wprintw(hw, "%c", key_mapping[x].ks[c]);
-						break;
-					}
-					c += 1;
+			if (!i->mks[x]) continue;
+			int c = 0;
+			wprintw(hw, " ");
+			int k;
+			while ((k = key_mapping[x].ks[c])) {
+				switch (k) {
+				case '\t':
+					wprintw(hw, "TAB");
+					break;
+				default:
+					wprintw(hw, "%c", key_mapping[x].ks[c]);
+					break;
 				}
-				wattron(hw, COLOR_PAIR(4));
-				wprintw(hw, "%s", key_mapping[x].d);
-				wattroff(hw, COLOR_PAIR(4));
+				c += 1;
 			}
+			wattron(hw, COLOR_PAIR(4));
+			wprintw(hw, "%s", key_mapping[x].d);
+			wattroff(hw, COLOR_PAIR(4));
 		}
 	}
 	wrefresh(hw);
@@ -353,7 +322,8 @@ enum command get_cmd(struct ui* i) {
 	static int keyseq[MAX_KEYSEQ_LENGTH] = { 0 };
 	static int ksi = 0;
 	int c = getch();
-	syslog(LOG_DEBUG, "%d, (%d) %d %d %d %d", c, ksi, keyseq[0], keyseq[1], keyseq[2], keyseq[3]);
+	syslog(LOG_DEBUG, "%d, (%d) %d %d %d %d",
+			c, ksi, keyseq[0], keyseq[1], keyseq[2], keyseq[3]);
 
 	if (c == -1 && !ksi) return CMD_NONE;
 	if (c == 27) {
@@ -428,7 +398,7 @@ enum command get_cmd(struct ui* i) {
  * If keeps gathering, returns 1.
  */
 int fill_textbox(char* buf, char** buftop, size_t bsize, int c) {
-	syslog(LOG_DEBUG, "fill_textbox %d", c);
+	//syslog(LOG_DEBUG, "fill_textbox %d", c);
 	if (c == -1) return 1;
 	else if (c == 27) {
 		// evil ESC
