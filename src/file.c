@@ -22,7 +22,8 @@
 static int file_filter(const struct dirent* d) {
 	// Skip . and ..
 	// Don't need them
-	return !((d->d_name[0] == '.' && d->d_name[1] == 0) || (d->d_name[0] == '.' && d->d_name[1] == '.' && d->d_name[2] == 0));
+	return !((d->d_name[0] == '.' && d->d_name[1] == 0) ||
+			(d->d_name[0] == '.' && d->d_name[1] == '.' && d->d_name[2] == 0));
 }
 
 static int file_sort(const struct dirent** a, const struct dirent** b) {
@@ -36,7 +37,8 @@ static int file_sort(const struct dirent** a, const struct dirent** b) {
  * putting data into variables passed in arguments.
  * TODO it can fail too; to error handling
  */
-void scan_dir(const char* wd, struct file_record*** file_list, fnum_t* num_files) {
+void scan_dir(const char* wd, struct file_record*** file_list,
+		fnum_t* num_files) {
 	delete_file_list(file_list, num_files);
 	struct dirent** namelist;
 	DIR* dir = opendir(wd);
@@ -100,7 +102,8 @@ void delete_file_list(struct file_record*** file_list, fnum_t* num_files) {
 /* Finds file with given name and returns it's position in file_list
  * If not found, leaves SELection unchanged
  */
-void file_index(struct file_record** fl, fnum_t nf, const char* name, fnum_t* sel) {
+void file_index(struct file_record** fl, fnum_t nf,
+		const char* name, fnum_t* sel) {
 	fnum_t i = 0;
 	while (i < nf && strcmp(fl[i]->file_name, name)) {
 		i += 1;
@@ -113,7 +116,8 @@ void file_index(struct file_record** fl, fnum_t nf, const char* name, fnum_t* se
 /* Unlike file_index() it does not look for exact match
  * If nothing found, does not modify SELection
  */
-void file_find(struct file_record** fl, fnum_t nf, const char* name, fnum_t* sel) {
+void file_find(struct file_record** fl, fnum_t nf,
+		const char* name, fnum_t* sel) {
 	fnum_t i = 0;
 	while (i < nf && strncmp(fl[i]->file_name, name, strlen(name))) {
 		i += 1;
@@ -213,7 +217,8 @@ int file_copy(const char* src, const char* dest) {
 		FILE* output_file = fopen(dest, "wb");
 		if (!output_file) {
 			int e = errno;
-			fclose(input_file); // TODO fclose() can fail and set errno; how to handle that?
+			fclose(input_file);
+			// TODO fclose() can fail and set errno; how to handle that?
 			return e;
 		}
 		char* buffer = malloc(BUFSIZ);
