@@ -47,7 +47,8 @@
 // If bit is set, unset it and vice versa
 #define TOGGLE_MODE_BIT(M, B) if ((M) & (B)) { (M) &= ~(B); } else { (M) |= (B); }
 
-static char* mode_bit_meaning[] = {
+/* From LSB to MSB, by bit index */
+static const char* const mode_bit_meaning[] = {
 	"execute/sears by others",
 	"write by others",
 	"read by others",
