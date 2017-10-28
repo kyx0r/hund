@@ -7,24 +7,28 @@ echo "Starting program test"
 echo "qq" | ./$exe || ( echo "Command qq failed"; exit 1 )
 
 # create directory named 'lol' and exit
-echo -e "mklol\rqq" | ./$exe --chdir "testdir"
+echo -e "mklol\nqq" | ./$exe testdir
 if [ ! -d "testdir/lol" ]; then
 	echo "Command mk failed"
 	exit 1
-else
-	rmdir "testdir/lol"
 fi
 
-# move 'testdir/a/a.file' to 'testdir/b.file'
-mkdir "testdir/a"
+# remove directory 'lol' and exit
+echo -e "rmqq" | ./$exe testdir
+if [ -d "testdir/lol" ]; then
+	echo "Command rm failed"
+	rmdir testdir/lol
+	exit 1
+fi
+
+# move 'testdir/a/a.file' to 'testdir/a.file'
+mkdir -p "testdir/a"
 touch "testdir/a/a.file"
-echo -e "\tu\tmvb.file\rqq" | ./$exe --chdir "testdir/a"
-if [ ! -e "testdir/b.file" ] || [ -e "testdir/a/a.file" ]; then
+echo -e "mv\nqq" | ./$exe testdir/a testdir
+if [ ! -e "testdir/a.file" ] || [ -e "testdir/a/a.file" ]; then
 	echo "Command mv failed"
 	exit 1
 fi
-rm -r "testdir"
-mkdir "testdir"
 
 # ...
 
