@@ -100,18 +100,19 @@ int main(int argc, char* argv[])  {
 	openlog(argv[0], LOG_PID, LOG_USER);
 	syslog(LOG_NOTICE, "%s started", argv[0]+2);
 	
-	struct ui i;
-	ui_init(&i);
+	struct file_view fvs[2];
+	memset(fvs, 0, sizeof(struct file_view)*2);
+	struct file_view* pv = &fvs[0];
+	struct file_view* sv = &fvs[1];
+	struct ui i = ui_init(pv, sv);
 
-	struct file_view* pv = &i.fvs[0];
-	struct file_view* sv = &i.fvs[1];
 	for (int v = 0; v < 2; ++v) {
-		get_cwd(i.fvs[v].wd);
+		get_cwd(fvs[v].wd);
 		if (init_wd[v]) {
-			enter_dir(i.fvs[v].wd, init_wd[v]);
+			enter_dir(fvs[v].wd, init_wd[v]);
 		}
-		scan_dir(i.fvs[v].wd, &i.fvs[v].file_list, &i.fvs[v].num_files);
-		//syslog(LOG_DEBUG, "%s", i.fvs[v].wd);
+		scan_dir(fvs[v].wd, &fvs[v].file_list, &fvs[v].num_files);
+		first_entry(&fvs[v]);
 	}
 
 	struct task t = (struct task) {
@@ -125,38 +126,34 @@ int main(int argc, char* argv[])  {
 	while (run) {
 		ui_update_geometry(&i);
 		ui_draw(&i);
+
 		if (i.m == MODE_MANAGER) {
 			switch (get_cmd(&i)) {
 			case CMD_QUIT:
 				run = false;
 				break;
 			case CMD_SWITCH_PANEL:
-				sv = &i.fvs[i.active_view];
+				sv = i.fvs[i.active_view];
 				i.active_view += 1;
 				i.active_view %= 2;
-				pv = &i.fvs[i.active_view];
+				pv = i.fvs[i.active_view];
 				break;
 			case CMD_ENTRY_DOWN:
-				if (pv->selection < pv->num_files-1) {
-					pv->selection += 1;
-				}
+				next_entry(pv);
 				break;
 			case CMD_ENTRY_UP:
-				if (pv->selection > 0) {
-					pv->selection -= 1;
-				}
+				prev_entry(pv);
 				break;
 			case CMD_ENTER_DIR:
-				if (pv->file_list[pv->selection]->t == DIRECTORY) {
+				if (!pv->show_hidden && !ifaiv(pv, pv->selection)) break;
+				else if (pv->file_list[pv->selection]->t == DIRECTORY) {
 					enter_dir(pv->wd, pv->file_list[pv->selection]->file_name);
-					pv->selection = 0;
-					scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				}
 				else if (pv->file_list[pv->selection]->t == LINK) {
 					enter_dir(pv->wd, pv->file_list[pv->selection]->link_path);
-					pv->selection = 0;
-					scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				}
+				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
+				first_entry(pv);
 				break;
 			case CMD_UP_DIR:
 				{
@@ -167,6 +164,9 @@ int main(int argc, char* argv[])  {
 					scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 					file_index(pv->file_list, pv->num_files,
 							prevdir, &pv->selection);
+					if (!ifaiv(pv, pv->selection)) {
+						first_entry(pv);
+					}
 				}
 				free(prevdir);
 				}
@@ -197,19 +197,19 @@ int main(int argc, char* argv[])  {
 				break;
 			case CMD_REMOVE:
 				t.src = calloc(PATH_MAX, sizeof(char));
-				t.t = TASK_RM;
-				t.s = TASK_STATE_DATA_GATHERED;
 				strcpy(t.src, pv->wd);
 				enter_dir(t.src, pv->file_list[pv->selection]->file_name);
+				t.t = TASK_RM;
+				t.s = TASK_STATE_DATA_GATHERED;
 				break;
 			case CMD_CREATE_DIR:
 				t.src = calloc(PATH_MAX, sizeof(char));
-				t.t = TASK_MKDIR;
-				t.s = TASK_STATE_GATHERING_DATA;
 				strcpy(t.src, pv->wd);
 				strcat(t.src, "/");
 				i.prompt_textbox_top = i.prompt_textbox = t.src+strlen(t.src);
 				i.prompt_textbox_size = NAME_MAX;
+				t.t = TASK_MKDIR;
+				t.s = TASK_STATE_GATHERING_DATA;
 				i.m = MODE_PROMPT;
 				break;
 			case CMD_FIND:
@@ -220,10 +220,10 @@ int main(int argc, char* argv[])  {
 				i.m = MODE_FIND;
 				break;
 			case CMD_ENTRY_FIRST:
-				pv->selection = 0;
+				first_entry(pv);
 				break;
 			case CMD_ENTRY_LAST:
-				pv->selection = pv->num_files-1;
+				last_entry(pv);
 				break;
 			case CMD_CHMOD:
 				i.chmod_path = malloc(PATH_MAX);
@@ -250,6 +250,12 @@ int main(int argc, char* argv[])  {
 				i.m = MODE_PROMPT;
 				}
 				break;
+			case CMD_TOGGLE_HIDDEN:
+				pv->show_hidden = !pv->show_hidden;
+				if (!ifaiv(pv, pv->selection)) {
+					first_entry(pv);
+				}
+				break;
 			case CMD_REFRESH:
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				break;
@@ -257,6 +263,7 @@ int main(int argc, char* argv[])  {
 				break;
 			}
 		} // MODE_MANGER
+
 		else if (i.m == MODE_CHMOD) {
 			switch (get_cmd(&i)) {
 			case CMD_RETURN:
@@ -282,13 +289,9 @@ int main(int argc, char* argv[])  {
 			default: break;
 			}
 		} // MODE_CHMOD
+
 		else if (i.m == MODE_FIND) {
-			curs_set(2);
-			WINDOW* hw = panel_window(i.hint);
-			wmove(hw, 1, i.prompt_textbox_top-i.prompt_textbox+1);
-			wrefresh(hw);
-			int c = wgetch(hw);
-			int r = fill_textbox(i.find, &i.find_top, i.find_size, c);
+			int r = fill_textbox(i.find, &i.find_top, i.find_size, panel_window(i.hint));
 			if (r == -1) {
 				pv->selection = i.find_init;
 				i.m = MODE_MANAGER;
@@ -300,20 +303,22 @@ int main(int argc, char* argv[])  {
 				free(i.find);
 				i.find = NULL;
 			}
-			else {
-				file_find(pv->file_list,
-						pv->num_files, i.find, &pv->selection);
+			/* Truth table - "Perform searching?"
+			 *    .hidden.file | visible.file
+			 * show_hidden 0 |0|1|
+			 * show_hidden 1 |1|1|
+			 * Also, don't perform search at all on empty input
+			 */
+			else if ((i.find_top - i.find) &&
+					!(!pv->show_hidden && i.find[0] == '.')) {
+				file_find(pv->file_list, pv->num_files,
+					i.find, &pv->selection);
 			}
-			curs_set(0);
 		} // MODE_FIND
+
 		else if (i.m ==	MODE_PROMPT) {
-			curs_set(2);
-			WINDOW* hw = panel_window(i.hint);
-			wmove(hw, 1, i.prompt_textbox_top-i.prompt_textbox+1);
-			wrefresh(hw);
-			int c = wgetch(hw);
-			int r = fill_textbox(i.prompt_textbox,
-					&i.prompt_textbox_top, i.prompt_textbox_size, c);
+			int r = fill_textbox(i.prompt_textbox, &i.prompt_textbox_top,
+					i.prompt_textbox_size, panel_window(i.hint));
 			if (!r) {
 				if (t.t != TASK_NONE && t.s == TASK_STATE_GATHERING_DATA) {
 					t.s = TASK_STATE_DATA_GATHERED;
@@ -327,7 +332,6 @@ int main(int argc, char* argv[])  {
 				t.s = TASK_STATE_CLEAN;
 				i.m = MODE_MANAGER;
 			}
-			curs_set(0);
 		} // MODE_PROMPT
 
 		if (t.s == TASK_STATE_DATA_GATHERED) {
@@ -355,9 +359,7 @@ int main(int argc, char* argv[])  {
 							t.src, strerror(err));
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
-				if (pv->selection >= pv->num_files) {
-					pv->selection -= 1;
-				}
+				prev_entry(pv);
 				t.s = TASK_STATE_FINISHED;
 				break;
 			case TASK_COPY:
@@ -395,9 +397,7 @@ int main(int argc, char* argv[])  {
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				scan_dir(sv->wd, &sv->file_list, &sv->num_files);
-				if (pv->selection >= pv->num_files) {
-					pv->selection -= 1;
-				}
+				prev_entry(pv);
 				t.s = TASK_STATE_FINISHED;
 				break;
 			case TASK_NONE:

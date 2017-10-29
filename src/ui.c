@@ -19,7 +19,8 @@
 
 #include "include/ui.h"
 
-void ui_init(struct ui* const i) {
+struct ui ui_init(struct file_view* pv, struct file_view* sv) {
+	struct ui i;
 	setlocale(LC_ALL, "");
 	initscr();
 	if (has_colors() == FALSE) {
@@ -46,45 +47,36 @@ void ui_init(struct ui* const i) {
 	init_pair(7, COLOR_YELLOW, COLOR_BLACK);
 	init_pair(8, COLOR_BLACK, COLOR_YELLOW);
 
-	i->fvs[0] = (struct file_view) {
-		.file_list = NULL,
-		.num_files = 0,
-		.selection = 0,
-		.view_offset = 0,
-	};
-	i->fvs[1] = (struct file_view) {
-		.file_list = NULL,
-		.num_files = 0,
-		.selection = 0,
-		.view_offset = 0,
-	};
+	i.fvs[0] = pv;
+	i.fvs[1] = sv;
 	for (int x = 0; x < 2; ++x) {
 		WINDOW* tmpwin = newwin(1, 1, 0, 0);
-		i->fvp[x] = new_panel(tmpwin);
+		i.fvp[x] = new_panel(tmpwin);
 	}
-	i->scrw = i->scrh = 0;
-	i->active_view = 0;
-	i->m = MODE_MANAGER;
-	i->prompt_textbox = NULL;
-	i->prompt_textbox_top = NULL;
-	i->prompt_textbox_size = 0;
-	i->find = NULL;
-	i->find_top = NULL;
-	i->find_size = 0;
-	i->find_init = 0;
-	i->chmod_panel = NULL;
-	i->chmod_mode = 0;
-	i->chmod_path = NULL;
+	i.scrw = i.scrh = 0;
+	i.active_view = 0;
+	i.m = MODE_MANAGER;
+	i.prompt_textbox = NULL;
+	i.prompt_textbox_top = NULL;
+	i.prompt_textbox_size = 0;
+	i.find = NULL;
+	i.find_top = NULL;
+	i.find_size = 0;
+	i.find_init = 0;
+	i.chmod_panel = NULL;
+	i.chmod_mode = 0;
+	i.chmod_path = NULL;
 	WINDOW* hw = newwin(1, 1, 0, 0);
 	keypad(hw, TRUE);
 	wtimeout(hw, DEFAULT_GETCH_TIMEOUT);
-	i->hint = new_panel(hw);
-	i->kml = 0;
-	while (key_mapping[i->kml].ks[0]) {
-		i->kml += 1;
+	i.hint = new_panel(hw);
+	i.kml = 0;
+	while (key_mapping[i.kml].ks[0]) {
+		i.kml += 1;
 	}
-	i->mks = calloc(i->kml, sizeof(int));
-	syslog(LOG_DEBUG, "UI initialized");
+	i.mks = calloc(i.kml, sizeof(int));
+	//syslog(LOG_DEBUG, "UI initialized");
+	return i;
 }
 
 void ui_end(struct ui* const i) {
@@ -98,9 +90,6 @@ void ui_end(struct ui* const i) {
 	 * did this is this order
 	 * http://invisible-island.net/ncurses/ncurses-examples.html
 	 */
-	for (int x = 0; x < 2; x++) {
-		delete_file_list(&i->fvs[x].file_list, &i->fvs[x].num_files);
-	}
 	for (int x = 0; x < 2; x++) {
 		PANEL* p = i->fvp[x];
 		WINDOW* w = panel_window(p);
@@ -119,7 +108,7 @@ void ui_end(struct ui* const i) {
 
 void ui_draw(struct ui* const i) {
 	for (int v = 0; v < 2; ++v) {
-		struct file_view* s = &i->fvs[v];
+		struct file_view* const s = i->fvs[v];
 		PANEL* p = i->fvp[v];
 		int _ph, _pw;
 		WINDOW* w = panel_window(p);
@@ -138,23 +127,32 @@ void ui_draw(struct ui* const i) {
 		free(pretty);
 		// First, adjust view_offset to selection
 		// (Keep selection in center if possible)
+		fnum_t view_offset = 0;
 		if (s->num_files <= ph - 1) {
-			s->view_offset = 0;
+			view_offset = 0;
 		}
 		else if (s->selection < ph/2) {
-			s->view_offset = 0;
+			view_offset = 0;
 		}
 		else if (s->selection > s->num_files - ph/2) {
-			s->view_offset = s->num_files - ph + 2;
+			view_offset = s->num_files - ph + 2;
 		}
 		else {
-			s->view_offset = s->selection - ph/2 + 1;
+			view_offset = s->selection - ph/2 + 1;
 		}
 		unsigned view_row = 1; // Skipping border
-		fnum_t ei = s->view_offset; // Entry Index
+		fnum_t ei = view_offset; // Entry Index
+		fnum_t hc = 0; // Hidden Count
+		fnum_t vi = 0;
+		fnum_t vsi = 0; // Visible Selected Index
 		while (ei < s->num_files && view_row < ph-1) {
 			// Current File Record
 			const struct file_record* cfr = s->file_list[ei];
+			if (cfr->file_name[0] == '.' && !s->show_hidden) {
+				ei += 1;
+				hc += 1;
+				continue;
+			}
 			char type_symbol = '?';
 			int color_pair_enabled = 0;
 			type_symbol = type_symbol_mapping[cfr->t][0];
@@ -172,6 +170,7 @@ void ui_draw(struct ui* const i) {
 				enlen = fnlen;
 			}
 			if (ei == s->selection && v == i->active_view) {
+				vsi = vi;
 				color_pair_enabled += 1;
 			}
 			wattron(w, COLOR_PAIR(color_pair_enabled));
@@ -182,18 +181,26 @@ void ui_draw(struct ui* const i) {
 			}
 			wattroff(w, COLOR_PAIR(color_pair_enabled));
 			view_row += 1;
+			vi += 1;
 			ei += 1;
 		}
 		while (view_row < ph-1) {
 			mvwprintw(w, view_row, 1, "%*c", pw-2, ' ');
 			view_row += 1;
 		}
-		if (s->num_files) {
+		if (s->num_files && s->num_files-hc) {
 			const size_t fsize = (s->selection < s->num_files ?
 					s->file_list[s->selection]->s.st_size : 0);
-			mvwprintw(w, view_row, 2, " %u/%u, %uB, %o ",
-					s->selection+1, s->num_files,
-					fsize, s->file_list[s->selection]->s.st_mode);
+			if (s->show_hidden) {
+				mvwprintw(w, view_row, 2, " %u/%u, %uB, %o ",
+						vsi+1, s->num_files-hc,
+						fsize, s->file_list[s->selection]->s.st_mode);
+			}
+			else {
+				mvwprintw(w, view_row, 2, " %u/%u, h%d, %uB, %o ",
+						vsi+1, s->num_files-hc, hc,
+						fsize, s->file_list[s->selection]->s.st_mode);
+			}
 		}
 		wrefresh(w);
 	}
@@ -297,7 +304,7 @@ void ui_update_geometry(struct ui* const i) {
 }
 
 void chmod_open(struct ui* i, char* path, mode_t m) {
-	syslog(LOG_DEBUG, "chmod %s", path);
+	//syslog(LOG_DEBUG, "chmod %s", path);
 	i->chmod_path = path;
 	i->chmod_mode = m;
 	WINDOW* cw = newwin(1, 1, 0, 0);
@@ -322,24 +329,24 @@ enum command get_cmd(struct ui* i) {
 	static int keyseq[MAX_KEYSEQ_LENGTH] = { 0 };
 	static int ksi = 0;
 	int c = getch();
-	syslog(LOG_DEBUG, "%d, (%d) %d %d %d %d",
-			c, ksi, keyseq[0], keyseq[1], keyseq[2], keyseq[3]);
+	//syslog(LOG_DEBUG, "%d, (%d) %d %d %d %d",
+			//c, ksi, keyseq[0], keyseq[1], keyseq[2], keyseq[3]);
 
 	if (c == -1 && !ksi) return CMD_NONE;
 	if (c == 27) {
-		syslog(LOG_DEBUG, "esc?");
+		//syslog(LOG_DEBUG, "esc?");
 		//timeout();
 		int cc = getch();
 		//timeout(DEFAULT_GETCH_TIMEOUT);
 		if (cc == -1) {
-			syslog(LOG_DEBUG, "esc");
+			//syslog(LOG_DEBUG, "esc");
 			memset(i->mks, 0, i->kml*sizeof(int));
 			memset(keyseq, 0, sizeof(keyseq));
 			ksi = 0;
 			return CMD_NONE;
 		}
 		else {
-			syslog(LOG_DEBUG, "alt");
+			//syslog(LOG_DEBUG, "alt");
 			return CMD_NONE;
 		}
 	}
@@ -397,8 +404,12 @@ enum command get_cmd(struct ui* i) {
  * If aborted, returns -1.
  * If keeps gathering, returns 1.
  */
-int fill_textbox(char* buf, char** buftop, size_t bsize, int c) {
-	//syslog(LOG_DEBUG, "fill_textbox %d", c);
+int fill_textbox(char* buf, char** buftop, size_t bsize, WINDOW* w) {
+	curs_set(2);
+	wmove(w, 1, (*buftop)-buf+1);
+	wrefresh(w);
+	int c = wgetch(w);
+	curs_set(0);
 	if (c == -1) return 1;
 	else if (c == 27) {
 		// evil ESC

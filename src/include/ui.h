@@ -27,7 +27,7 @@
 #include <locale.h>
 #include <syslog.h>
 
-#include "file.h"
+#include "file_view.h"
 
 #define DEFAULT_GETCH_TIMEOUT 500
 
@@ -54,6 +54,7 @@ enum command {
 	CMD_ENTRY_FIRST,
 	CMD_ENTRY_LAST,
 	CMD_RENAME,
+	CMD_TOGGLE_HIDDEN,
 	CMD_FIND,
 
 	CMD_CHMOD,
@@ -101,6 +102,7 @@ static const struct key2cmd key_mapping[] = {
 	{ .ks = { 'i', 0, 0, 0 }, .d = "enter dir", .m = MODE_MANAGER, .c = CMD_ENTER_DIR },
 	{ .ks = { 'e', 0, 0, 0 }, .d = "enter dir", .m = MODE_MANAGER, .c = CMD_ENTER_DIR },
 	{ .ks = { '/', 0, 0, 0 }, .d = "find", .m = MODE_MANAGER, .c = CMD_FIND },
+	{ .ks = { 'h', 0, 0, 0 }, .d = "toggle hidden", .m = MODE_MANAGER, .c = CMD_TOGGLE_HIDDEN },
 	{ .ks = { 'c', 'h', 0, 0 }, .d = "chmod", .m = MODE_MANAGER, .c = CMD_CHMOD },
 
 	/* MODE_CHMOD */
@@ -140,46 +142,40 @@ static const char type_symbol_mapping[][2] = {
 	[UNKNOWN] = { '?', 1 },
 };
 
-struct file_view {
-	char wd[PATH_MAX];
-	struct file_record** file_list;
-	fnum_t num_files;
-	fnum_t selection;
-	fnum_t view_offset;
-};
-
-/* UI is intended only to handle drawing functions
- * No FS logic or data manipulation
- */
 struct ui {
 	int scrh, scrw;
-	int active_view;
 	enum mode m;
+
+	int active_view;
 	PANEL* fvp[2];
-	struct file_view fvs[2]; // Dunno where to put it
+	struct file_view* fvs[2];
+
 	char* prompt_textbox;
 	char* prompt_textbox_top;
 	size_t prompt_textbox_size;
+
 	PANEL* hint;
+
+	int kml;
+	int* mks; // Matching Key Sequence
+
 	char* find;
 	char* find_top;
 	size_t find_size;
 	fnum_t find_init; // Selection before find command
-	int kml;
-	int* mks; // Matching Key Sequence
 
 	PANEL* chmod_panel;
 	mode_t chmod_mode;
 	char* chmod_path;
 };
 
-void ui_init(struct ui* const);
+struct ui ui_init(struct file_view*, struct file_view*);
 void ui_end(struct ui* const);
 void ui_draw(struct ui* const);
 void ui_update_geometry(struct ui* const);
 void chmod_open(struct ui*, char*, mode_t);
 void chmod_close(struct ui*, enum mode);
 enum command get_cmd(struct ui*);
-int fill_textbox(char* buf, char** buftop, size_t bsize, int c);
+int fill_textbox(char*, char**, size_t, WINDOW*);
 
 #endif
