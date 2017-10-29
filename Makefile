@@ -8,7 +8,7 @@ LIBS = -Wl,--start-group -ltinfo -lpanel -lncurses -Wl,--end-group
 # undefined reference to symbol 'wtimeout'
 # /usr/lib/libtinfo.so.6: error adding symbols: DSO missing from command line
 OBJDIR = obj
-OBJ = main.o path.o file.o ui.o
+OBJ = main.o path.o file.o ui.o file_view.o
 EXENAME = hund
 TESTEXENAME = test/testme
 TESTSCRIPTNAME = test/test.sh
@@ -27,7 +27,10 @@ $(OBJDIR)/path.o : src/path.c src/include/path.h | $(OBJDIR)
 $(OBJDIR)/file.o : src/file.c src/include/file.h src/include/path.h | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(OBJDIR)/ui.o : src/ui.c src/include/ui.h src/include/file.h | $(OBJDIR)
+$(OBJDIR)/file_view.o : src/file_view.c src/include/file_view.h src/include/file.h | $(OBJDIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(OBJDIR)/ui.o : src/ui.c src/include/ui.h src/include/file_view.h | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJDIR) :
