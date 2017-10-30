@@ -33,6 +33,7 @@ enum task_type {
 	TASK_RM,
 	TASK_COPY,
 	TASK_MOVE,
+	TASK_CD,
 	TASK_RENAME,
 };
 
@@ -146,6 +147,14 @@ int main(int argc, char* argv[])  {
 			case CMD_ENTRY_UP:
 				prev_entry(pv);
 				break;
+			case CMD_CD:
+				t.dst = calloc(PATH_MAX, sizeof(char));
+				i.prompt_textbox_top = i.prompt_textbox = t.dst;
+				i.prompt_textbox_size = PATH_MAX;
+				t.t = TASK_CD;
+				t.s = TASK_STATE_GATHERING_DATA;
+				i.m = MODE_PROMPT;
+				break;
 			case CMD_ENTER_DIR:
 				if (!pv->show_hidden && !ifaiv(pv, pv->selection)) break;
 				else if (pv->file_list[pv->selection]->t == DIRECTORY) {
@@ -167,7 +176,7 @@ int main(int argc, char* argv[])  {
 					scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 					file_index(pv->file_list, pv->num_files,
 							prevdir, &pv->selection);
-					if (!ifaiv(pv, pv->selection)) {
+					if (!pv->show_hidden && !ifaiv(pv, pv->selection)) {
 						first_entry(pv);
 					}
 				}
@@ -193,7 +202,6 @@ int main(int argc, char* argv[])  {
 				enter_dir(t.src, pv->file_list[pv->selection]->file_name);
 				t.dst = calloc(PATH_MAX, sizeof(char));
 				strcpy(t.dst, sv->wd);
-				/* same name; TODO detect conflicting file names */
 				enter_dir(t.dst, pv->file_list[pv->selection]->file_name);
 				t.t = TASK_MOVE;
 				t.s = TASK_STATE_DATA_GATHERED;
@@ -364,6 +372,22 @@ int main(int argc, char* argv[])  {
 				}
 				t.s = TASK_STATE_FINISHED;
 				break;
+			case TASK_CD:
+				syslog(LOG_DEBUG, "task_cd %s", t.dst);
+				if (!file_exists(t.dst)) {
+					syslog(LOG_ERR, "cd failed: File does not exist");
+					t.s = TASK_STATE_FINISHED;
+					break;
+				}
+				err = enter_dir(pv->wd, t.dst);
+				if (err) {
+					syslog(LOG_ERR, "enter_dir(\"%s\") failed: %s",
+							t.src, strerror(err));
+				}
+				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
+				first_entry(pv);
+				t.s = TASK_STATE_FINISHED;
+				break;
 			case TASK_RM:
 				syslog(LOG_DEBUG, "task_rmdir %s", t.src);
 				err = file_remove(t.src);
@@ -377,6 +401,11 @@ int main(int argc, char* argv[])  {
 				break;
 			case TASK_COPY:
 				syslog(LOG_DEBUG, "task_copy %s -> %s", t.src, t.dst);
+				if (file_exists(t.dst)) {
+					syslog(LOG_ERR, "copy failed: File exists");
+					t.s = TASK_STATE_FINISHED;
+					break;
+				}
 				err = file_copy(t.src, t.dst);
 				if (err) {
 					syslog(LOG_ERR, "file_copy(\"%s\", \"%s\") failed: %s",
@@ -388,6 +417,11 @@ int main(int argc, char* argv[])  {
 			case TASK_RENAME:
 				{
 				syslog(LOG_DEBUG, "task_rename %s -> %s", t.src, t.dst);
+				if (file_exists(t.dst)) {
+					syslog(LOG_ERR, "rename failed: File exists");
+					t.s = TASK_STATE_FINISHED;
+					break;
+				}
 				char* named = malloc(NAME_MAX);
 				current_dir(t.dst, named);
 				err = rename(t.src, t.dst);
@@ -409,6 +443,11 @@ int main(int argc, char* argv[])  {
 				break;
 			case TASK_MOVE:
 				syslog(LOG_DEBUG, "task_move %s -> %s", t.src, t.dst);
+				if (file_exists(t.dst)) {
+					syslog(LOG_ERR, "move failed: File exists");
+					t.s = TASK_STATE_FINISHED;
+					break;
+				}
 				err = file_move(t.src, t.dst);
 				if (err) {
 					syslog(LOG_ERR, "file_move(\"%s\", \"%s\") failed: %s",
@@ -423,14 +462,17 @@ int main(int argc, char* argv[])  {
 				break;
 			}
 		}
-		else if (t.s == TASK_STATE_EXECUTING) {
+
+		if (t.s == TASK_STATE_EXECUTING) {
 			/* TODO
 			 * This state is for later.
 			 * Copying, moving, listing etc. is going to be iterative.
 			 * So that tasks can be paused, stopped or changed anytime.
 			 */
 		}
-		else if (t.s == TASK_STATE_FINISHED) {
+
+		if (t.s == TASK_STATE_FINISHED) {
+			syslog(LOG_DEBUG, "task cleanup");
 			if (t.src) free(t.src);
 			if (t.dst) free(t.dst);
 			t.src = t.dst = NULL;

@@ -55,6 +55,7 @@ enum command {
 	CMD_ENTRY_LAST,
 	CMD_RENAME,
 	CMD_TOGGLE_HIDDEN,
+	CMD_CD,
 	CMD_FIND,
 
 	CMD_CHMOD,
@@ -103,6 +104,7 @@ static const struct key2cmd key_mapping[] = {
 	{ .ks = { 'e', 0, 0, 0 }, .d = "enter dir", .m = MODE_MANAGER, .c = CMD_ENTER_DIR },
 	{ .ks = { '/', 0, 0, 0 }, .d = "find", .m = MODE_MANAGER, .c = CMD_FIND },
 	{ .ks = { 'h', 0, 0, 0 }, .d = "toggle hidden", .m = MODE_MANAGER, .c = CMD_TOGGLE_HIDDEN },
+	{ .ks = { 'c', 'd', 0, 0 }, .d = "open directory", .m = MODE_MANAGER, .c = CMD_CD },
 	{ .ks = { 'c', 'h', 0, 0 }, .d = "chmod", .m = MODE_MANAGER, .c = CMD_CHMOD },
 
 	/* MODE_CHMOD */

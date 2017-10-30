@@ -35,7 +35,7 @@ struct ui ui_init(struct file_view* pv, struct file_view* sv) {
 	//raw();
 	//intrflush(stdscr, FALSE);
 	keypad(stdscr, TRUE);
-	timeout(DEFAULT_GETCH_TIMEOUT);
+	//timeout(DEFAULT_GETCH_TIMEOUT);
 	curs_set(0);
 
 	init_pair(1, COLOR_WHITE, COLOR_BLACK);
@@ -68,7 +68,7 @@ struct ui ui_init(struct file_view* pv, struct file_view* sv) {
 	i.chmod_path = NULL;
 	WINDOW* hw = newwin(1, 1, 0, 0);
 	keypad(hw, TRUE);
-	wtimeout(hw, DEFAULT_GETCH_TIMEOUT);
+	//wtimeout(hw, DEFAULT_GETCH_TIMEOUT);
 	i.hint = new_panel(hw);
 	i.kml = 0;
 	while (key_mapping[i.kml].ks[0]) {
@@ -144,7 +144,7 @@ void ui_draw(struct ui* const i) {
 		unsigned view_row = 1; // Skipping border
 		fnum_t ei = view_offset; // Entry Index
 		fnum_t hc = 0; // Hidden Count
-		fnum_t vi = 0;
+		fnum_t vi = 0; // Visible Index
 		fnum_t vsi = 0; // Visible Selected Index
 		while (ei < s->num_files && view_row < ph-1) {
 			// Current File Record
@@ -189,19 +189,25 @@ void ui_draw(struct ui* const i) {
 			mvwprintw(w, view_row, 1, "%*c", pw-2, ' ');
 			view_row += 1;
 		}
-		if (s->num_files && s->num_files-hc) {
+		if (!s->num_files) {
+			mvwprintw(w, view_row, 2, "empty");
+		}
+		else if (s->num_files-hc) {
 			const size_t fsize = (s->selection < s->num_files ?
 					s->file_list[s->selection]->s.st_size : 0);
 			if (s->show_hidden) {
 				mvwprintw(w, view_row, 2, " %u/%u %uB %o ",
-						vsi+1, s->num_files-hc,
+						s->selection+1, s->num_files-hc,
 						fsize, s->file_list[s->selection]->s.st_mode);
 			}
 			else {
-				mvwprintw(w, view_row, 2, " %u/%u h%d %uB %o ",
-						vsi+1, s->num_files-hc, hc,
+				mvwprintw(w, view_row, 2, " %u/%u h%u %uB %o ",
+						s->selection+1, s->num_files-hc, hc,
 						fsize, s->file_list[s->selection]->s.st_mode);
 			}
+		}
+		else {
+			mvwprintw(w, view_row, 2, "h%u", hc);
 		}
 		wrefresh(w);
 	}
