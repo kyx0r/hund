@@ -75,7 +75,6 @@ struct ui ui_init(struct file_view* pv, struct file_view* sv) {
 		i.kml += 1;
 	}
 	i.mks = calloc(i.kml, sizeof(int));
-	//syslog(LOG_DEBUG, "UI initialized");
 	return i;
 }
 
@@ -118,13 +117,15 @@ void ui_draw(struct ui* const i) {
 		box(w, 0, 0);
 		//wborder(w, '|', '|', '-', '-', '+', '+', '+', '+');
 		struct passwd* pwd = get_pwd();
-		char* pretty = malloc(PATH_MAX);
-		strcpy(pretty, s->wd);
-		prettify_path(pretty, pwd->pw_dir);
+		int pi = prettify_path_i(s->wd, pwd->pw_dir);
 		wattron(w, COLOR_PAIR(4));
-		mvwprintw(w, 0, 2, "%s", pretty);
+		if (pi == -1) {
+			mvwprintw(w, 0, 2, "%s", s->wd);
+		}
+		else {
+			mvwprintw(w, 0, 2, "~%s", s->wd+pi);
+		}
 		wattroff(w, COLOR_PAIR(4));
-		free(pretty);
 		// First, adjust view_offset to selection
 		// (Keep selection in center if possible)
 		fnum_t view_offset = 0;
@@ -192,12 +193,12 @@ void ui_draw(struct ui* const i) {
 			const size_t fsize = (s->selection < s->num_files ?
 					s->file_list[s->selection]->s.st_size : 0);
 			if (s->show_hidden) {
-				mvwprintw(w, view_row, 2, " %u/%u, %uB, %o ",
+				mvwprintw(w, view_row, 2, " %u/%u %uB %o ",
 						vsi+1, s->num_files-hc,
 						fsize, s->file_list[s->selection]->s.st_mode);
 			}
 			else {
-				mvwprintw(w, view_row, 2, " %u/%u, h%d, %uB, %o ",
+				mvwprintw(w, view_row, 2, " %u/%u h%d %uB %o ",
 						vsi+1, s->num_files-hc, hc,
 						fsize, s->file_list[s->selection]->s.st_mode);
 			}
@@ -304,7 +305,7 @@ void ui_update_geometry(struct ui* const i) {
 }
 
 void chmod_open(struct ui* i, char* path, mode_t m) {
-	//syslog(LOG_DEBUG, "chmod %s", path);
+	syslog(LOG_DEBUG, "chmod %s", path);
 	i->chmod_path = path;
 	i->chmod_mode = m;
 	WINDOW* cw = newwin(1, 1, 0, 0);

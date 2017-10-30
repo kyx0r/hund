@@ -125,7 +125,7 @@ void current_dir(const char path[PATH_MAX], char dir[NAME_MAX]) {
 	const int plen = strlen(path);
 	int i = plen-1; // i will point last slash in path
 	while (path[i] != '/' && i >= 0) {
-		i--;
+		i -= 1;
 	}
 	if (!i && plen == 1) {
 		memcpy(dir, "/", 2);
@@ -136,4 +136,31 @@ void current_dir(const char path[PATH_MAX], char dir[NAME_MAX]) {
 
 bool path_is_relative(char path[PATH_MAX]) {
 	return (path[0] != '/' && path[0] != '~') || (path[0] == '.' && path[1] == '/');
+}
+
+/* Same as current_dir_i()
+ * Returns place in buffer, where path after ~ starts
+ * So that pretty path is just
+ * printf("~%s", path+prettify_path_i(path));
+ * If cannot be prettified, returns -1
+ */
+int prettify_path_i(const char path[PATH_MAX], const char home[PATH_MAX]) {
+	const int hlen = strlen(home);
+	if (!memcmp(path, home, hlen)) {
+		return hlen;
+	}
+	return -1;
+}
+
+/* Instead of populating another buffer,
+ * it just points to place in buffer,
+ * where current dir's name starts
+ */
+int current_dir_i(const char path[PATH_MAX]) {
+	const int plen = strlen(path);
+	int i = plen-1; // i will point last slash in path
+	while (path[i] != '/' && i >= 0) {
+		i -= 1;
+	}
+	return i+1; // i will point last slash in path
 }

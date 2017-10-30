@@ -48,6 +48,8 @@ struct task {
 	enum task_state s;
 	enum task_type t;
 	char *src, *dst;
+	//char* name;
+	//char* oth[4];
 };
 
 int main(int argc, char* argv[])  {
@@ -152,6 +154,7 @@ int main(int argc, char* argv[])  {
 				else if (pv->file_list[pv->selection]->t == LINK) {
 					enter_dir(pv->wd, pv->file_list[pv->selection]->link_path);
 				}
+				else break;
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				first_entry(pv);
 				break;
@@ -347,8 +350,18 @@ int main(int argc, char* argv[])  {
 							t.src, strerror(err));
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
-				file_index(pv->file_list,
-						pv->num_files, i.prompt_textbox, &pv->selection);
+				/* Truth table - "Highlight new directory?"
+				 *            .dir | dir
+				 * show_hidden 0 |0|1|
+				 * show_hidden 1 |1|1|
+				 */
+				if (pv->show_hidden || i.prompt_textbox[0] != '.') {
+					file_index(pv->file_list, pv->num_files,
+						i.prompt_textbox, &pv->selection);
+				}
+				else {
+					first_entry(pv);
+				}
 				t.s = TASK_STATE_FINISHED;
 				break;
 			case TASK_RM:
@@ -375,7 +388,7 @@ int main(int argc, char* argv[])  {
 			case TASK_RENAME:
 				{
 				syslog(LOG_DEBUG, "task_rename %s -> %s", t.src, t.dst);
-				char named[NAME_MAX];
+				char* named = malloc(NAME_MAX);
 				current_dir(t.dst, named);
 				err = rename(t.src, t.dst);
 				if (err) {
@@ -383,9 +396,15 @@ int main(int argc, char* argv[])  {
 							t.src, t.dst, strerror(err));
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
-				file_index(pv->file_list, pv->num_files,
-						named, &pv->selection);
+				if (!pv->show_hidden && !ifaiv(pv, pv->selection)) {
+					next_entry(pv);
+				}
+				else {
+					file_index(pv->file_list, pv->num_files,
+							named, &pv->selection);
+				}
 				t.s = TASK_STATE_FINISHED;
+				free(named);
 				}
 				break;
 			case TASK_MOVE:

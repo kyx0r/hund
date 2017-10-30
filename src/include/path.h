@@ -41,4 +41,7 @@ int prettify_path(char [PATH_MAX], char [PATH_MAX]);
 void current_dir(const char [PATH_MAX], char [NAME_MAX]);
 bool path_is_relative(char [PATH_MAX]);
 
+int prettify_path_i(const char [PATH_MAX], const char [PATH_MAX]); // TODO tests
+int current_dir_i(const char [PATH_MAX]);
+
 #endif
