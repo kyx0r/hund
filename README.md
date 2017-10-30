@@ -1,21 +1,28 @@
 # Hund
 A terminal file manager.
-#### Goals
-I want to learn new things. If you find Hund useful, it's a huge plus.
 #### Current features
 - Vim-inspired command system
 - Resize window
 - File type recognition (indicated by color and symbol)
 - Follow symlinks
-- Move/remove/copy file/directory
+- Move/remove/copy/rename file/directory
+- Hide/show hidden files
+- Change file permissions
 - Create directory
-- Find file
+- Find file in current directory
+#### Planned features
+- Rich error/warning/info log
+- Open in external program, based on extension
+- Rename multiple files at once (somewhat like ranger)
+- UTF-8 support
+- Task queue of some sort
+- Fancy file sorting
+- Configuration in a file
 #### UI
 Hund uses dual-panel view just like GNU Midnight Commander does. And it uses ncurses too.
-#### Be careful
-Hund is very young at the moment and it can mess your files up if you trust it too much.
 #### Commands
 - `qq` exit
+- `ESC` reset command
 - `j` entry down
 - `k` entry up
 - `u` or `d` up directory
@@ -33,7 +40,6 @@ Hund is very young at the moment and it can mess your files up if you trust it t
 	- `(any characters)` enter name of searched file
 	- `ESC` abort search and return to entry highlighted before searching
 	- `ENTER` exit search and stay at found entry
-- `ESC` reset command
 - `ch` change file permissions
 	- `qq` abort changes and quit chmod
 	- `ch` apply changes and quit chmod
