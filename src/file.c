@@ -33,6 +33,10 @@ static int file_sort(const struct dirent** a, const struct dirent** b) {
 	else return strcmp((*a)->d_name, (*b)->d_name);
 }
 
+bool file_exists(const char* path) {
+	return !access(path, F_OK);
+}
+
 /* Cleans up old data and scans working directory,
  * putting data into variables passed in arguments.
  * TODO it can fail too; to error handling

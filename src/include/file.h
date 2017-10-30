@@ -78,11 +78,12 @@ enum file_type {
 
 struct file_record {
 	char* file_name;
-	struct stat s;
-	enum file_type t;
 	char* link_path;
+	enum file_type t;
+	struct stat s;
 };
 
+bool file_exists(const char*);
 void scan_dir(const char*, struct file_record***, fnum_t*);
 void delete_file_list(struct file_record***, fnum_t*);
 void file_index(struct file_record**, fnum_t, const char*, fnum_t*);
