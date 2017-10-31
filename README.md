@@ -22,7 +22,7 @@ A terminal file manager.
 Hund uses dual-panel view just like GNU Midnight Commander does. And it uses ncurses too.
 #### Commands
 - `qq` exit
-- `ESC` reset command
+- `ESC` reset command/get rid of error message
 - `j` entry down
 - `k` entry up
 - `u` or `d` up directory
@@ -36,6 +36,7 @@ Hund uses dual-panel view just like GNU Midnight Commander does. And it uses ncu
 - `rr` rescan active view
 - `rn` rename highlighted file
 - `mk` create directory
+- `cd` open directory
 - `/` find file in working directory
 	- `(any characters)` enter name of searched file
 	- `ESC` abort search and return to entry highlighted before searching
