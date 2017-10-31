@@ -134,11 +134,11 @@ static const struct key2cmd key_mapping[] = {
 };
 
 static const char type_symbol_mapping[][2] = {
-	[BLOCK] = { '+', 7 },
-	[CHARACTER] = { '-', 7 },
-	[DIRECTORY] = { '/', 3 },
+	[BLOCK] = { '+', 11 },
+	[CHARACTER] = { '-', 11 },
+	[DIRECTORY] = { '/', 9 },
 	[FIFO] = { '|', 1 },
-	[LINK] = { '~', 5 },
+	[LINK] = { '~', 3 },
 	[REGULAR] = { ' ', 1 },
 	[SOCKET] = { '=', 5 },
 	[UNKNOWN] = { '?', 1 },
@@ -157,6 +157,8 @@ struct ui {
 	size_t prompt_textbox_size;
 
 	PANEL* hint;
+
+	char* error;
 
 	int kml;
 	int* mks; // Matching Key Sequence

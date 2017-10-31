@@ -40,12 +40,24 @@ struct ui ui_init(struct file_view* pv, struct file_view* sv) {
 
 	init_pair(1, COLOR_WHITE, COLOR_BLACK);
 	init_pair(2, COLOR_BLACK, COLOR_WHITE);
-	init_pair(3, COLOR_CYAN, COLOR_BLACK);
-	init_pair(4, COLOR_BLACK, COLOR_CYAN);
-	init_pair(5, COLOR_RED, COLOR_BLACK);
-	init_pair(6, COLOR_BLACK, COLOR_RED);
-	init_pair(7, COLOR_YELLOW, COLOR_BLACK);
-	init_pair(8, COLOR_BLACK, COLOR_YELLOW);
+
+	init_pair(3, COLOR_RED, COLOR_BLACK);
+	init_pair(4, COLOR_BLACK, COLOR_RED);
+
+	init_pair(5, COLOR_GREEN, COLOR_BLACK);
+	init_pair(6, COLOR_BLACK, COLOR_GREEN);
+
+	init_pair(7, COLOR_BLUE, COLOR_BLACK);
+	init_pair(8, COLOR_BLACK, COLOR_BLUE);
+
+	init_pair(9, COLOR_CYAN, COLOR_BLACK);
+	init_pair(10, COLOR_BLACK, COLOR_CYAN);
+
+	init_pair(11, COLOR_MAGENTA, COLOR_BLACK);
+	init_pair(12, COLOR_BLACK, COLOR_MAGENTA);
+
+	init_pair(13, COLOR_YELLOW, COLOR_BLACK);
+	init_pair(14, COLOR_BLACK, COLOR_YELLOW);
 
 	i.fvs[0] = pv;
 	i.fvs[1] = sv;
@@ -56,6 +68,7 @@ struct ui ui_init(struct file_view* pv, struct file_view* sv) {
 	i.scrw = i.scrh = 0;
 	i.active_view = 0;
 	i.m = MODE_MANAGER;
+	i.error = NULL;
 	i.prompt_textbox = NULL;
 	i.prompt_textbox_top = NULL;
 	i.prompt_textbox_size = 0;
@@ -114,18 +127,19 @@ void ui_draw(struct ui* const i) {
 		getmaxyx(w, _ph, _pw);
 		if (_ph < 0 || _ph < 0) return; // these may be -1
 		fnum_t ph = _ph, pw = _pw;
-		box(w, 0, 0);
+		//box(w, 0, 0);
 		//wborder(w, '|', '|', '-', '-', '+', '+', '+', '+');
+
+		/* Top pathbar */
 		struct passwd* pwd = get_pwd();
 		int pi = prettify_path_i(s->wd, pwd->pw_dir);
-		wattron(w, COLOR_PAIR(4));
-		if (pi == -1) {
-			mvwprintw(w, 0, 2, "%s", s->wd);
-		}
-		else {
-			mvwprintw(w, 0, 2, "~%s", s->wd+pi);
-		}
-		wattroff(w, COLOR_PAIR(4));
+		/* TODO if path does not fit into bar, shorten it somehow */
+		wattron(w, COLOR_PAIR(2));
+		if (pi) mvwprintw(w, 0, 0, "~");
+		mvwprintw(w, 0, (pi ? 1 : 0), "%s%*c", s->wd+pi, pw-strlen(s->wd+pi), ' ');
+		wattroff(w, COLOR_PAIR(2));
+
+		/* Entry list */
 		// First, adjust view_offset to selection
 		// (Keep selection in center if possible)
 		fnum_t view_offset = 0;
@@ -141,12 +155,11 @@ void ui_draw(struct ui* const i) {
 		else {
 			view_offset = s->selection - ph/2 + 1;
 		}
-		unsigned view_row = 1; // Skipping border
+		unsigned vo = 1; // Vertical offset, 1 = skipping top bar
 		fnum_t ei = view_offset; // Entry Index
 		fnum_t hc = 0; // Hidden Count
 		fnum_t vi = 0; // Visible Index
-		fnum_t vsi = 0; // Visible Selected Index
-		while (ei < s->num_files && view_row < ph-1) {
+		while (ei < s->num_files && vo < ph-1) {
 			// Current File Record
 			const struct file_record* cfr = s->file_list[ei];
 			if (cfr->file_name[0] == '.' && !s->show_hidden) {
@@ -167,59 +180,71 @@ void ui_draw(struct ui* const i) {
 				enlen = pw - 3;
 			}
 			else {
-				padding = (pw - 3) - fnlen;
+				padding = (pw - 1) - fnlen;
 				enlen = fnlen;
 			}
 			if (ei == s->selection && v == i->active_view) {
-				vsi = vi;
 				color_pair_enabled += 1;
 			}
 			wattron(w, COLOR_PAIR(color_pair_enabled));
-			mvwprintw(w, view_row, 1, "%c%.*s",
+			mvwprintw(w, vo, 0, "%c%.*s",
 					type_symbol, enlen, cfr->file_name);
 			if (padding) {
-				mvwprintw(w, view_row, 1 + enlen + 1, "%*c", padding, ' ');
+				mvwprintw(w, vo, 0 + enlen + 1, "%*c", padding, ' ');
 			}
 			wattroff(w, COLOR_PAIR(color_pair_enabled));
-			view_row += 1;
+			vo += 1;
 			vi += 1;
 			ei += 1;
 		}
-		while (view_row < ph-1) {
-			mvwprintw(w, view_row, 1, "%*c", pw-2, ' ');
-			view_row += 1;
+		while (vo < ph-1) {
+			mvwprintw(w, vo, 0, "%*c", pw, ' ');
+			vo += 1;
 		}
+
+		/* Statusbar */
+		wattron(w, COLOR_PAIR(2));
+		const size_t status_size = 256;
+		char* status = malloc(status_size);
+		static char* empty = "(empty)";
 		if (!s->num_files) {
-			mvwprintw(w, view_row, 2, "empty");
+			snprintf(status, status_size, empty);
 		}
-		else if (s->num_files-hc) {
+		else if (s->num_files - hc) {
 			const size_t fsize = (s->selection < s->num_files ?
 					s->file_list[s->selection]->s.st_size : 0);
 			if (s->show_hidden) {
-				mvwprintw(w, view_row, 2, " %u/%u %uB %o ",
+				snprintf(status, status_size, "%u/%u %zuB %o",
 						s->selection+1, s->num_files-hc,
 						fsize, s->file_list[s->selection]->s.st_mode);
 			}
 			else {
-				mvwprintw(w, view_row, 2, " %u/%u h%u %uB %o ",
+				snprintf(status, status_size, "%u/%u h%u %zuB %o",
 						s->selection+1, s->num_files-hc, hc,
 						fsize, s->file_list[s->selection]->s.st_mode);
 			}
 		}
 		else {
-			mvwprintw(w, view_row, 2, "h%u", hc);
+			snprintf(status, status_size, "h%u", hc);
 		}
+		mvwprintw(w, vo, 0, "%s%*c", status, pw-strlen(status), ' ');
+		free(status);
+		wattroff(w, COLOR_PAIR(2));
 		wrefresh(w);
 	}
 	WINDOW* hw = panel_window(i->hint);
 	mvwprintw(hw, 0, 0, "%*c", i->scrw-1, ' ');
 	wmove(hw, 0, 0);
-
-	if (i->m == MODE_FIND) {
-		mvwprintw(hw, 0, 1, "/%s", i->find);
+	if (i->error) {
+		wattron(hw, COLOR_PAIR(4));
+		mvwprintw(hw, 0, 0, "%s", i->error);
+		wattroff(hw, COLOR_PAIR(4));
+	}
+	else if (i->m == MODE_FIND) {
+		mvwprintw(hw, 0, 0, "/%s", i->find);
 	}
 	else if (i->m == MODE_PROMPT) {
-		mvwprintw(hw, 0, 1, "%s", i->prompt_textbox);
+		mvwprintw(hw, 0, 0, "%s", i->prompt_textbox);
 	}
 	else {
 		for (int x = 0; x < i->kml; ++x) {
@@ -238,9 +263,9 @@ void ui_draw(struct ui* const i) {
 				}
 				c += 1;
 			}
-			wattron(hw, COLOR_PAIR(4));
+			wattron(hw, COLOR_PAIR(2));
 			wprintw(hw, "%s", key_mapping[x].d);
-			wattroff(hw, COLOR_PAIR(4));
+			wattroff(hw, COLOR_PAIR(2));
 		}
 	}
 	wrefresh(hw);
@@ -292,7 +317,7 @@ void ui_update_geometry(struct ui* const i) {
 		PANEL* p = i->fvp[x];
 		WINDOW* ow = panel_window(p);
 		wresize(ow, i->scrh-1, w[x]);
-		wborder(ow, '|', '|', '-', '-', '+', '+', '+', '+');
+		//wborder(ow, '|', '|', '-', '-', '+', '+', '+', '+');
 		move_panel(p, 0, px[x]);
 	}
 

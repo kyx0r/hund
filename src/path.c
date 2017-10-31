@@ -142,14 +142,14 @@ bool path_is_relative(char path[PATH_MAX]) {
  * Returns place in buffer, where path after ~ starts
  * So that pretty path is just
  * printf("~%s", path+prettify_path_i(path));
- * If cannot be prettified, returns -1
+ * If cannot be prettified, returns 0
  */
 int prettify_path_i(const char path[PATH_MAX], const char home[PATH_MAX]) {
 	const int hlen = strlen(home);
 	if (!memcmp(path, home, hlen)) {
 		return hlen;
 	}
-	return -1;
+	return 0;
 }
 
 /* Instead of populating another buffer,

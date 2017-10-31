@@ -271,6 +271,8 @@ int main(int argc, char* argv[])  {
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				break;
 			default:
+				free(i.error);
+				i.error = NULL;
 				break;
 			}
 		} // MODE_MANGER
@@ -354,8 +356,8 @@ int main(int argc, char* argv[])  {
 						t.src, i.prompt_textbox);
 				err = dir_make(t.src);
 				if (err) {
-					syslog(LOG_ERR, "dir_make(\"%s\") failed: %s",
-							t.src, strerror(err));
+					i.error = malloc(256);
+					snprintf(i.error, 256, "mkdir failed: %s", strerror(err));
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				/* Truth table - "Highlight new directory?"
@@ -373,6 +375,8 @@ int main(int argc, char* argv[])  {
 				t.s = TASK_STATE_FINISHED;
 				break;
 			case TASK_CD:
+				// TODO it crashes when opening file
+				// Do stat and determine if it's directory
 				syslog(LOG_DEBUG, "task_cd %s", t.dst);
 				if (!file_exists(t.dst)) {
 					syslog(LOG_ERR, "cd failed: File does not exist");
@@ -381,8 +385,8 @@ int main(int argc, char* argv[])  {
 				}
 				err = enter_dir(pv->wd, t.dst);
 				if (err) {
-					syslog(LOG_ERR, "enter_dir(\"%s\") failed: %s",
-							t.src, strerror(err));
+					i.error = malloc(256);
+					snprintf(i.error, 256, "cd failed: %s", strerror(err));
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				first_entry(pv);
@@ -392,8 +396,8 @@ int main(int argc, char* argv[])  {
 				syslog(LOG_DEBUG, "task_rmdir %s", t.src);
 				err = file_remove(t.src);
 				if (err) {
-					syslog(LOG_ERR, "file_remove(\"%s\") failed: %s",
-							t.src, strerror(err));
+					i.error = malloc(256);
+					snprintf(i.error, 256, "rmdir failed: %s", strerror(err));
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				prev_entry(pv);
@@ -402,14 +406,15 @@ int main(int argc, char* argv[])  {
 			case TASK_COPY:
 				syslog(LOG_DEBUG, "task_copy %s -> %s", t.src, t.dst);
 				if (file_exists(t.dst)) {
-					syslog(LOG_ERR, "copy failed: File exists");
+					i.error = malloc(256);
+					snprintf(i.error, 256, "cp failed: File exists");
 					t.s = TASK_STATE_FINISHED;
 					break;
 				}
 				err = file_copy(t.src, t.dst);
 				if (err) {
-					syslog(LOG_ERR, "file_copy(\"%s\", \"%s\") failed: %s",
-							t.src, t.dst, strerror(err));
+					i.error = malloc(256);
+					snprintf(i.error, 256, "cp failed: %s", strerror(err));
 				}
 				scan_dir(sv->wd, &sv->file_list, &sv->num_files);
 				t.s = TASK_STATE_FINISHED;
@@ -418,7 +423,8 @@ int main(int argc, char* argv[])  {
 				{
 				syslog(LOG_DEBUG, "task_rename %s -> %s", t.src, t.dst);
 				if (file_exists(t.dst)) {
-					syslog(LOG_ERR, "rename failed: File exists");
+					i.error = malloc(256);
+					snprintf(i.error, 256, "rn failed: File exists");
 					t.s = TASK_STATE_FINISHED;
 					break;
 				}
@@ -426,8 +432,8 @@ int main(int argc, char* argv[])  {
 				current_dir(t.dst, named);
 				err = rename(t.src, t.dst);
 				if (err) {
-					syslog(LOG_ERR, "rename(\"%s\", \"%s\") failed: %s",
-							t.src, t.dst, strerror(err));
+					i.error = malloc(256);
+					snprintf(i.error, 256, "rn failed: %s", strerror(err));
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				if (!pv->show_hidden && !ifaiv(pv, pv->selection)) {
@@ -444,14 +450,15 @@ int main(int argc, char* argv[])  {
 			case TASK_MOVE:
 				syslog(LOG_DEBUG, "task_move %s -> %s", t.src, t.dst);
 				if (file_exists(t.dst)) {
-					syslog(LOG_ERR, "move failed: File exists");
+					i.error = malloc(256);
+					snprintf(i.error, 256, "mv failed: File exists");
 					t.s = TASK_STATE_FINISHED;
 					break;
 				}
 				err = file_move(t.src, t.dst);
 				if (err) {
-					syslog(LOG_ERR, "file_move(\"%s\", \"%s\") failed: %s",
-							t.src, t.dst, strerror(err));
+					i.error = malloc(256);
+					snprintf(i.error, 256, "mv failed: %s", strerror(err));
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				scan_dir(sv->wd, &sv->file_list, &sv->num_files);
