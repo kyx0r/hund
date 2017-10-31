@@ -65,24 +65,13 @@ static const char* const mode_bit_meaning[] = {
 
 typedef unsigned int fnum_t; // Number of Files
 
-enum file_type {
-	UNKNOWN = 0,
-	BLOCK,
-	CHARACTER,
-	DIRECTORY,
-	FIFO,
-	LINK,
-	REGULAR,
-	SOCKET
-};
-
 struct file_record {
 	char* file_name;
 	char* link_path;
-	enum file_type t;
 	struct stat s;
 };
 
+bool is_dir(const char*);
 bool file_exists(const char*);
 void scan_dir(const char*, struct file_record***, fnum_t*);
 void delete_file_list(struct file_record***, fnum_t*);

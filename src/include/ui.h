@@ -134,14 +134,15 @@ static const struct key2cmd key_mapping[] = {
 };
 
 static const char type_symbol_mapping[][2] = {
-	[BLOCK] = { '+', 11 },
-	[CHARACTER] = { '-', 11 },
-	[DIRECTORY] = { '/', 9 },
-	[FIFO] = { '|', 1 },
-	[LINK] = { '~', 3 },
-	[REGULAR] = { ' ', 1 },
-	[SOCKET] = { '=', 5 },
-	[UNKNOWN] = { '?', 1 },
+	// See mode2type in ui.c
+	[0] = { '+', 11 }, // BLK
+	[1] = { '-', 11 }, // CHR
+	[2] = { '|', 1 }, // FIFO
+	[3] = { ' ', 1 }, // REG
+	[4] = { '/', 9 }, // DIR
+	[5] = { '~', 3 }, // LNK
+	[6] = { '=', 5 }, // SOCK
+	[7] = { '?', 1 }, // default
 };
 
 struct ui {

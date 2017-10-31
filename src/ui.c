@@ -19,6 +19,20 @@
 
 #include "include/ui.h"
 
+static int mode2type(mode_t m) {
+	// TODO find a better way
+	switch (m & S_IFMT) {
+	case S_IFBLK: return 0;
+	case S_IFCHR: return 1;
+	case S_IFIFO: return 2;
+	case S_IFREG: return 3;
+	case S_IFDIR: return 4;
+	case S_IFLNK: return 5;
+	case S_IFSOCK: return 6;
+	default: return 7;
+	}
+}
+
 struct ui ui_init(struct file_view* pv, struct file_view* sv) {
 	struct ui i;
 	setlocale(LC_ALL, "");
@@ -169,8 +183,9 @@ void ui_draw(struct ui* const i) {
 			}
 			char type_symbol = '?';
 			int color_pair_enabled = 0;
-			type_symbol = type_symbol_mapping[cfr->t][0];
-			color_pair_enabled = type_symbol_mapping[cfr->t][1];
+			int type = mode2type(cfr->s.st_mode);
+			type_symbol = type_symbol_mapping[type][0];
+			color_pair_enabled = type_symbol_mapping[type][1];
 			const size_t fnlen = strlen(cfr->file_name); // File Name Length
 			size_t enlen; // entry length
 			int padding;

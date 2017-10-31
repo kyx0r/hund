@@ -33,6 +33,15 @@ static int file_sort(const struct dirent** a, const struct dirent** b) {
 	else return strcmp((*a)->d_name, (*b)->d_name);
 }
 
+/* Checks if that thing pointed by path is a directory
+ * TODO will that work if checking link???
+ */
+bool is_dir(const char* path) {
+	struct stat s;
+	int r = stat(path, &s);
+	return (!r && S_ISDIR(s.st_mode));
+}
+
 bool file_exists(const char* path) {
 	return !access(path, F_OK);
 }
@@ -59,28 +68,19 @@ void scan_dir(const char* wd, struct file_record*** file_list,
 		fr->file_name = strdup(namelist[i]->d_name);
 		fr->link_path = NULL;
 		if (lstat(path, &fr->s)) {
-			fr->t = UNKNOWN;
+			// what TODO?
 			continue;
 		}
+		else if (S_ISLNK(fr->s.st_mode)) {
+			// Readlink does not append NULL terminator,
+			// but it returns the length of copied path
+			const int lp_len = readlink(path, link_path, PATH_MAX);
+			fr->link_path = malloc(lp_len+1);
+			memcpy(fr->link_path, link_path, lp_len+1);
+			fr->link_path[lp_len] = 0; // NULL terminator
+		}
 		else {
-			switch (fr->s.st_mode & S_IFMT) {
-			case S_IFBLK: fr->t = BLOCK; break;
-			case S_IFCHR: fr->t = CHARACTER; break;
-			case S_IFDIR: fr->t = DIRECTORY; break;
-			case S_IFIFO: fr->t = FIFO; break;
-			case S_IFLNK: fr->t = LINK; break;
-			case S_IFREG: fr->t = REGULAR; break;
-			case S_IFSOCK: fr->t = SOCKET; break;
-			default: fr->t = UNKNOWN; break;
-			}
-			if (S_ISLNK(fr->s.st_mode)) {
-				// Readlink does not append NULL terminator,
-				// but it returns the length of copied path
-				const int lp_len = readlink(path, link_path, PATH_MAX);
-				fr->link_path = malloc(lp_len+1);
-				memcpy(fr->link_path, link_path, lp_len+1);
-				fr->link_path[lp_len] = 0; // NULL terminator
-			}
+			// what TODO?
 		}
 		// I'm keeping d_name, don't need the rest
 		free(namelist[i]);
@@ -170,7 +170,7 @@ int file_remove(const char* src) {
 	syslog(LOG_DEBUG, "file_remove(\"%s\")", src);
 	struct stat s;
 	if (lstat(src, &s)) return errno;
-	if ((s.st_mode & S_IFMT) == S_IFDIR) {
+	if (S_ISDIR(s.st_mode)) {
 		struct file_record** fl = NULL;
 		fnum_t fn = 0;
 		scan_dir(src, &fl, &fn);
@@ -194,7 +194,7 @@ int file_copy(const char* src, const char* dest) {
 	syslog(LOG_DEBUG, "file_copy(\"%s\", \"%s\")", src, dest);
 	struct stat srcs;
 	if (lstat(src, &srcs)) return errno;
-	if ((srcs.st_mode & S_IFMT) == S_IFDIR) {
+	if (S_ISDIR(srcs.st_mode)) {
 		dir_make(dest);
 		struct file_record** fl = NULL;
 		fnum_t fn = 0;

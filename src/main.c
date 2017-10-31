@@ -157,10 +157,10 @@ int main(int argc, char* argv[])  {
 				break;
 			case CMD_ENTER_DIR:
 				if (!pv->show_hidden && !ifaiv(pv, pv->selection)) break;
-				else if (pv->file_list[pv->selection]->t == DIRECTORY) {
+				else if (S_ISDIR(pv->file_list[pv->selection]->s.st_mode)) {
 					enter_dir(pv->wd, pv->file_list[pv->selection]->file_name);
 				}
-				else if (pv->file_list[pv->selection]->t == LINK) {
+				else if (S_ISLNK(pv->file_list[pv->selection]->s.st_mode)) {
 					enter_dir(pv->wd, pv->file_list[pv->selection]->link_path);
 				}
 				else break;
@@ -375,11 +375,16 @@ int main(int argc, char* argv[])  {
 				t.s = TASK_STATE_FINISHED;
 				break;
 			case TASK_CD:
-				// TODO it crashes when opening file
-				// Do stat and determine if it's directory
 				syslog(LOG_DEBUG, "task_cd %s", t.dst);
+				if (!is_dir(t.dst)) {
+					i.error = malloc(256);
+					snprintf(i.error, 256, "cd failed: Not a directory");
+					t.s = TASK_STATE_FINISHED;
+					break;
+				}
 				if (!file_exists(t.dst)) {
-					syslog(LOG_ERR, "cd failed: File does not exist");
+					i.error = malloc(256);
+					snprintf(i.error, 256, "cd failed: File does not exist");
 					t.s = TASK_STATE_FINISHED;
 					break;
 				}
