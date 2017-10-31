@@ -25,6 +25,7 @@ bool ifaiv(const struct file_view* const fv, const fnum_t i) {
 }
 
 void next_entry(struct file_view* fv) {
+	if (!fv->num_files) return;
 	if (fv->show_hidden) {
 		if (fv->selection < fv->num_files-1) {
 			fv->selection += 1;
@@ -48,6 +49,7 @@ void next_entry(struct file_view* fv) {
 }
 
 void prev_entry(struct file_view* fv) {
+	if (!fv->num_files) return;
 	if (fv->show_hidden) {
 		if (fv->selection > 0) {
 			fv->selection -= 1;
@@ -83,6 +85,7 @@ void prev_entry(struct file_view* fv) {
 }
 
 void first_entry(struct file_view* fv) {
+	if (!fv->num_files) return;
 	if (fv->show_hidden) {
 		fv->selection = 0;
 	}
@@ -101,6 +104,7 @@ void first_entry(struct file_view* fv) {
 }
 
 void last_entry(struct file_view* fv) {
+	if (!fv->num_files) return;
 	if (fv->show_hidden) {
 		fv->selection = fv->num_files-1;
 	}
