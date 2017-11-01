@@ -21,6 +21,7 @@
 
 static int mode2type(mode_t m) {
 	// TODO find a better way
+	// See sys_stat.h manpage for more info
 	switch (m & S_IFMT) {
 	case S_IFBLK: return 0;
 	case S_IFCHR: return 1;
@@ -82,21 +83,14 @@ struct ui ui_init(struct file_view* pv, struct file_view* sv) {
 	i.scrw = i.scrh = 0;
 	i.active_view = 0;
 	i.m = MODE_MANAGER;
-	i.error = NULL;
-	i.prompt_textbox = NULL;
-	i.prompt_textbox_top = NULL;
-	i.prompt_textbox_size = 0;
+	i.prompt = NULL;
+	i.chmod = NULL;
 	i.find = NULL;
-	i.find_top = NULL;
-	i.find_size = 0;
-	i.find_init = 0;
-	i.chmod_panel = NULL;
-	i.chmod_mode = 0;
-	i.chmod_path = NULL;
-	WINDOW* hw = newwin(1, 1, 0, 0);
-	keypad(hw, TRUE);
+	i.error = NULL;
+	WINDOW* sw = newwin(1, 1, 0, 0);
+	keypad(sw, TRUE);
 	//wtimeout(hw, DEFAULT_GETCH_TIMEOUT);
-	i.hint = new_panel(hw);
+	i.status = new_panel(sw);
 	i.kml = 0;
 	while (key_mapping[i.kml].ks[0]) {
 		i.kml += 1;
@@ -111,10 +105,6 @@ void ui_end(struct ui* const i) {
 	 * then the program will hang in infinite loop
 	 * (I attached to it via gdb and it was stuck either on del_panel or poll.)
 	 * or segfault/double free/corrupted unsorted chunks.
-	 *
-	 * my_remove_panel() in demo_panels.c from ncurses-examples
-	 * did this is this order
-	 * http://invisible-island.net/ncurses/ncurses-examples.html
 	 */
 	for (int x = 0; x < 2; x++) {
 		PANEL* p = i->fvp[x];
@@ -122,31 +112,27 @@ void ui_end(struct ui* const i) {
 		del_panel(p);
 		delwin(w);
 	}
-	WINDOW* hw = panel_window(i->hint);
-	del_panel(i->hint);
-	delwin(hw);
-	WINDOW* cw = panel_window(i->chmod_panel);
-	del_panel(i->chmod_panel);
-	delwin(cw);
+	WINDOW* sw = panel_window(i->status);
+	del_panel(i->status);
+	delwin(sw);
 	free(i->mks);
 	endwin();
 }
 
 void ui_draw(struct ui* const i) {
 	for (int v = 0; v < 2; ++v) {
-		struct file_view* const s = i->fvs[v];
-		PANEL* p = i->fvp[v];
+		const struct file_view* const s = i->fvs[v];
+		WINDOW* const w = panel_window(i->fvp[v]);
 		int _ph, _pw;
-		WINDOW* w = panel_window(p);
 		getmaxyx(w, _ph, _pw);
 		if (_ph < 0 || _ph < 0) return; // these may be -1
-		fnum_t ph = _ph, pw = _pw;
+		const fnum_t ph = _ph, pw = _pw;
 		//box(w, 0, 0);
 		//wborder(w, '|', '|', '-', '-', '+', '+', '+', '+');
 
 		/* Top pathbar */
 		struct passwd* pwd = get_pwd();
-		int pi = prettify_path_i(s->wd, pwd->pw_dir);
+		const int pi = prettify_path_i(s->wd, pwd->pw_dir);
 		/* TODO if path does not fit into bar, shorten it somehow */
 		wattron(w, COLOR_PAIR(2));
 		if (pi) mvwprintw(w, 0, 0, "~");
@@ -217,7 +203,7 @@ void ui_draw(struct ui* const i) {
 			vo += 1;
 		}
 
-		/* Statusbar */
+		/* Pathbar */
 		wattron(w, COLOR_PAIR(2));
 		const size_t status_size = 256;
 		char* status = malloc(status_size);
@@ -247,57 +233,62 @@ void ui_draw(struct ui* const i) {
 		wattroff(w, COLOR_PAIR(2));
 		wrefresh(w);
 	}
-	WINDOW* hw = panel_window(i->hint);
-	mvwprintw(hw, 0, 0, "%*c", i->scrw-1, ' ');
-	wmove(hw, 0, 0);
+	WINDOW* sw = panel_window(i->status);
+	mvwprintw(sw, 0, 0, "%*c", i->scrw-1, ' ');
+	wmove(sw, 0, 0);
 	if (i->error) {
-		wattron(hw, COLOR_PAIR(4));
-		mvwprintw(hw, 0, 0, "%s", i->error);
-		wattroff(hw, COLOR_PAIR(4));
+		wattron(sw, COLOR_PAIR(4));
+		mvwprintw(sw, 0, 0, "%s", i->error);
+		wattroff(sw, COLOR_PAIR(4));
 	}
-	else if (i->m == MODE_FIND) {
-		mvwprintw(hw, 0, 0, "/%s", i->find);
+	else if (i->find) {
+		mvwprintw(sw, 0, 0, "/%s", i->find->t);
 	}
-	else if (i->m == MODE_PROMPT) {
-		mvwprintw(hw, 0, 0, "%s", i->prompt_textbox);
+	else if (i->prompt) {
+		mvwprintw(sw, 0, 0, "%s", i->prompt->tb);
 	}
 	else {
 		for (int x = 0; x < i->kml; ++x) {
 			if (!i->mks[x]) continue;
 			int c = 0;
-			wprintw(hw, " ");
+			wprintw(sw, " ");
 			int k;
 			while ((k = key_mapping[x].ks[c])) {
 				switch (k) {
 				case '\t':
-					wprintw(hw, "TAB");
+					wprintw(sw, "TAB");
 					break;
 				default:
-					wprintw(hw, "%c", key_mapping[x].ks[c]);
+					wprintw(sw, "%c", key_mapping[x].ks[c]);
 					break;
 				}
 				c += 1;
 			}
-			wattron(hw, COLOR_PAIR(2));
-			wprintw(hw, "%s", key_mapping[x].d);
-			wattroff(hw, COLOR_PAIR(2));
+			wattron(sw, COLOR_PAIR(2));
+			wprintw(sw, "%s", key_mapping[x].d);
+			wattroff(sw, COLOR_PAIR(2));
 		}
 	}
-	wrefresh(hw);
+	wrefresh(sw);
 
-	if (i->chmod_panel) {
-		WINDOW* cw = panel_window(i->chmod_panel);
+	if (i->chmod) {
+		WINDOW* cw = panel_window(i->chmod->p);
 		box(cw, 0, 0);
-		//wborder(cw, '|', '|', '-', '-', '+', '+', '+', '+');
-		mode_t m = i->chmod_mode;
-		struct passwd* pwd = get_pwd();
-		struct group* grp = getgrgid(pwd->pw_gid);
-		if (grp) {
-			mvwprintw(cw, 1, 2, "%o %s %s", m, pwd->pw_name, grp->gr_name);
-		}
-		for (int i = 0; i < 12; ++i) {
+		mode_t m = i->chmod->m;
+		// fno = File Name Offset (in path)
+		const size_t fno = current_dir_i(i->chmod->path);
+		// TODO what if filename is like 230 characters?
+		mvwprintw(cw, 1, 2, "file: %s%*c", i->chmod->path+fno,
+				i->chmod->ww-(strlen(i->chmod->path+fno)+6+2+1), ' ');
+		mvwprintw(cw, 2, 2, "permissions: %o", m);
+		mvwprintw(cw, 3, 2, "owner: %s%*c", i->chmod->owner,
+				// 7 = "owner: ", 2 = x offset + 1 for border
+				i->chmod->ww-(strlen(i->chmod->owner)+7+2+1), ' ');
+		mvwprintw(cw, 4, 2, "group: %s%*c", i->chmod->group,
+				i->chmod->ww-(strlen(i->chmod->group)+7+2+1), ' ');
+		for (int b = 0; b < 12; ++b) {
 			char s = (m & (mode_t)1 ? 'x' : ' ');
-			mvwprintw(cw, 13-i, 2, "[%c] %s", s, mode_bit_meaning[i]);
+			mvwprintw(cw, i->chmod->wh-2-b, 2, "[%c] %s", s, mode_bit_meaning[b]);
 			m >>= 1;
 		}
 		wrefresh(cw);
@@ -317,13 +308,10 @@ void ui_update_geometry(struct ui* const i) {
 	 * mvwprintw or something.
 	 * I do overwrite all buffer with spaces, so I dont have to.
 	 * ...but if you do, delete old window AFTER you assign new one to panel.
-	 * All ncurses examples do so, so it's probably THE way to do it.
 	 */
 	int newscrh, newscrw;
 	getmaxyx(stdscr, newscrh, newscrw);
-	if (newscrh == i->scrh && newscrw == i->scrw) {
-		return;
-	}
+	if (newscrh == i->scrh && newscrw == i->scrw) return;
 	i->scrh = newscrh;
 	i->scrw = newscrw;
 	int w[2] = { i->scrw/2, i->scrw - w[0] };
@@ -332,44 +320,90 @@ void ui_update_geometry(struct ui* const i) {
 		PANEL* p = i->fvp[x];
 		WINDOW* ow = panel_window(p);
 		wresize(ow, i->scrh-1, w[x]);
-		//wborder(ow, '|', '|', '-', '-', '+', '+', '+', '+');
 		move_panel(p, 0, px[x]);
 	}
 
-	WINDOW* hw = panel_window(i->hint);
-	wresize(hw, 1, i->scrw);
-	move_panel(i->hint, i->scrh-1, 0);
+	WINDOW* sw = panel_window(i->status);
+	wresize(sw, 1, i->scrw);
+	move_panel(i->status, i->scrh-1, 0);
 
-	if (i->chmod_panel) {
-		const int cpw = 40;
-		const int cph = 15;
-		WINDOW* cw = panel_window(i->chmod_panel);
-		PANEL* cp = i->chmod_panel;
-		wresize(cw, cph, cpw);
-		move_panel(cp, (i->scrh-cph)/2, (i->scrw-cpw)/2);
+	if (i->chmod) {
+		WINDOW* cw = panel_window(i->chmod->p);
+		PANEL* cp = i->chmod->p;
+		wresize(cw, i->chmod->wh, i->chmod->ww);
+		move_panel(cp, (i->scrh-i->chmod->wh)/2, (i->scrw-i->chmod->ww)/2);
 	}
 }
 
 void chmod_open(struct ui* i, char* path, mode_t m) {
-	syslog(LOG_DEBUG, "chmod %s", path);
-	i->chmod_path = path;
-	i->chmod_mode = m;
+	i->chmod = malloc(sizeof(struct ui_chmod));
+	i->chmod->mb = i->m;
+	i->chmod->path = path;
+	i->chmod->m = m;
+	i->chmod->tmp = NULL;
 	WINDOW* cw = newwin(1, 1, 0, 0);
-	PANEL* cp = new_panel(cw);
-	i->chmod_panel = cp;
+	i->chmod->p =new_panel(cw);
 	i->m = MODE_CHMOD;
+	struct stat s;
+	int r = lstat(i->chmod->path, &s); // TODO handle stat errors
+	i->chmod->o = s.st_uid;
+	i->chmod->g = s.st_gid;
+	struct passwd* pwd = getpwuid(s.st_uid);
+	struct group* grp = getgrgid(s.st_gid);
+	strcpy(i->chmod->owner, pwd->pw_name);
+	strcpy(i->chmod->group, grp->gr_name);
+	/* TODO should I care about smaller terminal?
+	 * What does the standard say?
+	 */
+	i->chmod->ww = 34;
+	i->chmod->wh = 18;
 	i->scrw = i->scrh = 0; // Forces geometry update
 }
 
-void chmod_close(struct ui* i, enum mode m) {
-	WINDOW* cw = panel_window(i->chmod_panel);
-	del_panel(i->chmod_panel);
+void chmod_close(struct ui* i) {
+	i->m = i->chmod->mb;
+	WINDOW* cw = panel_window(i->chmod->p);
+	del_panel(i->chmod->p);
 	delwin(cw);
-	i->chmod_panel = NULL;
-	free(i->chmod_path);
-	i->chmod_path = NULL;
-	i->chmod_mode = 0;
-	i->m = m;
+	if (i->chmod->tmp) free(i->chmod->tmp);
+	free(i->chmod->path);
+	free(i->chmod);
+	i->chmod = NULL;
+	i->scrw = i->scrh = 0; // Forces geometry update
+}
+
+void prompt_open(struct ui* i, char* tb, char* tb_top, size_t tb_size) {
+	i->prompt = malloc(sizeof(struct ui_prompt));
+	i->prompt->mb = i->m;
+	i->prompt->tb = tb;
+	i->prompt->tb_top = tb_top;
+	i->prompt->tb_size = tb_size;
+	i->m = MODE_PROMPT;
+}
+
+void prompt_close(struct ui* i) {
+	i->m = i->prompt->mb;
+	//free(i->prompt->tb);
+	free(i->prompt);
+	i->prompt = NULL;
+}
+
+void find_open(struct ui* i, char* t, char* t_top, size_t t_size) {
+	i->find = malloc(sizeof(struct ui_find));
+	i->find->mb = i->m;
+	i->find->sbfc = i->fvs[i->active_view]->selection;
+	i->find->t = t;
+	i->find->t_top = t_top;
+	i->find->t_size = t_size;
+	i->m = MODE_FIND;
+}
+
+void find_close(struct ui* i, bool success) {
+	if (!success) i->fvs[i->active_view]->selection = i->find->sbfc;
+	i->m = i->find->mb;
+	free(i->find->t);
+	free(i->find);
+	i->find = NULL;
 }
 
 enum command get_cmd(struct ui* i) {

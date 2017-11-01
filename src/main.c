@@ -27,6 +27,8 @@
 
 #include "include/ui.h"
 
+#define ERROR_MSG_BUFFER_SIZE 256
+
 enum task_type {
 	TASK_NONE = 0,
 	TASK_MKDIR,
@@ -35,6 +37,8 @@ enum task_type {
 	TASK_MOVE,
 	TASK_CD,
 	TASK_RENAME,
+	TASK_CHOWN,
+	TASK_CHGRP,
 };
 
 enum task_state {
@@ -49,8 +53,6 @@ struct task {
 	enum task_state s;
 	enum task_type t;
 	char *src, *dst;
-	//char* name;
-	//char* oth[4];
 };
 
 int main(int argc, char* argv[])  {
@@ -149,11 +151,9 @@ int main(int argc, char* argv[])  {
 				break;
 			case CMD_CD:
 				t.dst = calloc(PATH_MAX, sizeof(char));
-				i.prompt_textbox_top = i.prompt_textbox = t.dst;
-				i.prompt_textbox_size = PATH_MAX;
 				t.t = TASK_CD;
 				t.s = TASK_STATE_GATHERING_DATA;
-				i.m = MODE_PROMPT;
+				prompt_open(&i, t.dst, t.dst, PATH_MAX);
 				break;
 			case CMD_ENTER_DIR:
 				if (!pv->show_hidden && !ifaiv(pv, pv->selection)) break;
@@ -192,9 +192,8 @@ int main(int argc, char* argv[])  {
 				strcat(t.dst, "/");
 				t.t = TASK_COPY;
 				t.s = TASK_STATE_GATHERING_DATA;
-				i.m = MODE_PROMPT;
-				i.prompt_textbox_top = i.prompt_textbox = t.dst+strlen(t.dst);
-				i.prompt_textbox_size = NAME_MAX;
+				prompt_open(&i, t.dst+strlen(t.dst),
+						t.dst+strlen(t.dst), NAME_MAX);
 				break;
 			case CMD_MOVE:
 				t.src = calloc(PATH_MAX, sizeof(char));
@@ -217,18 +216,16 @@ int main(int argc, char* argv[])  {
 				t.src = calloc(PATH_MAX, sizeof(char));
 				strcpy(t.src, pv->wd);
 				strcat(t.src, "/");
-				i.prompt_textbox_top = i.prompt_textbox = t.src+strlen(t.src);
-				i.prompt_textbox_size = NAME_MAX;
 				t.t = TASK_MKDIR;
 				t.s = TASK_STATE_GATHERING_DATA;
-				i.m = MODE_PROMPT;
+				prompt_open(&i, t.src+strlen(t.src),
+						t.src+strlen(t.src), NAME_MAX);
 				break;
 			case CMD_FIND:
-				i.find = calloc(NAME_MAX, 1);
-				i.find_top = i.find;
-				i.find_size = NAME_MAX;
-				i.find_init = pv->selection;
-				i.m = MODE_FIND;
+				{
+				char* t = calloc(NAME_MAX, 1);
+				find_open(&i, t, t, NAME_MAX);
+				}
 				break;
 			case CMD_ENTRY_FIRST:
 				first_entry(pv);
@@ -237,12 +234,12 @@ int main(int argc, char* argv[])  {
 				last_entry(pv);
 				break;
 			case CMD_CHMOD:
-				i.chmod_path = malloc(PATH_MAX);
-				strcpy(i.chmod_path, pv->wd);
-				enter_dir(i.chmod_path,
-						pv->file_list[pv->selection]->file_name);
-				chmod_open(&i, i.chmod_path,
-						pv->file_list[pv->selection]->s.st_mode);
+				{
+				char* p = malloc(PATH_MAX);
+				strcpy(p, pv->wd);
+				enter_dir(p, pv->file_list[pv->selection]->file_name);
+				chmod_open(&i, p, pv->file_list[pv->selection]->s.st_mode);
+				}
 				break;
 			case CMD_RENAME:
 				{
@@ -253,12 +250,9 @@ int main(int argc, char* argv[])  {
 				enter_dir(t.src, pv->file_list[pv->selection]->file_name);
 				t.dst = calloc(PATH_MAX, sizeof(char));
 				strcpy(t.dst, t.src);
-				i.prompt_textbox = t.dst + plen + 1;
-				i.prompt_textbox_top = i.prompt_textbox + fnlen;
-				i.prompt_textbox_size = NAME_MAX;
 				t.t = TASK_RENAME;
 				t.s = TASK_STATE_GATHERING_DATA;
-				i.m = MODE_PROMPT;
+				prompt_open(&i, t.dst+plen+1, t.dst+plen+1+fnlen, NAME_MAX);
 				}
 				break;
 			case CMD_TOGGLE_HIDDEN:
@@ -280,41 +274,64 @@ int main(int argc, char* argv[])  {
 		else if (i.m == MODE_CHMOD) {
 			switch (get_cmd(&i)) {
 			case CMD_RETURN:
-				chmod_close(&i, MODE_MANAGER);
+				chmod_close(&i);
 				break;
 			case CMD_CHANGE:
-				chmod(i.chmod_path, i.chmod_mode);
+				syslog(LOG_DEBUG, "chmod %s: %o, %d:%d",
+						i.chmod->path, i.chmod->m, i.chmod->o, i.chmod->g);
+				if (chmod(i.chmod->path, i.chmod->m)) {
+					int err = errno;
+					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
+					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+							"chmod failed: %s", strerror(err));
+				}
+				if (lchown(i.chmod->path, i.chmod->o, i.chmod->g)) {
+					int err = errno;
+					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
+					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+							"chown failed: %s", strerror(err));
+				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
-				chmod_close(&i, MODE_MANAGER);
+				chmod_close(&i);
 				break;
-			case CMD_TOGGLE_UIOX: TOGGLE_BIT(i.chmod_mode, S_ISUID); break;
-			case CMD_TOGGLE_GIOX: TOGGLE_BIT(i.chmod_mode, S_ISGID); break;
-			case CMD_TOGGLE_SB: TOGGLE_BIT(i.chmod_mode, S_ISVTX); break;
-			case CMD_TOGGLE_UR: TOGGLE_BIT(i.chmod_mode, S_IRUSR); break;
-			case CMD_TOGGLE_UW: TOGGLE_BIT(i.chmod_mode, S_IWUSR); break;
-			case CMD_TOGGLE_UX: TOGGLE_BIT(i.chmod_mode, S_IXUSR); break;
-			case CMD_TOGGLE_GR: TOGGLE_BIT(i.chmod_mode, S_IRGRP); break;
-			case CMD_TOGGLE_GW: TOGGLE_BIT(i.chmod_mode, S_IWGRP); break;
-			case CMD_TOGGLE_GX: TOGGLE_BIT(i.chmod_mode, S_IXGRP); break;
-			case CMD_TOGGLE_OR: TOGGLE_BIT(i.chmod_mode, S_IROTH); break;
-			case CMD_TOGGLE_OW: TOGGLE_BIT(i.chmod_mode, S_IWOTH); break;
-			case CMD_TOGGLE_OX: TOGGLE_BIT(i.chmod_mode, S_IXOTH); break;
+			case CMD_CHOWN:
+				{
+				i.chmod->tmp = calloc(LOGIN_NAME_MAX, sizeof(char));
+				t.t = TASK_CHOWN;
+				t.s = TASK_STATE_GATHERING_DATA;
+				prompt_open(&i, i.chmod->tmp, i.chmod->tmp, LOGIN_NAME_MAX);
+				}
+				break;
+			case CMD_CHGRP:
+				i.chmod->tmp = calloc(LOGIN_NAME_MAX, sizeof(char));
+				t.t = TASK_CHGRP;
+				t.s = TASK_STATE_GATHERING_DATA;
+				prompt_open(&i, i.chmod->tmp, i.chmod->tmp, LOGIN_NAME_MAX);
+				break;
+			case CMD_TOGGLE_UIOX: TOGGLE_BIT(i.chmod->m, S_ISUID); break;
+			case CMD_TOGGLE_GIOX: TOGGLE_BIT(i.chmod->m, S_ISGID); break;
+			case CMD_TOGGLE_SB: TOGGLE_BIT(i.chmod->m, S_ISVTX); break;
+			case CMD_TOGGLE_UR: TOGGLE_BIT(i.chmod->m, S_IRUSR); break;
+			case CMD_TOGGLE_UW: TOGGLE_BIT(i.chmod->m, S_IWUSR); break;
+			case CMD_TOGGLE_UX: TOGGLE_BIT(i.chmod->m, S_IXUSR); break;
+			case CMD_TOGGLE_GR: TOGGLE_BIT(i.chmod->m, S_IRGRP); break;
+			case CMD_TOGGLE_GW: TOGGLE_BIT(i.chmod->m, S_IWGRP); break;
+			case CMD_TOGGLE_GX: TOGGLE_BIT(i.chmod->m, S_IXGRP); break;
+			case CMD_TOGGLE_OR: TOGGLE_BIT(i.chmod->m, S_IROTH); break;
+			case CMD_TOGGLE_OW: TOGGLE_BIT(i.chmod->m, S_IWOTH); break;
+			case CMD_TOGGLE_OX: TOGGLE_BIT(i.chmod->m, S_IXOTH); break;
 			default: break;
 			}
 		} // MODE_CHMOD
 
 		else if (i.m == MODE_FIND) {
-			int r = fill_textbox(i.find, &i.find_top, i.find_size, panel_window(i.hint));
+			int r = fill_textbox(i.find->t, &i.find->t_top,
+					i.find->t_size, panel_window(i.status));
 			if (r == -1) {
-				pv->selection = i.find_init;
-				i.m = MODE_MANAGER;
-				free(i.find);
-				i.find = NULL;
+				find_close(&i, false);
 			}
 			else if (r == 0) {
-				i.m = MODE_MANAGER;
-				free(i.find);
-				i.find = NULL;
+				find_close(&i, true);
 			}
 			/* Truth table - "Perform searching?"
 			 *    .hidden.file | visible.file
@@ -322,42 +339,74 @@ int main(int argc, char* argv[])  {
 			 * show_hidden 1 |1|1|
 			 * Also, don't perform search at all on empty input
 			 */
-			else if ((i.find_top - i.find) &&
-					!(!pv->show_hidden && i.find[0] == '.')) {
+			else if ((i.find->t_top - i.find->t) &&
+					!(!pv->show_hidden && i.find->t[0] == '.')) {
 				file_find(pv->file_list, pv->num_files,
-					i.find, &pv->selection);
+					i.find->t, &pv->selection);
 			}
 		} // MODE_FIND
 
 		else if (i.m ==	MODE_PROMPT) {
-			int r = fill_textbox(i.prompt_textbox, &i.prompt_textbox_top,
-					i.prompt_textbox_size, panel_window(i.hint));
+			int r = fill_textbox(i.prompt->tb, &i.prompt->tb_top,
+					i.prompt->tb_size, panel_window(i.status));
 			if (!r) {
 				if (t.t != TASK_NONE && t.s == TASK_STATE_GATHERING_DATA) {
 					t.s = TASK_STATE_DATA_GATHERED;
 				}
-				i.m = MODE_MANAGER;
+				prompt_close(&i);
 			}
 			else if (r == -1) {
-				if (t.src) free(t.src);
-				if (t.dst) free(t.dst);
-				t.t = TASK_NONE;
-				t.s = TASK_STATE_CLEAN;
-				i.m = MODE_MANAGER;
+				prompt_close(&i);
 			}
 		} // MODE_PROMPT
 
 		if (t.s == TASK_STATE_DATA_GATHERED) {
 			t.s = TASK_STATE_EXECUTING;
-			int err;
 			switch (t.t) {
+			case TASK_CHOWN:
+				{
+				syslog(LOG_DEBUG, "chown %s", i.chmod->tmp);
+				/* Some username was entered
+				 * check if such user exists */
+				struct passwd* pwd = getpwnam(i.chmod->tmp);
+				int err = errno;
+				if (err) {
+					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
+					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+							"chown failed: %s", strerror(err));
+				}
+				else {
+					i.chmod->o = pwd->pw_uid;
+					strcpy(i.chmod->owner, pwd->pw_name);
+				}
+				t.s = TASK_STATE_FINISHED;
+				}
+				break;
+			case TASK_CHGRP:
+				syslog(LOG_DEBUG, "chgrp %s", i.chmod->tmp);
+				/* Some group was entered
+				 * check if such group exists */
+				struct group* grp = getgrnam(i.chmod->tmp);
+				int err = errno;
+				if (err) {
+					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
+					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+							"chown failed: %s", strerror(err));
+				}
+				else {
+					i.chmod->g = grp->gr_gid;
+					strcpy(i.chmod->group, grp->gr_name);
+				}
+				t.s = TASK_STATE_FINISHED;
+				break;
 			case TASK_MKDIR:
-				syslog(LOG_DEBUG, "task_mkdir %s (%s)",
-						t.src, i.prompt_textbox);
+				{
+				syslog(LOG_DEBUG, "task_mkdir %s", t.src);
 				err = dir_make(t.src);
 				if (err) {
-					i.error = malloc(256);
-					snprintf(i.error, 256, "mkdir failed: %s", strerror(err));
+					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
+					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+							"mkdir failed: %s", strerror(err));
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				/* Truth table - "Highlight new directory?"
@@ -365,33 +414,38 @@ int main(int argc, char* argv[])  {
 				 * show_hidden 0 |0|1|
 				 * show_hidden 1 |1|1|
 				 */
-				if (pv->show_hidden || i.prompt_textbox[0] != '.') {
+				int fno = current_dir_i(t.src);
+				if (pv->show_hidden || t.src[fno] != '.') {
 					file_index(pv->file_list, pv->num_files,
-						i.prompt_textbox, &pv->selection);
+							t.src+fno, &pv->selection);
 				}
 				else {
 					first_entry(pv);
 				}
 				t.s = TASK_STATE_FINISHED;
+				}
 				break;
 			case TASK_CD:
 				syslog(LOG_DEBUG, "task_cd %s", t.dst);
 				if (!is_dir(t.dst)) {
-					i.error = malloc(256);
-					snprintf(i.error, 256, "cd failed: Not a directory");
+					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
+					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+							"cd failed: Not a directory");
 					t.s = TASK_STATE_FINISHED;
 					break;
 				}
 				if (!file_exists(t.dst)) {
-					i.error = malloc(256);
-					snprintf(i.error, 256, "cd failed: File does not exist");
+					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
+					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+							"cd failed: File does not exist");
 					t.s = TASK_STATE_FINISHED;
 					break;
 				}
 				err = enter_dir(pv->wd, t.dst);
 				if (err) {
-					i.error = malloc(256);
-					snprintf(i.error, 256, "cd failed: %s", strerror(err));
+					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
+					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+							"cd failed: %s", strerror(err));
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				first_entry(pv);
@@ -401,8 +455,9 @@ int main(int argc, char* argv[])  {
 				syslog(LOG_DEBUG, "task_rmdir %s", t.src);
 				err = file_remove(t.src);
 				if (err) {
-					i.error = malloc(256);
-					snprintf(i.error, 256, "rmdir failed: %s", strerror(err));
+					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
+					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+							"rmdir failed: %s", strerror(err));
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				prev_entry(pv);
@@ -411,15 +466,17 @@ int main(int argc, char* argv[])  {
 			case TASK_COPY:
 				syslog(LOG_DEBUG, "task_copy %s -> %s", t.src, t.dst);
 				if (file_exists(t.dst)) {
-					i.error = malloc(256);
-					snprintf(i.error, 256, "cp failed: File exists");
+					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
+					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+							"cp failed: File exists");
 					t.s = TASK_STATE_FINISHED;
 					break;
 				}
 				err = file_copy(t.src, t.dst);
 				if (err) {
-					i.error = malloc(256);
-					snprintf(i.error, 256, "cp failed: %s", strerror(err));
+					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
+					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+							"cp failed: %s", strerror(err));
 				}
 				scan_dir(sv->wd, &sv->file_list, &sv->num_files);
 				t.s = TASK_STATE_FINISHED;
@@ -428,8 +485,9 @@ int main(int argc, char* argv[])  {
 				{
 				syslog(LOG_DEBUG, "task_rename %s -> %s", t.src, t.dst);
 				if (file_exists(t.dst)) {
-					i.error = malloc(256);
-					snprintf(i.error, 256, "rn failed: File exists");
+					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
+					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+							"rn failed: File exists");
 					t.s = TASK_STATE_FINISHED;
 					break;
 				}
@@ -437,8 +495,9 @@ int main(int argc, char* argv[])  {
 				current_dir(t.dst, named);
 				err = rename(t.src, t.dst);
 				if (err) {
-					i.error = malloc(256);
-					snprintf(i.error, 256, "rn failed: %s", strerror(err));
+					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
+					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+							"rn failed: %s", strerror(err));
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				if (!pv->show_hidden && !ifaiv(pv, pv->selection)) {
@@ -455,15 +514,17 @@ int main(int argc, char* argv[])  {
 			case TASK_MOVE:
 				syslog(LOG_DEBUG, "task_move %s -> %s", t.src, t.dst);
 				if (file_exists(t.dst)) {
-					i.error = malloc(256);
-					snprintf(i.error, 256, "mv failed: File exists");
+					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
+					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+							"mv failed: File exists");
 					t.s = TASK_STATE_FINISHED;
 					break;
 				}
 				err = file_move(t.src, t.dst);
 				if (err) {
-					i.error = malloc(256);
-					snprintf(i.error, 256, "mv failed: %s", strerror(err));
+					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
+					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+							"mv failed: %s", strerror(err));
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				scan_dir(sv->wd, &sv->file_list, &sv->num_files);
