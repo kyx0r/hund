@@ -2,12 +2,12 @@
 A terminal file manager.
 #### Current features
 - Vim-inspired command system
-- Resize window
+- Dynamic window size
 - File type recognition (indicated by color and symbol)
 - Follow symlinks
 - Move/remove/copy/rename file/directory
 - Hide/show hidden files
-- Change file permissions
+- Change file permissions/owner/group
 - Create directory
 - Find file in current directory
 #### Planned features
@@ -44,6 +44,8 @@ Hund uses dual-panel view just like GNU Midnight Commander does. And it uses ncu
 - `ch` change file permissions
 	- `qq` abort changes and quit chmod
 	- `ch` apply changes and quit chmod
+	- `co` change owner (prompts for owner login)
+	- `cg` change group (prompts for group name)
 	- `ui` toggle set user id on execution
 	- `gi` toggle set group id on execution
 	- `os` toggle sticky bit
