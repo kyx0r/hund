@@ -217,10 +217,11 @@ void ui_draw(struct ui* const i) {
 
 		/* Infobar */
 		wattron(w, COLOR_PAIR(2));
-		const size_t status_size = 256;
+		const size_t status_size = 512;
 		char* status = malloc(status_size);
-		const size_t time_size = 64;
-		char* time = malloc(64);
+		static char* timefmt = "%Y-%m-%d %H:%M";
+		const size_t time_size = 32;
+		char time[time_size];
 		static char* empty = "(empty)";
 		if (!s->num_files) {
 			snprintf(status, status_size, empty);
@@ -230,7 +231,7 @@ void ui_draw(struct ui* const i) {
 					s->file_list[s->selection]->s.st_size : 0);
 			time_t lt = s->file_list[s->selection]->s.st_mtim.tv_sec;
 			struct tm* tt = localtime(&lt);
-			strftime(time, time_size, "%Y-%m-%d %H:%M", tt);
+			strftime(time, time_size, timefmt, tt);
 			if (s->show_hidden) {
 				snprintf(status, status_size, "%u/%u %o %zuB",
 						s->selection+1, s->num_files,
@@ -248,7 +249,6 @@ void ui_draw(struct ui* const i) {
 		mvwprintw(w, dr, 0, " %s%*c%s ", status,
 				pw-strlen(status)-strlen(time)-2, ' ', time);
 		wattroff(w, COLOR_PAIR(2));
-		free(time);
 		free(status);
 		wrefresh(w);
 	}
@@ -256,9 +256,10 @@ void ui_draw(struct ui* const i) {
 	WINDOW* sw = panel_window(i->status);
 	if (i->error) {
 		wattron(sw, COLOR_PAIR(4));
-		mvwprintw(sw, 0, 0, "%s%*c", i->error,
-				i->scrw-(strlen(i->error)+1), ' ');
+		mvwprintw(sw, 0, 0, "%s", i->error);
 		wattroff(sw, COLOR_PAIR(4));
+		mvwprintw(sw, 0, strlen(i->error)+1, "%*c",
+				i->scrw-(strlen(i->error)+1), ' ');
 	}
 	else if (i->find) {
 		mvwprintw(sw, 0, 0, "/%s%*c", i->find->t,
@@ -335,6 +336,7 @@ void ui_update_geometry(struct ui* const i) {
 	int newscrh, newscrw;
 	getmaxyx(stdscr, newscrh, newscrw);
 	if (newscrh == i->scrh && newscrw == i->scrw) return;
+	syslog(LOG_DEBUG, "resized to %ux%u", newscrw, newscrh);
 	i->scrh = newscrh;
 	i->scrw = newscrw;
 	int w[2] = { i->scrw/2, i->scrw - w[0] };
