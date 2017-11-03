@@ -428,30 +428,40 @@ int main(int argc, char* argv[])  {
 				}
 				break;
 			case TASK_CD:
-				syslog(LOG_DEBUG, "task_cd %s", t.dst);
-				if (!is_dir(t.dst)) {
-					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
-					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
-							"cd failed: Not a directory");
-					t.s = TASK_STATE_FINISHED;
-					break;
-				}
-				if (!file_exists(t.dst)) {
+				{
+				char* path = malloc(PATH_MAX);
+				enter_dir(path, t.dst); // path may be relative or ~/something
+				syslog(LOG_DEBUG, "task_cd %s", path);
+				if (!file_exists(path)) {
 					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
 					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
 							"cd failed: File does not exist");
 					t.s = TASK_STATE_FINISHED;
+					free(path);
 					break;
 				}
-				err = enter_dir(pv->wd, t.dst);
+				if (!is_dir(path)) {
+					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
+					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+							"cd failed: Not a directory");
+					t.s = TASK_STATE_FINISHED;
+					free(path);
+					break;
+				}
+				err = enter_dir(pv->wd, path);
 				if (err) {
 					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
 					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
 							"cd failed: %s", strerror(err));
+					t.s = TASK_STATE_FINISHED;
+					free(path);
+					break;
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				first_entry(pv);
+				free(path);
 				t.s = TASK_STATE_FINISHED;
+				}
 				break;
 			case TASK_RM:
 				syslog(LOG_DEBUG, "task_rmdir %s", t.src);
