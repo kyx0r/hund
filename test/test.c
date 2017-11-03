@@ -63,6 +63,11 @@ int main() {
 	enter_dir(path5, "/home/user");
 	TEST(strcmp(path5, "/home/user") == 0, "");
 
+	char path6[PATH_MAX];
+	enter_dir(path6, "~");
+	struct passwd* pwd = get_pwd();
+	TEST(strcmp(path6, pwd->pw_dir) == 0, "");
+
 	END_SECTION("path");
 
 	END_TESTS;
