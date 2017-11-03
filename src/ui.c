@@ -358,21 +358,25 @@ void ui_update_geometry(struct ui* const i) {
 	}
 }
 
-void chmod_open(struct ui* i, char* path, mode_t m) {
+int chmod_open(struct ui* i, char* path, mode_t m) {
+	struct stat s;
+	if (lstat(path, &s)) return errno;
+	errno = 0;
+	struct passwd* pwd = getpwuid(s.st_uid);
+	if (!pwd) return errno;
+	struct group* grp = getgrgid(s.st_gid);
+	if (!grp) return errno;
+
 	i->chmod = malloc(sizeof(struct ui_chmod));
+	i->chmod->o = s.st_uid;
+	i->chmod->g = s.st_gid;
 	i->chmod->mb = i->m;
 	i->chmod->path = path;
 	i->chmod->m = m;
 	i->chmod->tmp = NULL;
 	WINDOW* cw = newwin(1, 1, 0, 0);
-	i->chmod->p =new_panel(cw);
+	i->chmod->p = new_panel(cw);
 	i->m = MODE_CHMOD;
-	struct stat s;
-	int r = lstat(i->chmod->path, &s); // TODO handle stat errors
-	i->chmod->o = s.st_uid;
-	i->chmod->g = s.st_gid;
-	struct passwd* pwd = getpwuid(s.st_uid);
-	struct group* grp = getgrgid(s.st_gid);
 	strcpy(i->chmod->owner, pwd->pw_name);
 	strcpy(i->chmod->group, grp->gr_name);
 	/* TODO should I care about smaller terminal?
@@ -381,6 +385,7 @@ void chmod_open(struct ui* i, char* path, mode_t m) {
 	i->chmod->ww = 34;
 	i->chmod->wh = 18;
 	i->scrw = i->scrh = 0; // Forces geometry update
+	return 0;
 }
 
 void chmod_close(struct ui* i) {

@@ -73,7 +73,7 @@ struct file_record {
 
 bool is_dir(const char*);
 bool file_exists(const char*);
-void scan_dir(const char*, struct file_record***, fnum_t*);
+int scan_dir(const char*, struct file_record***, fnum_t*);
 void delete_file_list(struct file_record***, fnum_t*);
 void file_index(struct file_record**, fnum_t, const char*, fnum_t*);
 void file_find(struct file_record**, fnum_t, const char*, fnum_t*);

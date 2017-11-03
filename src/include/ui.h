@@ -213,7 +213,7 @@ void ui_end(struct ui* const);
 void ui_draw(struct ui* const);
 void ui_update_geometry(struct ui* const);
 
-void chmod_open(struct ui*, char*, mode_t);
+int chmod_open(struct ui*, char*, mode_t);
 void chmod_close(struct ui*);
 void prompt_open(struct ui*, char*, char*, size_t);
 void prompt_close(struct ui*);

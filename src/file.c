@@ -48,15 +48,16 @@ bool file_exists(const char* path) {
 
 /* Cleans up old data and scans working directory,
  * putting data into variables passed in arguments.
- * TODO it can fail too; to error handling
  */
-void scan_dir(const char* wd, struct file_record*** file_list,
+int scan_dir(const char* wd, struct file_record*** file_list,
 		fnum_t* num_files) {
 	delete_file_list(file_list, num_files);
 	struct dirent** namelist;
 	DIR* dir = opendir(wd);
-	*num_files = scandir(wd, &namelist, file_filter, file_sort);
-	closedir(dir);
+	int r = scandir(wd, &namelist, file_filter, file_sort);
+	if (r == -1) return errno;
+	if (closedir(dir)) return errno;
+	*num_files = r;
 	*file_list = malloc(sizeof(struct file_record*) * (*num_files));
 	char* path = malloc(PATH_MAX);
 	char* link_path = malloc(PATH_MAX);
@@ -68,8 +69,16 @@ void scan_dir(const char* wd, struct file_record*** file_list,
 		fr->file_name = strdup(namelist[i]->d_name);
 		fr->link_path = NULL;
 		if (lstat(path, &fr->s)) {
-			// what TODO?
-			continue;
+			for (fnum_t j = 0; j <= i; ++j) {
+				free((*file_list)[i]->file_name);
+				if ((*file_list)[i]->link_path) {
+					free((*file_list)[i]->link_path);
+				}
+				free((*file_list)[i]);
+			}
+			*num_files = 0;
+			*file_list = NULL;
+			return errno;
 		}
 		else if (S_ISLNK(fr->s.st_mode)) {
 			// Readlink does not append NULL terminator,
@@ -79,15 +88,13 @@ void scan_dir(const char* wd, struct file_record*** file_list,
 			memcpy(fr->link_path, link_path, lp_len+1);
 			fr->link_path[lp_len] = 0; // NULL terminator
 		}
-		else {
-			// what TODO?
-		}
 		// I'm keeping d_name, don't need the rest
 		free(namelist[i]);
 	}
 	free(link_path);
 	free(path);
 	free(namelist);
+	return 0;
 }
 
 void delete_file_list(struct file_record*** file_list, fnum_t* num_files) {
