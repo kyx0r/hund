@@ -104,7 +104,7 @@ int main(int argc, char* argv[])  {
 
 	openlog(argv[0], LOG_PID, LOG_USER);
 	syslog(LOG_NOTICE, "%s started", argv[0]+2);
-	
+
 	struct file_view fvs[2];
 	memset(fvs, 0, sizeof(struct file_view)*2);
 	struct file_view* pv = &fvs[0];
@@ -114,7 +114,9 @@ int main(int argc, char* argv[])  {
 	for (int v = 0; v < 2; ++v) {
 		get_cwd(fvs[v].wd);
 		if (init_wd[v]) {
-			enter_dir(fvs[v].wd, init_wd[v]);
+			char* e = strdup(init_wd[v]);
+			enter_dir(fvs[v].wd, e);
+			free(e);
 		}
 		scan_dir(fvs[v].wd, &fvs[v].file_list, &fvs[v].num_files);
 		first_entry(&fvs[v]);
@@ -326,7 +328,7 @@ int main(int argc, char* argv[])  {
 
 		else if (i.m == MODE_FIND) {
 			int r = fill_textbox(i.find->t, &i.find->t_top,
-					i.find->t_size, panel_window(i.status));
+					i.find->t_size, 1, panel_window(i.status));
 			if (r == -1) {
 				find_close(&i, false);
 			}
@@ -348,7 +350,7 @@ int main(int argc, char* argv[])  {
 
 		else if (i.m ==	MODE_PROMPT) {
 			int r = fill_textbox(i.prompt->tb, &i.prompt->tb_top,
-					i.prompt->tb_size, panel_window(i.status));
+					i.prompt->tb_size, 0, panel_window(i.status));
 			if (!r) {
 				if (t.t != TASK_NONE && t.s == TASK_STATE_GATHERING_DATA) {
 					t.s = TASK_STATE_DATA_GATHERED;

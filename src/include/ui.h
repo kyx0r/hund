@@ -25,6 +25,7 @@
 #include <panel.h>
 #include <linux/limits.h>
 #include <locale.h>
+#include <time.h>
 #include <syslog.h>
 
 #include "file_view.h"
@@ -220,6 +221,6 @@ void find_open(struct ui*, char*, char*, size_t);
 void find_close(struct ui*, bool);
 
 enum command get_cmd(struct ui*);
-int fill_textbox(char*, char**, size_t, WINDOW*);
+int fill_textbox(char*, char**, size_t, int, WINDOW*);
 
 #endif

@@ -122,6 +122,7 @@ void ui_end(struct ui* const i) {
 void ui_draw(struct ui* const i) {
 	for (int v = 0; v < 2; ++v) {
 		const struct file_view* const s = i->fvs[v];
+		const bool sh = s->show_hidden;
 		WINDOW* const w = panel_window(i->fvp[v]);
 		int _ph, _pw;
 		getmaxyx(w, _ph, _pw);
@@ -140,114 +141,136 @@ void ui_draw(struct ui* const i) {
 		wattroff(w, COLOR_PAIR(2));
 
 		/* Entry list */
-		// First, adjust view_offset to selection
-		// (Keep selection in center if possible)
-		fnum_t view_offset = 0;
-		if (s->num_files <= ph - 1) {
-			view_offset = 0;
+		/* I'm drawing N entries before selection,
+		 * selection itself
+		 * and as many entries after selection as needed to fill remaining space.
+		 */
+		fnum_t me = ph - 3; // Max Entries
+		// 3 = 1 path bar + 1 statusbar + 1 infobar
+		fnum_t eo = 0; // Entries Over
+		fnum_t oi = 1; // Over Index
+		fnum_t bi = 0; // Begin Index
+		fnum_t eu = 0; // Entries Under
+		fnum_t ui = 1; // Under Index
+		/* How many entries are under selection? */
+		while (s->selection+ui < s->num_files && eu <= me/2) {
+			if (sh || ifaiv(s, s->selection+ui)) {
+				eu += 1;
+			}
+			ui += 1;
 		}
-		else if (s->selection < ph/2) {
-			view_offset = 0;
+		/* How many entries are over selection?
+		 * (If there are few entries under, then use up all remaining space)
+		 */
+		while (s->selection >= oi && eo + 1 + eu <= me) {
+			if (sh || ifaiv(s, s->selection-oi)) {
+				eo += 1;
+			}
+			bi = s->selection-oi;
+			oi += 1;
 		}
-		else if (s->selection > s->num_files - ph/2) {
-			view_offset = s->num_files - ph + 2;
+
+		fnum_t dr = 1; // Drawing Row
+		fnum_t nhf = 0; // Number of Hidden Files
+		fnum_t hi = 0; // Highlighted file Index
+		fnum_t e = bi;
+		for (fnum_t i = 0; i < s->num_files && !sh; ++i) {
+			if (!ifaiv(s, i)) nhf += 1;
+			if (i == s->selection) hi = i-nhf;
 		}
-		else {
-			view_offset = s->selection - ph/2 + 1;
-		}
-		unsigned vo = 1; // Vertical offset, 1 = skipping top bar
-		fnum_t ei = view_offset; // Entry Index
-		fnum_t hc = 0; // Hidden Count
-		fnum_t vi = 0; // Visible Index
-		while (ei < s->num_files && vo < ph-1) {
-			// Current File Record
-			const struct file_record* cfr = s->file_list[ei];
-			if (cfr->file_name[0] == '.' && !s->show_hidden) {
-				ei += 1;
-				hc += 1;
+		while (e < s->num_files && dr < ph-1) {
+			if (!sh && !ifaiv(s, e)) {
+				e += 1;
 				continue;
 			}
-			char type_symbol = '?';
-			int color_pair_enabled = 0;
-			int type = mode2type(cfr->s.st_mode);
-			type_symbol = type_symbol_mapping[type][0];
-			color_pair_enabled = type_symbol_mapping[type][1];
-			const size_t fnlen = strlen(cfr->file_name); // File Name Length
-			size_t enlen; // entry length
+			const struct file_record* const cfr = s->file_list[e];
+			const int type = mode2type(cfr->s.st_mode);
+			const char type_symbol = type_symbol_mapping[type][0];
+			int color_pair_enabled = type_symbol_mapping[type][1];
+			const size_t fnlen = strlen(cfr->file_name); // File Name LENgth
+			size_t enlen; // ENtry LENgth
 			int padding;
 			if (fnlen > pw - 3) {
 				// If file name can't fit in line, its just cut
 				padding = 0;
-				enlen = pw - 3;
+				enlen = pw - 1; // 1 is for type symbol
 			}
 			else {
 				padding = (pw - 1) - fnlen;
-				enlen = fnlen;
+				enlen = fnlen + 1;
 			}
-			if (ei == s->selection && v == i->active_view) {
+			if (e == s->selection && v == i->active_view) {
 				color_pair_enabled += 1;
 			}
 			wattron(w, COLOR_PAIR(color_pair_enabled));
-			mvwprintw(w, vo, 0, "%c%.*s",
-					type_symbol, enlen, cfr->file_name);
+			mvwprintw(w, dr, 0, "%c%.*s", type_symbol, enlen, cfr->file_name);
 			if (padding) {
-				mvwprintw(w, vo, 0 + enlen + 1, "%*c", padding, ' ');
+				mvwprintw(w, dr, enlen, "%*c", padding, ' ');
 			}
 			wattroff(w, COLOR_PAIR(color_pair_enabled));
-			vo += 1;
-			vi += 1;
-			ei += 1;
+			dr += 1;
+			e += 1;
 		}
-		while (vo < ph-1) {
-			mvwprintw(w, vo, 0, "%*c", pw, ' ');
-			vo += 1;
+		for (; dr < ph-1; ++dr) {
+			mvwprintw(w, dr, 0, "%*c", pw, ' ');
 		}
 
-		/* Pathbar */
+		/* Infobar */
 		wattron(w, COLOR_PAIR(2));
 		const size_t status_size = 256;
 		char* status = malloc(status_size);
+		const size_t time_size = 64;
+		char* time = malloc(64);
 		static char* empty = "(empty)";
 		if (!s->num_files) {
 			snprintf(status, status_size, empty);
 		}
-		else if (s->num_files - hc) {
+		else if (s->num_files - nhf) {
 			const size_t fsize = (s->selection < s->num_files ?
 					s->file_list[s->selection]->s.st_size : 0);
+			time_t lt = s->file_list[s->selection]->s.st_mtim.tv_sec;
+			struct tm* tt = localtime(&lt);
+			strftime(time, time_size, "%Y-%m-%d %H:%M", tt);
 			if (s->show_hidden) {
-				snprintf(status, status_size, "%u/%u %zuB %o",
-						s->selection+1, s->num_files-hc,
-						fsize, s->file_list[s->selection]->s.st_mode);
+				snprintf(status, status_size, "%u/%u %o %zuB",
+						s->selection+1, s->num_files,
+						s->file_list[s->selection]->s.st_mode & 0xfff, fsize);
 			}
 			else {
-				snprintf(status, status_size, "%u/%u h%u %zuB %o",
-						s->selection+1, s->num_files-hc, hc,
-						fsize, s->file_list[s->selection]->s.st_mode);
+				snprintf(status, status_size, "%u/%u h%u %o %zuB",
+						hi+1, s->num_files-nhf, nhf,
+						s->file_list[s->selection]->s.st_mode & 0xfff, fsize);
 			}
 		}
 		else {
-			snprintf(status, status_size, "h%u", hc);
+			snprintf(status, status_size, "h%u", nhf);
 		}
-		mvwprintw(w, vo, 0, "%s%*c", status, pw-strlen(status), ' ');
-		free(status);
+		mvwprintw(w, dr, 0, " %s%*c%s ", status,
+				pw-strlen(status)-strlen(time)-2, ' ', time);
 		wattroff(w, COLOR_PAIR(2));
+		free(time);
+		free(status);
 		wrefresh(w);
 	}
+
 	WINDOW* sw = panel_window(i->status);
-	mvwprintw(sw, 0, 0, "%*c", i->scrw-1, ' ');
-	wmove(sw, 0, 0);
 	if (i->error) {
 		wattron(sw, COLOR_PAIR(4));
-		mvwprintw(sw, 0, 0, "%s", i->error);
+		mvwprintw(sw, 0, 0, "%s%*c", i->error,
+				i->scrw-(strlen(i->error)+1), ' ');
 		wattroff(sw, COLOR_PAIR(4));
 	}
 	else if (i->find) {
-		mvwprintw(sw, 0, 0, "/%s", i->find->t);
+		mvwprintw(sw, 0, 0, "/%s%*c", i->find->t,
+				i->scrw-(strlen(i->find->t)+1), ' ');
 	}
 	else if (i->prompt) {
-		mvwprintw(sw, 0, 0, "%s", i->prompt->tb);
+		mvwprintw(sw, 0, 0, "%s%*c", i->prompt->tb,
+				i->scrw-(strlen(i->prompt->tb)+2), ' ');
 	}
 	else {
+		mvwprintw(sw, 0, 0, "%*c", i->scrw-1, ' ');
+		wmove(sw, 0, 0);
 		for (int x = 0; x < i->kml; ++x) {
 			if (!i->mks[x]) continue;
 			int c = 0;
@@ -485,9 +508,9 @@ enum command get_cmd(struct ui* i) {
  * If aborted, returns -1.
  * If keeps gathering, returns 1.
  */
-int fill_textbox(char* buf, char** buftop, size_t bsize, WINDOW* w) {
+int fill_textbox(char* buf, char** buftop, size_t bsize, int coff, WINDOW* w) {
 	curs_set(2);
-	wmove(w, 1, (*buftop)-buf+1);
+	wmove(w, 0, (*buftop)-buf+coff);
 	wrefresh(w);
 	int c = wgetch(w);
 	curs_set(0);
