@@ -37,7 +37,14 @@ struct passwd* get_pwd(void) {
  */
 int enter_dir(char path[PATH_MAX], char dir[PATH_MAX]) {
 	if (!path_is_relative(dir)) {
-		strcpy(path, dir);
+		if (dir[0] == '~') {
+			struct passwd* pwd = get_pwd();
+			strcpy(path, pwd->pw_dir);
+			strcat(path, dir+1);
+		}
+		else {
+			strcpy(path, dir);
+		}
 		return 0;
 	}
 	const size_t plen = strlen(path);
