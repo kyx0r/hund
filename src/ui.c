@@ -87,6 +87,7 @@ struct ui ui_init(struct file_view* pv, struct file_view* sv) {
 	i.chmod = NULL;
 	i.find = NULL;
 	i.error = NULL;
+	i.info = NULL;
 	WINDOW* sw = newwin(1, 1, 0, 0);
 	keypad(sw, TRUE);
 	//wtimeout(hw, DEFAULT_GETCH_TIMEOUT);
@@ -143,8 +144,16 @@ void ui_draw(struct ui* const i) {
 		/* Entry list */
 		/* I'm drawing N entries before selection,
 		 * selection itself
-		 * and as many entries after selection as needed to fill remaining space.
+		 * and as many entries after selection as needed
+		 * to fill remaining space.
 		 */
+		fnum_t nhf = 0; // Number of Hidden Files
+		fnum_t hi = 0; // Highlighted file Index
+		for (fnum_t i = 0; i < s->num_files && !sh; ++i) {
+			if (!ifaiv(s, i)) nhf += 1;
+			if (i == s->selection) hi = i-nhf;
+		}
+
 		fnum_t me = ph - 3; // Max Entries
 		// 3 = 1 path bar + 1 statusbar + 1 infobar
 		fnum_t eo = 0; // Entries Over
@@ -153,7 +162,7 @@ void ui_draw(struct ui* const i) {
 		fnum_t eu = 0; // Entries Under
 		fnum_t ui = 1; // Under Index
 		/* How many entries are under selection? */
-		while (s->selection+ui < s->num_files && eu <= me/2) {
+		while (s->num_files-nhf && s->selection+ui < s->num_files && eu <= me/2) {
 			if (sh || ifaiv(s, s->selection+ui)) {
 				eu += 1;
 			}
@@ -162,7 +171,7 @@ void ui_draw(struct ui* const i) {
 		/* How many entries are over selection?
 		 * (If there are few entries under, then use up all remaining space)
 		 */
-		while (s->selection >= oi && eo + 1 + eu <= me) {
+		while (s->num_files-nhf && s->selection >= oi && eo + 1 + eu <= me) {
 			if (sh || ifaiv(s, s->selection-oi)) {
 				eo += 1;
 			}
@@ -171,14 +180,8 @@ void ui_draw(struct ui* const i) {
 		}
 
 		fnum_t dr = 1; // Drawing Row
-		fnum_t nhf = 0; // Number of Hidden Files
-		fnum_t hi = 0; // Highlighted file Index
 		fnum_t e = bi;
-		for (fnum_t i = 0; i < s->num_files && !sh; ++i) {
-			if (!ifaiv(s, i)) nhf += 1;
-			if (i == s->selection) hi = i-nhf;
-		}
-		while (e < s->num_files && dr < ph-1) {
+		while (s->num_files-nhf && e < s->num_files && dr < ph-1) {
 			if (!sh && !ifaiv(s, e)) {
 				e += 1;
 				continue;
@@ -222,6 +225,7 @@ void ui_draw(struct ui* const i) {
 		static char* timefmt = "%Y-%m-%d %H:%M";
 		const size_t time_size = 32;
 		char time[time_size];
+		memset(time, 0, sizeof(time));
 		static char* empty = "(empty)";
 		if (!s->num_files) {
 			snprintf(status, status_size, empty);
@@ -258,8 +262,15 @@ void ui_draw(struct ui* const i) {
 		wattron(sw, COLOR_PAIR(4));
 		mvwprintw(sw, 0, 0, "%s", i->error);
 		wattroff(sw, COLOR_PAIR(4));
-		mvwprintw(sw, 0, strlen(i->error)+1, "%*c",
-				i->scrw-(strlen(i->error)+1), ' ');
+		mvwprintw(sw, 0, strlen(i->error), "%*c",
+				i->scrw-strlen(i->error), ' ');
+	}
+	else if (i->info) {
+		wattron(sw, COLOR_PAIR(10));
+		mvwprintw(sw, 0, 0, "%s", i->info);
+		wattroff(sw, COLOR_PAIR(10));
+		mvwprintw(sw, 0, strlen(i->info), "%*c",
+				i->scrw-strlen(i->info), ' ');
 	}
 	else if (i->find) {
 		mvwprintw(sw, 0, 0, "/%s%*c", i->find->t,

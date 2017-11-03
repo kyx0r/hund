@@ -27,7 +27,7 @@
 
 #include "include/ui.h"
 
-#define ERROR_MSG_BUFFER_SIZE 256
+#define MSG_BUFFER_SIZE 256
 
 enum task_type {
 	TASK_NONE = 0,
@@ -135,6 +135,14 @@ int main(int argc, char* argv[])  {
 		ui_draw(&i);
 
 		if (i.m == MODE_MANAGER) {
+			if (i.error) {
+				free(i.error);
+				i.error = NULL;
+			}
+			else if (i.info) {
+				free(i.info);
+				i.info = NULL;
+			}
 			switch (get_cmd(&i)) {
 			case CMD_QUIT:
 				run = false;
@@ -267,8 +275,6 @@ int main(int argc, char* argv[])  {
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				break;
 			default:
-				free(i.error);
-				i.error = NULL;
 				break;
 			}
 		} // MODE_MANGER
@@ -283,14 +289,14 @@ int main(int argc, char* argv[])  {
 						i.chmod->path, i.chmod->m, i.chmod->o, i.chmod->g);
 				if (chmod(i.chmod->path, i.chmod->m)) {
 					int err = errno;
-					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
-					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
 							"chmod failed: %s", strerror(err));
 				}
 				if (lchown(i.chmod->path, i.chmod->o, i.chmod->g)) {
 					int err = errno;
-					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
-					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
 							"chown failed: %s", strerror(err));
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
@@ -339,7 +345,7 @@ int main(int argc, char* argv[])  {
 			 *    .hidden.file | visible.file
 			 * show_hidden 0 |0|1|
 			 * show_hidden 1 |1|1|
-			 * Also, don't perform search at all on empty input
+			 * Also don't perform search at all on empty input
 			 */
 			else if ((i.find->t_top - i.find->t) &&
 					!(!pv->show_hidden && i.find->t[0] == '.')) {
@@ -373,8 +379,8 @@ int main(int argc, char* argv[])  {
 				struct passwd* pwd = getpwnam(i.chmod->tmp);
 				int err = errno;
 				if (err) {
-					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
-					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
 							"chown failed: %s", strerror(err));
 				}
 				else {
@@ -391,8 +397,8 @@ int main(int argc, char* argv[])  {
 				struct group* grp = getgrnam(i.chmod->tmp);
 				int err = errno;
 				if (err) {
-					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
-					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
 							"chown failed: %s", strerror(err));
 				}
 				else {
@@ -406,8 +412,8 @@ int main(int argc, char* argv[])  {
 				syslog(LOG_DEBUG, "task_mkdir %s", t.src);
 				err = dir_make(t.src);
 				if (err) {
-					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
-					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
 							"mkdir failed: %s", strerror(err));
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
@@ -433,16 +439,16 @@ int main(int argc, char* argv[])  {
 				enter_dir(path, t.dst); // path may be relative or ~/something
 				syslog(LOG_DEBUG, "task_cd %s", path);
 				if (!file_exists(path)) {
-					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
-					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
 							"cd failed: File does not exist");
 					t.s = TASK_STATE_FINISHED;
 					free(path);
 					break;
 				}
 				if (!is_dir(path)) {
-					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
-					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
 							"cd failed: Not a directory");
 					t.s = TASK_STATE_FINISHED;
 					free(path);
@@ -450,8 +456,8 @@ int main(int argc, char* argv[])  {
 				}
 				err = enter_dir(pv->wd, path);
 				if (err) {
-					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
-					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
 							"cd failed: %s", strerror(err));
 					t.s = TASK_STATE_FINISHED;
 					free(path);
@@ -467,29 +473,35 @@ int main(int argc, char* argv[])  {
 				syslog(LOG_DEBUG, "task_rmdir %s", t.src);
 				err = file_remove(t.src);
 				if (err) {
-					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
-					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
 							"rmdir failed: %s", strerror(err));
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				prev_entry(pv);
+				i.info = malloc(MSG_BUFFER_SIZE);
+				snprintf(i.info, MSG_BUFFER_SIZE,
+						"removed %s", t.src+current_dir_i(t.src));
 				t.s = TASK_STATE_FINISHED;
 				break;
 			case TASK_COPY:
 				syslog(LOG_DEBUG, "task_copy %s -> %s", t.src, t.dst);
 				if (file_exists(t.dst)) {
-					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
-					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
 							"cp failed: File exists");
 					t.s = TASK_STATE_FINISHED;
 					break;
 				}
 				err = file_copy(t.src, t.dst);
 				if (err) {
-					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
-					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
 							"cp failed: %s", strerror(err));
 				}
+				i.info = malloc(MSG_BUFFER_SIZE);
+				snprintf(i.info, MSG_BUFFER_SIZE,
+						"copied to %s", t.dst+current_dir_i(t.dst));
 				scan_dir(sv->wd, &sv->file_list, &sv->num_files);
 				t.s = TASK_STATE_FINISHED;
 				break;
@@ -497,8 +509,8 @@ int main(int argc, char* argv[])  {
 				{
 				syslog(LOG_DEBUG, "task_rename %s -> %s", t.src, t.dst);
 				if (file_exists(t.dst)) {
-					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
-					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
 							"rn failed: File exists");
 					t.s = TASK_STATE_FINISHED;
 					break;
@@ -507,8 +519,8 @@ int main(int argc, char* argv[])  {
 				current_dir(t.dst, named);
 				err = rename(t.src, t.dst);
 				if (err) {
-					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
-					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
 							"rn failed: %s", strerror(err));
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
@@ -526,21 +538,24 @@ int main(int argc, char* argv[])  {
 			case TASK_MOVE:
 				syslog(LOG_DEBUG, "task_move %s -> %s", t.src, t.dst);
 				if (file_exists(t.dst)) {
-					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
-					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
 							"mv failed: File exists");
 					t.s = TASK_STATE_FINISHED;
 					break;
 				}
 				err = file_move(t.src, t.dst);
 				if (err) {
-					i.error = malloc(ERROR_MSG_BUFFER_SIZE);
-					snprintf(i.error, ERROR_MSG_BUFFER_SIZE,
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
 							"mv failed: %s", strerror(err));
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				scan_dir(sv->wd, &sv->file_list, &sv->num_files);
 				prev_entry(pv);
+				i.info = malloc(MSG_BUFFER_SIZE);
+				snprintf(i.info, MSG_BUFFER_SIZE,
+						"moved to %s", t.dst+current_dir_i(t.dst));
 				t.s = TASK_STATE_FINISHED;
 				break;
 			case TASK_NONE:

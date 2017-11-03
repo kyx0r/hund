@@ -203,6 +203,7 @@ struct ui {
 	struct ui_chmod* chmod;
 	struct ui_find* find;
 	char* error;
+	char* info;
 
 	int kml; // Key Mapping Length
 	int* mks; // Matching Key Sequence
