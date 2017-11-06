@@ -1,5 +1,6 @@
 #include "test.h"
 #include "../src/include/path.h"
+#include "../src/include/utf8.h"
 
 int main() {
 	SETUP_TESTS;
@@ -69,6 +70,22 @@ int main() {
 	TEST(strcmp(path6, pwd->pw_dir) == 0, "");
 
 	END_SECTION("path");
+
+
+	SECTION("utf8");
+
+	bool symmetric = true;
+	char b[4];
+	for (codepoint_t cp = 0; cp < 0x20000; ++cp) {
+		if (!utf8_cp2nb(cp)) continue;
+		utf8_cp2b(b, cp);
+		codepoint_t cp2 = utf8_b2cp(b);
+		symmetric = symmetric && (cp2 == cp) &&
+			(utf8_cp2nb(cp) == utf8_cp2nb(cp2));
+	}
+	TEST(symmetric, "cp2b and b2cp are symmetric");
+
+	END_SECTION("utf8");
 
 	END_TESTS;
 }
