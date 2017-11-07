@@ -19,10 +19,6 @@
 
 #include "include/utf8.h"
 
-/* About implementation
- * TODO
- */
-
 /* CodePoint To Bytes */
 void utf8_cp2b(utf8* const b, codepoint_t cp) {
 	if (cp < (codepoint_t) 0x80) {
@@ -82,7 +78,8 @@ codepoint_t utf8_b2cp(const utf8* const b) {
 }
 
 /* Glyph To Number of Bytes
- * how long the current glyph is (based on initial byte)
+ * how long the current glyph is (in bytes)
+ * returns 0 if initial byte is invalid
  */
 size_t utf8_g2nb(const utf8* const g) {
 	/* It's simple, really
@@ -102,14 +99,18 @@ size_t utf8_g2nb(const utf8* const g) {
 	 * 2 x 3 bytes
 	 * 11101xxx -> 3 bytes
 	 * 11110xxx -> 4 bytes
+	 * 1 x 4 bytes
 	 * 11111xxx -> invalid (see impementation)
 	 */
-	// Top 4 bits To Length
+	// Top 5 bits To Length
 	static const char t2l[32] = {
-		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-		0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 4, 0
+		1, 1, 1, 1, 1, 1, 1, 1, //00000xxx - 00111xxx
+		1, 1, 1, 1, 1, 1, 1, 1, //01000xxx - 01111xxx
+		0, 0, 0, 0, 0, 0, 0, 0, //10000xxx - 10111xxx
+		2, 2, 2, 2, 3, 3, 4, 0  //11000xxx - 11111xxx
 	};
-	return t2l[g[0] >> 3];
+	/* This cast is very important */
+	return t2l[(unsigned char)(*g) >> 3];
 }
 
 /* CodePoint To Number of Bytes */
@@ -121,8 +122,59 @@ size_t utf8_cp2nb(codepoint_t cp) {
 	return 0;
 }
 
-bool utf8_validate(utf8* b) {
-	return false;
+/* apparent width */
+size_t utf8_width(const utf8* const b) {
+	size_t g = 0;
+	const utf8* p = b;
+	size_t s;
+	while (*p && (s = utf8_g2nb(p)) != 0) {
+		p += s;
+		g += 1;
+	}
+	return g;
 }
 
+/* Calculates how much bytes take first g glyphs */
+size_t utf8_slice_length(const utf8* const b, size_t g) {
+	size_t r = 0;
+	for (size_t i = 0; i < g; ++i) {
+		r += utf8_g2nb(b+r);
+	}
+	return r;
+}
 
+bool utf8_validate(const utf8* const b) {
+	size_t bl = strlen(b);
+	const utf8* t = b;
+	size_t i = 0;
+	while (i < bl) {
+		size_t s = utf8_g2nb(t+i);
+		if (!s) break;
+		i += s;
+	}
+	return i == bl;
+}
+
+/* Pop n chars off the top of a,
+ * and place them in b, preserving order
+ * (b is expected to be big enough to fit all n glyphs)
+ * return length in glyphs of a after operation
+ * Buffer sizes or addresses are left untouched. (no free of realloc)
+ * If b is NULL, then no glyph is copied.
+ * TODO there is more...
+ *
+ * strcat() is analogous, opposite function (push)
+ */
+size_t utf8_pop(utf8* const a, utf8* const b, size_t n) {
+	size_t aw = utf8_width(a);
+	if (n > aw) return aw;
+	utf8* t = a;
+	for (size_t i = 0; i < aw-n; ++i) {
+		t += utf8_g2nb(t);
+	}
+	if (b) strcpy(b, t);
+	memset(t, 0, strlen(t));
+	return aw-n;
+}
+
+// TODO size_t utf8_popfrom (index)

@@ -30,6 +30,10 @@ void utf8_cp2b(utf8* const, codepoint_t);
 codepoint_t utf8_b2cp(const utf8* const);
 size_t utf8_g2nb(const utf8* const);
 size_t utf8_cp2nb(codepoint_t);
-bool utf8_validate(utf8*);
+size_t utf8_width(const utf8* const);
+size_t utf8_slice_length(const utf8* const, size_t);
+bool utf8_validate(const utf8* const);
+
+size_t utf8_pop(utf8* const, utf8* const, size_t c);
 
 #endif

@@ -74,6 +74,32 @@ int main() {
 
 	SECTION("utf8");
 
+	struct test_utf8_pair {
+		utf8* b;
+		codepoint_t cp;
+	} tup[] = {
+		{ .b = " ", .cp = 0x20 },
+		{ .b = "@", .cp = 0x40 },
+		{ .b = "ł", .cp = 0x0142 },
+		// TODO fill with some sample glyphs
+	};
+
+	bool pairs = true;
+	for (unsigned i = 0; i < sizeof(tup)/sizeof(struct test_utf8_pair); ++i) {
+		pairs = pairs && tup[i].cp == utf8_b2cp(tup[i].b);
+	}
+	TEST(pairs, "sample pairs of glyphs and codepoints match");
+
+	TEST(utf8_width("wat") == 3, "");
+	TEST(utf8_width("łąć") == 3, "");
+	// TODO more
+
+	utf8 str[] = "ćął";
+	utf8 buf[3];
+	utf8_pop(str, buf, 1);
+	TEST(!strcmp(buf, "ł") && !strcmp(str, "ćą"), "");
+
+
 	bool symmetric = true;
 	char b[4];
 	for (codepoint_t cp = 0; cp < 0x20000; ++cp) {
@@ -84,6 +110,28 @@ int main() {
 			(utf8_cp2nb(cp) == utf8_cp2nb(cp2));
 	}
 	TEST(symmetric, "cp2b and b2cp are symmetric");
+
+	// Some Valid Strings
+	utf8* svs[] = {
+		"żąbą ną łąćę żrę trawę",
+	};
+	bool va = true;
+	for (size_t i = 0; i < sizeof(svs)/sizeof(utf8*); ++i) {
+		va = va && utf8_validate(svs[i]);
+	}
+	TEST(va, "all valid strings are valid");
+
+	utf8* sis[] = {
+		"a\xff",
+	};
+	bool inv = true;
+	for (size_t i = 0; i < sizeof(sis)/sizeof(utf8*); ++i) {
+		inv = inv && !utf8_validate(sis[i]);
+	}
+	TEST(inv, "all invalid strings are invalid");
+
+	TEST(utf8_slice_length("łaka łaka", 2) == 3, "");
+
 
 	END_SECTION("utf8");
 
