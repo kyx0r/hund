@@ -138,7 +138,7 @@ void ui_draw(struct ui* const i) {
 		/* TODO if path does not fit into bar, shorten it somehow */
 		wattron(w, COLOR_PAIR(2));
 		if (pi) mvwprintw(w, 0, 0, "~");
-		mvwprintw(w, 0, (pi ? 1 : 0), "%s%*c", s->wd+pi, pw-strlen(s->wd+pi), ' ');
+		mvwprintw(w, 0, (pi ? 1 : 0), "%s%*c", s->wd+pi, pw-utf8_width(s->wd+pi), ' ');
 		wattroff(w, COLOR_PAIR(2));
 
 		/* Entry list */
@@ -190,23 +190,26 @@ void ui_draw(struct ui* const i) {
 			const int type = mode2type(cfr->s.st_mode);
 			const char type_symbol = type_symbol_mapping[type][0];
 			int color_pair_enabled = type_symbol_mapping[type][1];
-			const size_t fnlen = strlen(cfr->file_name); // File Name LENgth
+			// TODO is is utf-8 at all? validate
+			const size_t fnlen = strlen(cfr->file_name);
+			const size_t fnwidth = utf8_width(cfr->file_name);
 			size_t enlen; // ENtry LENgth
 			int padding;
-			if (fnlen > pw - 3) {
+			if (fnwidth > pw - 1) {
 				// If file name can't fit in line, its just cut
 				padding = 0;
 				enlen = pw - 1; // 1 is for type symbol
 			}
 			else {
-				padding = (pw - 1) - fnlen;
-				enlen = fnlen + 1;
+				padding = pw - fnwidth;
+				enlen = fnwidth + 1;
 			}
 			if (e == s->selection && v == i->active_view) {
 				color_pair_enabled += 1;
 			}
 			wattron(w, COLOR_PAIR(color_pair_enabled));
-			mvwprintw(w, dr, 0, "%c%.*s", type_symbol, enlen, cfr->file_name);
+			mvwprintw(w, dr, 0, "%c%.*s", type_symbol,
+					utf8_slice_length(cfr->file_name, enlen), cfr->file_name);
 			if (padding) {
 				mvwprintw(w, dr, enlen, "%*c", padding, ' ');
 			}
@@ -251,7 +254,7 @@ void ui_draw(struct ui* const i) {
 			snprintf(status, status_size, "h%u", nhf);
 		}
 		mvwprintw(w, dr, 0, " %s%*c%s ", status,
-				pw-strlen(status)-strlen(time)-2, ' ', time);
+				pw-utf8_width(status)-strlen(time)-2, ' ', time);
 		wattroff(w, COLOR_PAIR(2));
 		free(status);
 		wrefresh(w);
@@ -263,22 +266,22 @@ void ui_draw(struct ui* const i) {
 		mvwprintw(sw, 0, 0, "%s", i->error);
 		wattroff(sw, COLOR_PAIR(4));
 		mvwprintw(sw, 0, strlen(i->error), "%*c",
-				i->scrw-strlen(i->error), ' ');
+				i->scrw-utf8_width(i->error), ' ');
 	}
 	else if (i->info) {
 		wattron(sw, COLOR_PAIR(10));
 		mvwprintw(sw, 0, 0, "%s", i->info);
 		wattroff(sw, COLOR_PAIR(10));
 		mvwprintw(sw, 0, strlen(i->info), "%*c",
-				i->scrw-strlen(i->info), ' ');
+				i->scrw-utf8_width(i->info), ' ');
 	}
 	else if (i->find) {
 		mvwprintw(sw, 0, 0, "/%s%*c", i->find->t,
-				i->scrw-(strlen(i->find->t)+1), ' ');
+				i->scrw-(utf8_width(i->find->t)+1), ' ');
 	}
 	else if (i->prompt) {
 		mvwprintw(sw, 0, 0, "%s%*c", i->prompt->tb,
-				i->scrw-(strlen(i->prompt->tb)+2), ' ');
+				i->scrw-(utf8_width(i->prompt->tb)+2), ' ');
 	}
 	else {
 		mvwprintw(sw, 0, 0, "%*c", i->scrw-1, ' ');
@@ -314,13 +317,13 @@ void ui_draw(struct ui* const i) {
 		const size_t fno = current_dir_i(i->chmod->path);
 		// TODO what if filename is like 230 characters?
 		mvwprintw(cw, 1, 2, "file: %s%*c", i->chmod->path+fno,
-				i->chmod->ww-(strlen(i->chmod->path+fno)+6+2+1), ' ');
+				i->chmod->ww-(utf8_width(i->chmod->path+fno)+6+2+1), ' ');
 		mvwprintw(cw, 2, 2, "permissions: %o", m);
 		mvwprintw(cw, 3, 2, "owner: %s%*c", i->chmod->owner,
 				// 7 = "owner: ", 2 = x offset + 1 for border
-				i->chmod->ww-(strlen(i->chmod->owner)+7+2+1), ' ');
+				i->chmod->ww-(utf8_width(i->chmod->owner)+7+2+1), ' ');
 		mvwprintw(cw, 4, 2, "group: %s%*c", i->chmod->group,
-				i->chmod->ww-(strlen(i->chmod->group)+7+2+1), ' ');
+				i->chmod->ww-(utf8_width(i->chmod->group)+7+2+1), ' ');
 		for (int b = 0; b < 12; ++b) {
 			char s = (m & (mode_t)1 ? 'x' : ' ');
 			mvwprintw(cw, i->chmod->wh-2-b, 2, "[%c] %s", s, mode_bit_meaning[b]);
@@ -371,7 +374,7 @@ void ui_update_geometry(struct ui* const i) {
 	}
 }
 
-int chmod_open(struct ui* i, char* path, mode_t m) {
+int chmod_open(struct ui* i, utf8* path, mode_t m) {
 	struct stat s;
 	if (lstat(path, &s)) return errno;
 	errno = 0;
@@ -413,7 +416,7 @@ void chmod_close(struct ui* i) {
 	i->scrw = i->scrh = 0; // Forces geometry update
 }
 
-void prompt_open(struct ui* i, char* tb, char* tb_top, size_t tb_size) {
+void prompt_open(struct ui* i, utf8* tb, utf8* tb_top, size_t tb_size) {
 	i->prompt = malloc(sizeof(struct ui_prompt));
 	i->prompt->mb = i->m;
 	i->prompt->tb = tb;
@@ -429,7 +432,7 @@ void prompt_close(struct ui* i) {
 	i->prompt = NULL;
 }
 
-void find_open(struct ui* i, char* t, char* t_top, size_t t_size) {
+void find_open(struct ui* i, utf8* t, utf8* t_top, size_t t_size) {
 	i->find = malloc(sizeof(struct ui_find));
 	i->find->mb = i->m;
 	i->find->sbfc = i->fvs[i->active_view]->selection;
@@ -526,29 +529,36 @@ enum command get_cmd(struct ui* i) {
  * If aborted, returns -1.
  * If keeps gathering, returns 1.
  */
-int fill_textbox(char* buf, char** buftop, size_t bsize, int coff, WINDOW* w) {
+int fill_textbox(utf8* buf, utf8** buftop, size_t bsize, int coff, WINDOW* w) {
 	curs_set(2);
-	wmove(w, 0, (*buftop)-buf+coff);
+	wmove(w, 0, utf8_width(buf)-utf8_width(*buftop)+coff);
 	wrefresh(w);
-	int c = wgetch(w);
+	utf8 c[5];
+	memset(c, 0, sizeof(c));
+	int init = wgetch(w);
+	c[0] = (utf8)init;
+	for (int i = 1; i < utf8_g2nb(c); ++i) {
+		c[i] = (utf8)wgetch(w);
+	}
 	curs_set(0);
-	if (c == -1) return 1;
-	else if (c == 27) {
+	if (init == -1) return 1;
+	else if (init == 27) {
 		// evil ESC
 		return -1;
 	}
-	else if (c == '\n' || c == '\r') return 0;
-	else if (c == KEY_BACKSPACE) {
+	else if (init == '\n' || init == '\r') return 0;
+	else if (init == KEY_BACKSPACE) {
 		if (*buftop - buf > 0) {
-			**buftop = 0;
-			*buftop -= 1;
-			**buftop = 0;
+			//size_t d = utf8_g2nb(*buftop);
+			utf8_pop(buf, NULL, 1);
+			*buftop = buf + strlen(buf);
+			//*buftop -= d;
 		}
-		else return 0;
+		else return -1;
 	}
 	else if ((size_t)(*buftop - buf) < bsize) {
-		**buftop = c;
-		*buftop += 1;
+		strcat(*buftop, c);
+		*buftop += utf8_g2nb(c);
 	}
 	return 1;
 }

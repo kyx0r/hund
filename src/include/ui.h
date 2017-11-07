@@ -29,6 +29,7 @@
 #include <syslog.h>
 
 #include "file_view.h"
+#include "utf8.h"
 
 //#define DEFAULT_GETCH_TIMEOUT 500
 
@@ -151,7 +152,7 @@ static const char type_symbol_mapping[][2] = {
 };
 
 struct ui_find {
-	char* t; // Pointer to buffer where searched name will be held
+	utf8* t; // Pointer to buffer where searched name will be held
 	char* t_top; // Used by fill_textbox. Does not have to == t
 	size_t t_size; // Size of buffer; for fill_textbox
 	fnum_t sbfc; // Selection Before Find Command
@@ -164,8 +165,8 @@ struct ui_find {
 struct ui_chmod {
 	PANEL* p; // TODO dont want it here
 	mode_t m; // permissions of chmodded file
-	char* path; // path of chmodded file
-	char* tmp; // Used to hold buffer used by prompt
+	utf8* path; // path of chmodded file
+	utf8* tmp; // Used to hold buffer used by prompt
 	uid_t o; // owner uid
 	gid_t g; // group gid
 	/* These are only to limit syscalls.
@@ -173,15 +174,15 @@ struct ui_chmod {
 	 * If correct, updated
 	 * If incorrect, stay as they are
 	 */
-	char owner[LOGIN_NAME_MAX];
-	char group[LOGIN_NAME_MAX];
+	utf8 owner[LOGIN_NAME_MAX];
+	utf8 group[LOGIN_NAME_MAX];
 	enum mode mb; // Mode Before find mode
 	int wh, ww; // Window Width, Window Height // TODO dont want it here
 };
 
 struct ui_prompt {
-	char* tb; // TextBox buffer
-	char* tb_top;
+	utf8* tb; // TextBox buffer
+	utf8* tb_top;
 	/* ^ Used to prompt with non-empty buffer;
 	 * this is where cursor will be
 	 */
@@ -202,8 +203,8 @@ struct ui {
 	struct ui_prompt* prompt;
 	struct ui_chmod* chmod;
 	struct ui_find* find;
-	char* error;
-	char* info;
+	utf8* error;
+	utf8* info;
 
 	int kml; // Key Mapping Length
 	int* mks; // Matching Key Sequence
@@ -214,14 +215,14 @@ void ui_end(struct ui* const);
 void ui_draw(struct ui* const);
 void ui_update_geometry(struct ui* const);
 
-int chmod_open(struct ui*, char*, mode_t);
+int chmod_open(struct ui*, utf8*, mode_t);
 void chmod_close(struct ui*);
-void prompt_open(struct ui*, char*, char*, size_t);
+void prompt_open(struct ui*, utf8*, utf8*, size_t);
 void prompt_close(struct ui*);
-void find_open(struct ui*, char*, char*, size_t);
+void find_open(struct ui*, utf8*, utf8*, size_t);
 void find_close(struct ui*, bool);
 
 enum command get_cmd(struct ui*);
-int fill_textbox(char*, char**, size_t, int, WINDOW*);
+int fill_textbox(utf8*, utf8**, size_t, int, WINDOW*);
 
 #endif
