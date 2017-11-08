@@ -133,12 +133,22 @@ void ui_draw(struct ui* const i) {
 		//wborder(w, '|', '|', '-', '-', '+', '+', '+', '+');
 
 		/* Top pathbar */
+		/* Padded on both sides with space */
 		struct passwd* pwd = get_pwd();
 		const int pi = prettify_path_i(s->wd, pwd->pw_dir);
-		/* TODO if path does not fit into bar, shorten it somehow */
+		size_t path_width = utf8_width(s->wd+pi) + (pi ? 1 : 0);
 		wattron(w, COLOR_PAIR(2));
-		if (pi) mvwprintw(w, 0, 0, "~");
-		mvwprintw(w, 0, (pi ? 1 : 0), "%s%*c", s->wd+pi, pw-utf8_width(s->wd+pi), ' ');
+		if (path_width+2 <= pw) {
+			if (pi) mvwprintw(w, 0, 0, " ~");
+			else mvwprintw(w, 0, 0, " ");
+			mvwprintw(w, 0, (pi ? 2 : 1), "%s%*c ",
+					s->wd+pi, pw-utf8_width(s->wd+pi), ' ');
+		}
+		else {
+			size_t sg = path_width+1 - pw;
+			mvwprintw(w, 0, 0, " %s ",
+					s->wd+pi+utf8_slice_length(s->wd+pi, sg));
+		}
 		wattroff(w, COLOR_PAIR(2));
 
 		/* Entry list */
@@ -222,6 +232,7 @@ void ui_draw(struct ui* const i) {
 		}
 
 		/* Infobar */
+		/* Padded on both sides with space */
 		wattron(w, COLOR_PAIR(2));
 		const size_t status_size = 512;
 		char* status = malloc(status_size);
