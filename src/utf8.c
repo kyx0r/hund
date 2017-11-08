@@ -82,6 +82,8 @@ codepoint_t utf8_b2cp(const utf8* const b) {
  * returns 0 if initial byte is invalid
  */
 size_t utf8_g2nb(const utf8* const g) {
+	// If it hits null terminator I want it to return 0
+	if (!*g) return 0;
 	/* It's simple, really
 	 * I'm looking at top 5 bits (32 possibilities) of initial byte
 	 * 00001xxx -> 1 byte
@@ -137,10 +139,21 @@ size_t utf8_width(const utf8* const b) {
 /* Calculates how much bytes take first g glyphs */
 size_t utf8_slice_length(const utf8* const b, size_t g) {
 	size_t r = 0;
-	for (size_t i = 0; i < g; ++i) {
+	for (size_t i = 0; i < g && *(b+r); ++i) {
 		r += utf8_g2nb(b+r);
 	}
 	return r;
+}
+
+/* Number of glyphs till some address in that string */
+size_t utf8_ng_till(const utf8* const a, const utf8* const b) {
+	const utf8* t = a;
+	size_t g = 0;
+	while (b - t > 0) {
+		t += utf8_g2nb(t);
+		g += 1;
+	}
+	return g;
 }
 
 bool utf8_validate(const utf8* const b) {
@@ -177,4 +190,25 @@ size_t utf8_pop(utf8* const a, utf8* const b, size_t n) {
 	return aw-n;
 }
 
-// TODO size_t utf8_popfrom (index)
+void utf8_insert(utf8* const a, utf8* const b, size_t pos) {
+	const size_t bl = strlen(b);
+	utf8* t = a;
+	size_t i = 0;
+	for (; i < pos; ++i) {
+		t += utf8_g2nb(t);
+	}
+	memmove(t+bl, t, strlen(t));
+	memcpy(t, b, bl);
+}
+
+/* remove glyph at index
+ */
+void utf8_remove(utf8* const a, size_t j) {
+	// TODO test
+	utf8* t = a;
+	for (size_t i = 0; i < j; ++i) {
+		t += utf8_g2nb(t);
+	}
+	size_t rl = utf8_g2nb(t); // Removed glyph Length
+	memmove(t, t+rl, strlen(t));
+}

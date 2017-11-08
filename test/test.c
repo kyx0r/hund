@@ -84,15 +84,9 @@ int main() {
 		// TODO fill with some sample glyphs
 	};
 
-	bool pairs = true;
 	for (unsigned i = 0; i < sizeof(tup)/sizeof(struct test_utf8_pair); ++i) {
-		pairs = pairs && tup[i].cp == utf8_b2cp(tup[i].b);
+		TEST(tup[i].cp == utf8_b2cp(tup[i].b), "sample pairs of glyphs and codepoints match");
 	}
-	TEST(pairs, "sample pairs of glyphs and codepoints match");
-
-	TEST(utf8_width("wat") == 3, "");
-	TEST(utf8_width("łąć") == 3, "");
-	// TODO more
 
 	utf8 str[] = "ćął";
 	utf8 buf[3];
@@ -113,24 +107,62 @@ int main() {
 
 	// Some Valid Strings
 	utf8* svs[] = {
-		"żąbą ną łąćę żrę trawę",
+		"!@#$%^&*()_+",
+		"ascii is cool",
+		"Pchnąć w tę łódź jeża lub ośm skrzyń fig.",
+		"Zwölf große Boxkämpfer jagen Viktor quer über den Sylter Deich.",
+		"Любя, съешь щипцы, — вздохнёт мэр, — кайф жгуч.",
+		"Nechť již hříšné saxofony ďáblů rozzvučí síň úděsnými tóny waltzu, tanga a quickstepu.",
+		"Eble ĉiu kvazaŭdeca fuŝĥoraĵo ĝojigas homtipon.",
+		"Γαζίες καὶ μυρτιὲς δὲν θὰ βρῶ πιὰ στὸ χρυσαφὶ ξέφωτο.",
 	};
-	bool va = true;
+
+	TEST(utf8_width("wat") == 3, "");
+	TEST(utf8_width("łąć") == 3, "");
+	TEST(utf8_width("łaka łaką") == 9, "");
+	TEST(utf8_width("Γαζίες καὶ μυρτιὲς δὲν θὰ βρῶ πιὰ στὸ χρυσαφὶ ξέφωτο.") == 53, "");
+	TEST(utf8_width("Eble ĉiu kvazaŭdeca fuŝĥoraĵo ĝojigas homtipon.") == 47, "");
+
 	for (size_t i = 0; i < sizeof(svs)/sizeof(utf8*); ++i) {
-		va = va && utf8_validate(svs[i]);
+		TEST(utf8_width(svs[i])<=strlen(svs[i]), "apparent width <= length; loose, but always true");
+		TEST(utf8_width(svs[i]) == utf8_ng_till(svs[i], svs[i]+strlen(svs[i])), "");
+		TEST(utf8_validate(svs[i]), "all valid strings are valid");
 	}
-	TEST(va, "all valid strings are valid");
 
 	utf8* sis[] = {
-		"a\xff",
+		"\xf0", // byte says 4 bytes, but there is only one
+		"\xe0",
+		"\xb0",
+		// ff, c0, c1, fe, ff are never used in utf-8
+		"\xff",
+		"\xc0",
+		"\xc1",
+		"\xfe",
+		"\xff",
+		"\x20\xac", // Euro sign in utf-16, big endian
+		"\xac\x20", // Euro sign in utf-16, little endian
 	};
-	bool inv = true;
 	for (size_t i = 0; i < sizeof(sis)/sizeof(utf8*); ++i) {
-		inv = inv && !utf8_validate(sis[i]);
+		TEST(!utf8_validate(sis[i]), "all invalid strings are invalid");
 	}
-	TEST(inv, "all invalid strings are invalid");
 
-	TEST(utf8_slice_length("łaka łaka", 2) == 3, "");
+	TEST(utf8_slice_length("łaka łaką", 2) == 3, "");
+	TEST(utf8_slice_length("qq", 2) == 2, "");
+	TEST(utf8_slice_length("", 2) == 0, "");
+	TEST(utf8_slice_length("a", 0) == 0, "");
+
+	utf8 inserted[20] = "łąkała";
+	utf8_insert(inserted, "ń", 2);
+	TEST(!strcmp(inserted, "łąńkała"), "");
+	utf8_insert(inserted, "ł", 5);
+	TEST(!strcmp(inserted, "łąńkałła"), "");
+	utf8_remove(inserted, 0);
+	TEST(!strcmp(inserted, "ąńkałła"), "");
+	utf8_remove(inserted, 4);
+	TEST(!strcmp(inserted, "ąńkała"), "");
+	utf8_remove(inserted, 4);
+	TEST(!strcmp(inserted, "ąńkaa"), "");
+	TEST(utf8_ng_till(inserted, inserted+5) == 3, "");
 
 
 	END_SECTION("utf8");
