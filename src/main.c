@@ -166,14 +166,13 @@ int main(int argc, char* argv[])  {
 				prompt_open(&i, t.dst, t.dst, PATH_MAX);
 				break;
 			case CMD_ENTER_DIR:
-				if (!pv->show_hidden && !ifaiv(pv, pv->selection)) break;
+				if (!pv->show_hidden && !ifaiv(pv, pv->selection));
 				else if (S_ISDIR(pv->file_list[pv->selection]->s.st_mode)) {
 					enter_dir(pv->wd, pv->file_list[pv->selection]->file_name);
 				}
 				else if (S_ISLNK(pv->file_list[pv->selection]->s.st_mode)) {
 					enter_dir(pv->wd, pv->file_list[pv->selection]->link_path);
 				}
-				else break;
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				first_entry(pv);
 				break;
@@ -267,7 +266,7 @@ int main(int argc, char* argv[])  {
 				break;
 			case CMD_TOGGLE_HIDDEN:
 				pv->show_hidden = !pv->show_hidden;
-				if (!ifaiv(pv, pv->selection)) {
+				if (!pv->show_hidden && !ifaiv(pv, pv->selection)) {
 					first_entry(pv);
 				}
 				break;
@@ -347,7 +346,7 @@ int main(int argc, char* argv[])  {
 			 * show_hidden 1 |1|1|
 			 * Also don't perform search at all on empty input
 			 */
-			else if ((i.find->t_top - i.find->t) &&
+			else if (i.find->t_top &&
 					!(!pv->show_hidden && i.find->t[0] == '.')) {
 				file_find(pv->file_list, pv->num_files,
 					i.find->t, &pv->selection);

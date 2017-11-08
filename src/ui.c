@@ -191,7 +191,7 @@ void ui_draw(struct ui* const i) {
 			const char type_symbol = type_symbol_mapping[type][0];
 			int color_pair_enabled = type_symbol_mapping[type][1];
 			// TODO is is utf-8 at all? validate
-			const size_t fnlen = strlen(cfr->file_name);
+			//const size_t fnlen = strlen(cfr->file_name);
 			const size_t fnwidth = utf8_width(cfr->file_name);
 			size_t enlen; // ENtry LENgth
 			int padding;
@@ -313,16 +313,11 @@ void ui_draw(struct ui* const i) {
 		WINDOW* cw = panel_window(i->chmod->p);
 		box(cw, 0, 0);
 		mode_t m = i->chmod->m;
-		// fno = File Name Offset (in path)
-		const size_t fno = current_dir_i(i->chmod->path);
-		// TODO what if filename is like 230 characters?
-		mvwprintw(cw, 1, 2, "file: %s%*c", i->chmod->path+fno,
-				i->chmod->ww-(utf8_width(i->chmod->path+fno)+6+2+1), ' ');
-		mvwprintw(cw, 2, 2, "permissions: %o", m);
-		mvwprintw(cw, 3, 2, "owner: %s%*c", i->chmod->owner,
+		mvwprintw(cw, 1, 2, "permissions: %o", m);
+		mvwprintw(cw, 2, 2, "owner: %s%*c", i->chmod->owner,
 				// 7 = "owner: ", 2 = x offset + 1 for border
 				i->chmod->ww-(utf8_width(i->chmod->owner)+7+2+1), ' ');
-		mvwprintw(cw, 4, 2, "group: %s%*c", i->chmod->group,
+		mvwprintw(cw, 3, 2, "group: %s%*c", i->chmod->group,
 				i->chmod->ww-(utf8_width(i->chmod->group)+7+2+1), ' ');
 		for (int b = 0; b < 12; ++b) {
 			char s = (m & (mode_t)1 ? 'x' : ' ');
@@ -399,7 +394,7 @@ int chmod_open(struct ui* i, utf8* path, mode_t m) {
 	 * What does the standard say?
 	 */
 	i->chmod->ww = 34;
-	i->chmod->wh = 18;
+	i->chmod->wh = 17;
 	i->scrw = i->scrh = 0; // Forces geometry update
 	return 0;
 }
@@ -450,10 +445,41 @@ void find_close(struct ui* i, bool success) {
 	i->find = NULL;
 }
 
+struct input get_input(WINDOW* w) {
+	struct input r;
+	memset(&r, 0, sizeof(struct input));
+	size_t utflen = 0;
+	int init = wgetch(w);
+	utf8 u = (utf8)init;
+	const char* kn = keyname(init);
+	if (init == -1 || init == 27) {
+		r.t = NONE;
+	}
+	else if (has_key(init)) {
+		r.t = SPECIAL;
+		r.c = init;
+	}
+	else if (strlen(kn) == 2 && kn[0] == '^') {
+		r.t = CTRL;
+		r.ctrl = kn[1];
+	}
+	else if ((utflen = utf8_g2nb(&u))) {
+		r.t = UTF8;
+		r.utf[0] = u;
+		for (size_t i = 1; i < utflen; ++i) {
+			r.utf[i] = (utf8)wgetch(w);
+		}
+	}
+	else {
+		r.t = NONE;
+	}
+	return r;
+}
+
 enum command get_cmd(struct ui* i) {
 	static int keyseq[MAX_KEYSEQ_LENGTH] = { 0 };
 	static int ksi = 0;
-	int c = getch();
+	int c = getch(); // TODO redo with get_input()
 	//syslog(LOG_DEBUG, "%d, (%d) %d %d %d %d",
 			//c, ksi, keyseq[0], keyseq[1], keyseq[2], keyseq[3]);
 
@@ -533,32 +559,54 @@ int fill_textbox(utf8* buf, utf8** buftop, size_t bsize, int coff, WINDOW* w) {
 	curs_set(2);
 	wmove(w, 0, utf8_width(buf)-utf8_width(*buftop)+coff);
 	wrefresh(w);
-	utf8 c[5];
-	memset(c, 0, sizeof(c));
-	int init = wgetch(w);
-	c[0] = (utf8)init;
-	for (int i = 1; i < utf8_g2nb(c); ++i) {
-		c[i] = (utf8)wgetch(w);
-	}
+	struct input i = get_input(w);
 	curs_set(0);
-	if (init == -1) return 1;
-	else if (init == 27) {
-		// evil ESC
-		return -1;
+	if (i.t == NONE) return 1;
+	else if ((i.t == CTRL && i.ctrl == 'J') ||
+			(i.t == UTF8 && (i.utf[0] == '\n' || i.utf[0] == '\r'))) {
+		if (*buftop != buf) return 0;
 	}
-	else if (init == '\n' || init == '\r') return 0;
-	else if (init == KEY_BACKSPACE) {
-		if (*buftop - buf > 0) {
-			//size_t d = utf8_g2nb(*buftop);
-			utf8_pop(buf, NULL, 1);
-			*buftop = buf + strlen(buf);
-			//*buftop -= d;
+	else if (i.t == UTF8 && (size_t)(*buftop - buf) < bsize) {
+		utf8_insert(buf, i.utf, utf8_ng_till(buf, *buftop));
+		*buftop += utf8_g2nb(i.utf);
+	}
+	else if ((i.t == CTRL && i.ctrl == 'H') || (i.t == SPECIAL && i.c == KEY_BACKSPACE)) {
+		if (*buftop != buf) {
+			const size_t before = strlen(buf);
+			utf8_remove(buf, utf8_ng_till(buf, *buftop)-1);
+			*buftop -= before - strlen(buf);
 		}
 		else return -1;
 	}
-	else if ((size_t)(*buftop - buf) < bsize) {
-		strcat(*buftop, c);
-		*buftop += utf8_g2nb(c);
+	else if ((i.t == CTRL && i.ctrl == 'D') || (i.t == SPECIAL && i.c == KEY_DC)) {
+		utf8_remove(buf, utf8_ng_till(buf, *buftop));
+	}
+	else if ((i.t == CTRL && i.ctrl == 'A') || (i.t == SPECIAL && i.c == KEY_HOME)) {
+		*buftop = buf;
+	}
+	else if ((i.t == CTRL && i.ctrl == 'E') || (i.t == SPECIAL && i.c == KEY_END)) {
+		*buftop = buf+strlen(buf);
+	}
+	else if (i.t == CTRL && i.ctrl == 'U') {
+		*buftop = buf;
+		memset(buf, 0, bsize);
+	}
+	else if (i.t == CTRL && i.ctrl == 'K') {
+		memset(*buftop, 0, strlen(*buftop));
+	}
+	else if ((i.t == CTRL && i.ctrl == 'F') || (i.t == SPECIAL && i.c == KEY_RIGHT)) {
+		if ((size_t)(*buftop - buf) < bsize) {
+			*buftop += utf8_g2nb(*buftop);
+		}
+	}
+	else if ((i.t == CTRL && i.ctrl == 'B') || (i.t == SPECIAL && i.c == KEY_LEFT)) {
+		if ((size_t)(*buftop - buf) != 0) {
+			const size_t gt = utf8_ng_till(buf, *buftop);
+			*buftop = buf;
+			for (size_t i = 0; i < gt-1; ++i) {
+				*buftop += utf8_g2nb(*buftop);
+			}
+		}
 	}
 	return 1;
 }

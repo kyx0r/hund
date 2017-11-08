@@ -153,7 +153,7 @@ static const char type_symbol_mapping[][2] = {
 
 struct ui_find {
 	utf8* t; // Pointer to buffer where searched name will be held
-	char* t_top; // Used by fill_textbox. Does not have to == t
+	utf8* t_top; // Used by fill_textbox. Does not have to == t
 	size_t t_size; // Size of buffer; for fill_textbox
 	fnum_t sbfc; // Selection Before Find Command
 	/* If find was escaped, it returns to sbfc.
@@ -222,6 +222,23 @@ void prompt_close(struct ui*);
 void find_open(struct ui*, utf8*, utf8*, size_t);
 void find_close(struct ui*, bool);
 
+enum input_type {
+	NONE = 0,
+	UTF8,
+	SPECIAL,
+	CTRL,
+};
+
+struct input {
+	enum input_type t;
+	union {
+		char utf[5];
+		char ctrl;
+		int c;
+	};
+};
+
+struct input get_input(WINDOW*);
 enum command get_cmd(struct ui*);
 int fill_textbox(utf8*, utf8**, size_t, int, WINDOW*);
 
