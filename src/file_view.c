@@ -85,8 +85,8 @@ void prev_entry(struct file_view* fv) {
 }
 
 void first_entry(struct file_view* fv) {
-	if (!fv->num_files) return;
-	if (fv->show_hidden) {
+	if (!fv->num_files || fv->show_hidden ||
+			(!fv->show_hidden && !fv->num_files)) {
 		fv->selection = 0;
 	}
 	else {
