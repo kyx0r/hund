@@ -129,8 +129,6 @@ void ui_draw(struct ui* const i) {
 		getmaxyx(w, _ph, _pw);
 		if (_ph < 0 || _ph < 0) return; // these may be -1
 		const fnum_t ph = _ph, pw = _pw;
-		//box(w, 0, 0);
-		//wborder(w, '|', '|', '-', '-', '+', '+', '+', '+');
 
 		/* Top pathbar */
 		/* Padded on both sides with space */
@@ -138,14 +136,13 @@ void ui_draw(struct ui* const i) {
 		const int pi = prettify_path_i(s->wd, pwd->pw_dir);
 		size_t path_width = utf8_width(s->wd+pi) + (pi ? 1 : 0);
 		wattron(w, COLOR_PAIR(2));
-		if (path_width+2 <= pw) {
-			if (pi) mvwprintw(w, 0, 0, " ~");
-			else mvwprintw(w, 0, 0, " ");
-			mvwprintw(w, 0, (pi ? 2 : 1), "%s%*c ",
+		if (path_width <= pw-2) {
+			mvwprintw(w, 0, 0, "%s%s%*c ",
+					(pi ? " ~" : " "),
 					s->wd+pi, pw-utf8_width(s->wd+pi), ' ');
 		}
 		else {
-			size_t sg = path_width+1 - pw;
+			size_t sg = path_width - (pw-2) - (pi?1:0);
 			mvwprintw(w, 0, 0, " %s ",
 					s->wd+pi+utf8_slice_length(s->wd+pi, sg));
 		}
@@ -401,9 +398,6 @@ int chmod_open(struct ui* i, utf8* path, mode_t m) {
 	i->m = MODE_CHMOD;
 	strcpy(i->chmod->owner, pwd->pw_name);
 	strcpy(i->chmod->group, grp->gr_name);
-	/* TODO should I care about smaller terminal?
-	 * What does the standard say?
-	 */
 	i->chmod->ww = 34;
 	i->chmod->wh = 17;
 	i->scrw = i->scrh = 0; // Forces geometry update
@@ -463,16 +457,17 @@ struct input get_input(WINDOW* w) {
 	int init = wgetch(w);
 	utf8 u = (utf8)init;
 	const char* kn = keyname(init);
-	if (init == -1 || init == 27) {
+	syslog(LOG_DEBUG, "get_input: %s (%d)", kn, init);
+	if (init == -1) {
 		r.t = NONE;
-	}
-	else if (has_key(init)) {
-		r.t = SPECIAL;
-		r.c = init;
 	}
 	else if (strlen(kn) == 2 && kn[0] == '^') {
 		r.t = CTRL;
 		r.ctrl = kn[1];
+	}
+	else if (has_key(init)) {
+		r.t = SPECIAL;
+		r.c = init;
 	}
 	else if ((utflen = utf8_g2nb(&u))) {
 		r.t = UTF8;
@@ -573,6 +568,7 @@ int fill_textbox(utf8* buf, utf8** buftop, size_t bsize, int coff, WINDOW* w) {
 	struct input i = get_input(w);
 	curs_set(0);
 	if (i.t == NONE) return 1;
+	if (i.t == CTRL && i.ctrl == '[') return -1;
 	else if ((i.t == CTRL && i.ctrl == 'J') ||
 			(i.t == UTF8 && (i.utf[0] == '\n' || i.utf[0] == '\r'))) {
 		if (*buftop != buf) return 0;
