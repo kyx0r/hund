@@ -2,19 +2,16 @@
 A terminal file manager.
 #### Current features
 - Vim-inspired command system
-- Dynamic window size
-- File type recognition (indicated by color and symbol)
-- Follow symlinks
+- UTF-8 support
+- Symlink aware
 - Move/remove/copy/rename file/directory
 - Hide/show hidden files
 - Change file permissions/owner/group
 - Create directory
 - Find file in current directory
 #### Planned features
-- Rich error/warning/info log
 - Open in external program, based on extension
 - Rename multiple files at once (somewhat like ranger)
-- UTF-8 support
 - Task queue of some sort
 - Fancy file sorting
 - Configuration in a file
@@ -37,10 +34,9 @@ Hund uses dual-panel view just like GNU Midnight Commander does. And it uses ncu
 - `rn` rename highlighted file
 - `mk` create directory
 - `cd` open directory
-- `/` find file in working directory
-	- `(any characters)` enter name of searched file
-	- `ESC` abort search and return to entry highlighted before searching
-	- `ENTER` exit search and stay at found entry
+- `/` find file in working directory (opens PROMPT)
+	- aborting search returns to entry highlighted before searching
+	- applying search leaves selection at found entry
 - `ch` change file permissions
 	- `qq` abort changes and quit chmod
 	- `ch` apply changes and quit chmod
@@ -58,5 +54,16 @@ Hund uses dual-panel view just like GNU Midnight Commander does. And it uses ncu
 	- `or` toggle other read
 	- `ow` toggle other write
 	- `ox` toggle other execute
+- PROMPT
+	- `ENTER` or `^J` accept input
+	- `ESC` or `^[` abort input
+	- `BACKSPACE` or `^H' backspace (delete before cursor)
+	- `DELETE` or `^D` delete after cursor
+	- `HOME` or `^A` place cursor at the begining of input
+	- `END` or `^E` place cursor at the end of input
+	- `RIGHT` or `^F` go right
+	- `LEFT` or `^B` go left
+	- `^U` clear whole input
+	- `^K` clear input after cursor
 #### Name
 _Hund_ is a german word for _dog_.
