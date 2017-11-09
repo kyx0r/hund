@@ -34,7 +34,7 @@ static int file_sort(const struct dirent** a, const struct dirent** b) {
 }
 
 /* Checks if that thing pointed by path is a directory
- * TODO will that work if checking link???
+ * If path points to link, then pointed file is checked
  */
 bool is_dir(const char* path) {
 	struct stat s;
