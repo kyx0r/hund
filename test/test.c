@@ -88,12 +88,6 @@ int main() {
 		TEST(tup[i].cp == utf8_b2cp(tup[i].b), "sample pairs of glyphs and codepoints match");
 	}
 
-	utf8 str[] = "ćął";
-	utf8 buf[3];
-	utf8_pop(str, buf, 1);
-	TEST(!strcmp(buf, "ł") && !strcmp(str, "ćą"), "");
-
-
 	bool symmetric = true;
 	char b[4];
 	for (codepoint_t cp = 0; cp < 0x20000; ++cp) {

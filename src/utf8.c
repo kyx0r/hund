@@ -82,7 +82,6 @@ codepoint_t utf8_b2cp(const utf8* const b) {
  * returns 0 if initial byte is invalid
  */
 size_t utf8_g2nb(const utf8* const g) {
-	// If it hits null terminator I want it to return 0
 	if (!*g) return 0;
 	/* It's simple, really
 	 * I'm looking at top 5 bits (32 possibilities) of initial byte
@@ -168,28 +167,6 @@ bool utf8_validate(const utf8* const b) {
 	return i == bl;
 }
 
-/* Pop n chars off the top of a,
- * and place them in b, preserving order
- * (b is expected to be big enough to fit all n glyphs)
- * return length in glyphs of a after operation
- * Buffer sizes or addresses are left untouched. (no free of realloc)
- * If b is NULL, then no glyph is copied.
- * TODO there is more...
- *
- * strcat() is analogous, opposite function (push)
- */
-size_t utf8_pop(utf8* const a, utf8* const b, size_t n) {
-	size_t aw = utf8_width(a);
-	if (n > aw) return aw;
-	utf8* t = a;
-	for (size_t i = 0; i < aw-n; ++i) {
-		t += utf8_g2nb(t);
-	}
-	if (b) strcpy(b, t);
-	memset(t, 0, strlen(t));
-	return aw-n;
-}
-
 void utf8_insert(utf8* const a, utf8* const b, size_t pos) {
 	const size_t bl = strlen(b);
 	utf8* t = a;
@@ -204,7 +181,6 @@ void utf8_insert(utf8* const a, utf8* const b, size_t pos) {
 /* remove glyph at index
  */
 void utf8_remove(utf8* const a, size_t j) {
-	// TODO test
 	utf8* t = a;
 	for (size_t i = 0; i < j; ++i) {
 		t += utf8_g2nb(t);

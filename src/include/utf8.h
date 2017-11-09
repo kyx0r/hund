@@ -35,7 +35,6 @@ size_t utf8_slice_length(const utf8* const, size_t);
 size_t utf8_ng_till(const utf8* const, const utf8* const);
 bool utf8_validate(const utf8* const);
 
-size_t utf8_pop(utf8* const, utf8* const, size_t c);
 void utf8_insert(utf8* const, utf8* const, size_t);
 void utf8_remove(utf8* const, size_t);
 
