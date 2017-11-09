@@ -27,8 +27,6 @@
 
 #include "include/ui.h"
 
-#define MSG_BUFFER_SIZE 256
-
 enum task_type {
 	TASK_NONE = 0,
 	TASK_MKDIR,
@@ -52,7 +50,7 @@ enum task_state {
 struct task {
 	enum task_state s;
 	enum task_type t;
-	char *src, *dst;
+	utf8 *src, *dst;
 };
 
 int main(int argc, char* argv[])  {
@@ -114,11 +112,23 @@ int main(int argc, char* argv[])  {
 	for (int v = 0; v < 2; ++v) {
 		get_cwd(fvs[v].wd);
 		if (init_wd[v]) {
-			char* e = strdup(init_wd[v]);
-			enter_dir(fvs[v].wd, e);
+			utf8* e = strdup(init_wd[v]);
+			int r = enter_dir(fvs[v].wd, e);
+			if (r) {
+				ui_end(&i);
+				fprintf(stderr, "path too long: it's %lu, limit is %d\n",
+						strlen(fvs[v].wd), PATH_MAX);
+				exit(1);
+			}
 			free(e);
 		}
-		scan_dir(fvs[v].wd, &fvs[v].file_list, &fvs[v].num_files);
+		int r = scan_dir(fvs[v].wd, &fvs[v].file_list, &fvs[v].num_files);
+		if (r) {
+			ui_end(&i);
+			fprintf(stderr, "cannot scan directory '%s': %s (%d)\n",
+					fvs[v].wd, strerror(r), r);
+			exit(1);
+		}
 		first_entry(&fvs[v]);
 	}
 
@@ -166,36 +176,88 @@ int main(int argc, char* argv[])  {
 				prompt_open(&i, t.dst, t.dst, PATH_MAX);
 				break;
 			case CMD_ENTER_DIR:
-				if (!pv->show_hidden && !ifaiv(pv, pv->selection));
+				if (!pv->show_hidden && !ifaiv(pv, pv->selection)) break;
 				else if (S_ISDIR(pv->file_list[pv->selection]->s.st_mode)) {
-					enter_dir(pv->wd, pv->file_list[pv->selection]->file_name);
+					int r = enter_dir(pv->wd,
+							pv->file_list[pv->selection]->file_name);
+					if (r) {
+						i.error = malloc(MSG_BUFFER_SIZE);
+						snprintf(i.error, MSG_BUFFER_SIZE,
+								"path too long: it's %lu, limit is %d",
+								strlen(pv->wd), PATH_MAX);
+						break;
+					}
 				}
 				else if (S_ISLNK(pv->file_list[pv->selection]->s.st_mode)) {
-					enter_dir(pv->wd, pv->file_list[pv->selection]->link_path);
+					utf8* p = malloc(PATH_MAX);
+					strcpy(p, pv->wd);
+					int r = enter_dir(p,
+							pv->file_list[pv->selection]->link_path);
+					if (r) {
+						i.error = malloc(MSG_BUFFER_SIZE);
+						snprintf(i.error, MSG_BUFFER_SIZE,
+								"path too long: it's %lu, limit is %d",
+								strlen(pv->wd), PATH_MAX);
+						free(p);
+						break;
+					}
+					if (is_dir(p)) {
+						enter_dir(pv->wd,
+								pv->file_list[pv->selection]->link_path);
+					}
+					free(p);
 				}
-				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
+				else break;
+				{
+				int r = scan_dir(pv->wd, &pv->file_list, &pv->num_files);
+				if (r) {
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
+							"cannot scan directory: %s (%d)", strerror(r), r);
+					up_dir(pv->wd);
+					r = scan_dir(pv->wd, &pv->file_list, &pv->num_files);
+					if (r) abort(); // TODO
+					break;
+				}
 				first_entry(pv);
+				}
 				break;
 			case CMD_UP_DIR:
 				{
-				char* prevdir = malloc(NAME_MAX);
+				utf8* prevdir = malloc(NAME_MAX);
 				current_dir(pv->wd, prevdir);
-				int r = up_dir(pv->wd);
-				if (!r) {
-					scan_dir(pv->wd, &pv->file_list, &pv->num_files);
-					file_index(pv->file_list, pv->num_files,
-							prevdir, &pv->selection);
-					if (!pv->show_hidden && !ifaiv(pv, pv->selection)) {
-						first_entry(pv);
-					}
+				up_dir(pv->wd);
+				int r = scan_dir(pv->wd, &pv->file_list, &pv->num_files);
+				if (r) {
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
+							"cannot scan directory: %s (%d)", strerror(r), r);
+					r = enter_dir(pv->wd, prevdir);
+					if (r) abort(); // TODO
+					free(prevdir);
+					break;
+				}
+				file_index(pv->file_list, pv->num_files,
+						prevdir, &pv->selection);
+				if (!pv->show_hidden && !ifaiv(pv, pv->selection)) {
+					first_entry(pv);
 				}
 				free(prevdir);
 				}
 				break;
 			case CMD_COPY:
+				{
 				t.src = calloc(PATH_MAX, sizeof(char));
 				strcpy(t.src, pv->wd);
-				enter_dir(t.src, pv->file_list[pv->selection]->file_name);
+				int r = enter_dir(t.src, pv->file_list[pv->selection]->file_name);
+				if (r) {
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
+							"path too long: it's %lu, limit is %d",
+							strlen(pv->wd), PATH_MAX);
+					t.s = TASK_STATE_FINISHED;
+					break;
+				}
 				t.dst = calloc(PATH_MAX, sizeof(char));
 				strcpy(t.dst, sv->wd);
 				strcat(t.dst, "/");
@@ -203,23 +265,52 @@ int main(int argc, char* argv[])  {
 				t.s = TASK_STATE_GATHERING_DATA;
 				prompt_open(&i, t.dst+strlen(t.dst),
 						t.dst+strlen(t.dst), NAME_MAX);
+				}
 				break;
 			case CMD_MOVE:
+				{
 				t.src = calloc(PATH_MAX, sizeof(char));
 				strcpy(t.src, pv->wd);
-				enter_dir(t.src, pv->file_list[pv->selection]->file_name);
+				int r = enter_dir(t.src, pv->file_list[pv->selection]->file_name);
+				if (r) {
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
+							"source path too long: it's %lu, limit is %d",
+							strlen(pv->wd), PATH_MAX);
+					t.s = TASK_STATE_FINISHED;
+					break;
+				}
 				t.dst = calloc(PATH_MAX, sizeof(char));
 				strcpy(t.dst, sv->wd);
-				enter_dir(t.dst, pv->file_list[pv->selection]->file_name);
+				r += enter_dir(t.dst, pv->file_list[pv->selection]->file_name);
+				if (r) {
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
+							"destination path too long: it's %lu, limit is %d",
+							strlen(pv->wd), PATH_MAX);
+					t.s = TASK_STATE_FINISHED;
+					break;
+				}
 				t.t = TASK_MOVE;
 				t.s = TASK_STATE_DATA_GATHERED;
+				}
 				break;
 			case CMD_REMOVE:
+				{
 				t.src = calloc(PATH_MAX, sizeof(char));
 				strcpy(t.src, pv->wd);
-				enter_dir(t.src, pv->file_list[pv->selection]->file_name);
+				int r = enter_dir(t.src, pv->file_list[pv->selection]->file_name);
+				if (r) {
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
+							"path too long: it's %lu, limit is %d",
+							strlen(pv->wd), PATH_MAX);
+					t.s = TASK_STATE_FINISHED;
+					break;
+				}
 				t.t = TASK_RM;
 				t.s = TASK_STATE_DATA_GATHERED;
+				}
 				break;
 			case CMD_CREATE_DIR:
 				t.src = calloc(PATH_MAX, sizeof(char));
@@ -232,7 +323,7 @@ int main(int argc, char* argv[])  {
 				break;
 			case CMD_FIND:
 				{
-				char* t = calloc(NAME_MAX, 1);
+				utf8* t = calloc(NAME_MAX, 1);
 				find_open(&i, t, t, NAME_MAX);
 				}
 				break;
@@ -244,9 +335,17 @@ int main(int argc, char* argv[])  {
 				break;
 			case CMD_CHMOD:
 				{
-				char* p = malloc(PATH_MAX);
+				utf8* p = malloc(PATH_MAX);
 				strcpy(p, pv->wd);
-				enter_dir(p, pv->file_list[pv->selection]->file_name);
+				int r = enter_dir(p, pv->file_list[pv->selection]->file_name);
+				if (r) {
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
+							"path too long: it's %lu, limit is %d",
+							strlen(pv->wd), PATH_MAX);
+					free(p);
+					break;
+				}
 				chmod_open(&i, p, pv->file_list[pv->selection]->s.st_mode);
 				}
 				break;
@@ -256,7 +355,23 @@ int main(int argc, char* argv[])  {
 				size_t fnlen = strlen(pv->file_list[pv->selection]->file_name);
 				t.src = calloc(PATH_MAX, sizeof(char));
 				strcpy(t.src, pv->wd);
-				enter_dir(t.src, pv->file_list[pv->selection]->file_name);
+				int r = enter_dir(t.src, pv->file_list[pv->selection]->file_name);
+				if (r) {
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
+							"path too long: it's %lu, limit is %d",
+							strlen(pv->wd), PATH_MAX);
+					t.s = TASK_STATE_FINISHED;
+					break;
+				}
+				if (!utf8_validate(t.src)) {
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
+							"this filename is not a valid UTF-8");
+					// TODO offer clearing entire name and giving it a new one
+					t.s = TASK_STATE_FINISHED;
+					break;
+				}
 				t.dst = calloc(PATH_MAX, sizeof(char));
 				strcpy(t.dst, t.src);
 				t.t = TASK_RENAME;
@@ -265,13 +380,26 @@ int main(int argc, char* argv[])  {
 				}
 				break;
 			case CMD_TOGGLE_HIDDEN:
+				/* Cursed CMD_TOGGLE_HIDDEN!
+				 * FIXME when i enter /root or lost+found (as not-root)
+				 * and toggle hidden two times,
+				 * then hund segfaults
+				 * I think I should write handles to scan_dir() errors...
+				 */
 				pv->show_hidden = !pv->show_hidden;
 				if (!pv->show_hidden && !ifaiv(pv, pv->selection)) {
 					first_entry(pv);
 				}
 				break;
 			case CMD_REFRESH:
-				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
+				{
+				int r = scan_dir(pv->wd, &pv->file_list, &pv->num_files);
+				if (r) {
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
+							"cannot scan directory: %s (%d)", strerror(r), r);
+				}
+				}
 				break;
 			default:
 				break;
@@ -435,7 +563,14 @@ int main(int argc, char* argv[])  {
 			case TASK_CD:
 				{
 				char* path = malloc(PATH_MAX);
-				enter_dir(path, t.dst); // path may be relative or ~/something
+				strcpy(path, pv->wd);
+				int r = enter_dir(path, t.dst);
+				if (r) {
+					i.error = malloc(MSG_BUFFER_SIZE);
+					snprintf(i.error, MSG_BUFFER_SIZE,
+							"path too long: it's %lu, limit is %d",
+							strlen(pv->wd), PATH_MAX);
+				}
 				syslog(LOG_DEBUG, "task_cd %s", path);
 				if (!file_exists(path)) {
 					i.error = malloc(MSG_BUFFER_SIZE);
@@ -457,7 +592,8 @@ int main(int argc, char* argv[])  {
 				if (err) {
 					i.error = malloc(MSG_BUFFER_SIZE);
 					snprintf(i.error, MSG_BUFFER_SIZE,
-							"cd failed: %s", strerror(err));
+							"path too long: it's %lu, limit is %d",
+							strlen(pv->wd), PATH_MAX);
 					t.s = TASK_STATE_FINISHED;
 					free(path);
 					break;

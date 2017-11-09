@@ -32,6 +32,7 @@
 #include "utf8.h"
 
 //#define DEFAULT_GETCH_TIMEOUT 500
+#define MSG_BUFFER_SIZE 256
 
 enum mode {
 	MODE_MANAGER,
