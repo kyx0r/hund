@@ -100,13 +100,13 @@ struct ui ui_init(struct file_view* pv, struct file_view* sv) {
 	return i;
 }
 
-void ui_pause(struct ui* const i) {
+void ui_system(const char* const cmd) {
 	def_prog_mode();
 	endwin();
-}
-
-void ui_restore(struct ui* const i) {
-	refresh();
+	system(cmd);
+	reset_prog_mode(); // FIXME ?
+	refresh(); // FIXME ?
+	doupdate(); // FIXME ?
 }
 
 void ui_end(struct ui* const i) {

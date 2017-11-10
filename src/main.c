@@ -178,11 +178,10 @@ int main(int argc, char* argv[])  {
 					free(file);
 					break;
 				}
-				utf8* cmd = malloc(PATH_MAX);
-				snprintf(cmd, PATH_MAX, "less '%s'", file); // TODO recognize format
-				ui_pause(&i);
-				system(cmd);
-				ui_restore(&i);
+				static const char* prog = "less";
+				utf8* cmd = malloc(strlen(file)+strlen(prog)+2+1+1);
+				snprintf(cmd, PATH_MAX, "%s '%s'", prog, file); // TODO recognize format
+				ui_system(cmd);
 				free(cmd);
 				free(file);
 				}
@@ -486,16 +485,16 @@ int main(int argc, char* argv[])  {
 			else if (r == 0) {
 				find_close(&i, true);
 			}
-			/* Truth table - "Perform searching?"
-			 *    .hidden.file | visible.file
-			 * show_hidden 0 |0|1|
-			 * show_hidden 1 |1|1|
-			 * Also don't perform search at all on empty input
-			 */
-			else if (i.find->t_top &&
-					!(!pv->show_hidden && i.find->t[0] == '.')) {
-				file_find(pv->file_list, pv->num_files,
-					i.find->t, &pv->selection);
+			else if (i.find->t_top != i.find->t) {
+				do {
+					file_find(pv->file_list, pv->num_files,
+						i.find->t, &pv->selection, pv->selection);
+				}
+				while (!pv->show_hidden && !ifaiv(pv, pv->selection) &&
+						pv->selection < pv->num_files-1 && (pv->selection += 1));
+			}
+			else {
+				pv->selection = i.find->sbfc;
 			}
 		} // MODE_FIND
 

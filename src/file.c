@@ -124,19 +124,29 @@ void file_index(struct file_record** fl, fnum_t nf,
 	}
 }
 
-/* Unlike file_index() it does not look for exact match
- * If nothing found, does not modify SELection
- */
+#define abs(V) ((V) < 0 ? -(V) : (V))
+#define min(A,B) ((A) > (B) ? (B) : (A))
 void file_find(struct file_record** fl, fnum_t nf,
-		const char* const name, fnum_t* sel) {
-	fnum_t i = 0;
-	while (i < nf && strncmp(fl[i]->file_name, name, strlen(name))) {
-		i += 1;
+		const char* const name, fnum_t* sel, fnum_t start) {
+	fnum_t bm = *sel; // Best Match
+	unsigned int bmv = ~0; // Best Match Value
+	for (fnum_t i = start; i < nf; ++i) {
+		for (size_t j = 0; strlen(fl[i]->file_name+j); ++j) {
+			size_t s = min(strlen(fl[i]->file_name+j), strlen(name));
+			unsigned int c = abs(strncmp(fl[i]->file_name+j, name, s));
+			if (c < bmv) {
+				bmv = c;
+				bm = i;
+			}
+		}
 	}
-	if (i != nf) {
-		*sel = i;
+	if (!bmv) {
+		syslog(LOG_DEBUG, "found: %s", fl[bm]->file_name);
+		*sel = bm;
 	}
 }
+#undef abs
+#undef min
 
 int file_move(const char* src, const char* dst) {
 	// Split dst[] to name[] and dst_dir[]

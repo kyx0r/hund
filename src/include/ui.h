@@ -214,8 +214,7 @@ struct ui {
 };
 
 struct ui ui_init(struct file_view*, struct file_view*);
-void ui_pause(struct ui* const);
-void ui_restore(struct ui* const);
+void ui_system(const char* const);
 void ui_end(struct ui* const);
 void ui_draw(struct ui* const);
 void ui_update_geometry(struct ui* const);

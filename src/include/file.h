@@ -73,7 +73,8 @@ bool file_exists(const char*);
 int scan_dir(const char*, struct file_record***, fnum_t*);
 void delete_file_list(struct file_record***, fnum_t*);
 void file_index(struct file_record**, fnum_t, const char* const, fnum_t*);
-void file_find(struct file_record**, fnum_t, const char* const, fnum_t*);
+void file_find(struct file_record**, fnum_t,
+		const char* const, fnum_t*, fnum_t);
 
 int file_move(const char*, const char*);
 int file_remove(const char*);
