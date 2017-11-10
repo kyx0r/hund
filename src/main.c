@@ -100,7 +100,7 @@ int main(int argc, char* argv[])  {
 		optind += 1;
 	}
 
-	openlog(argv[0], LOG_PID, LOG_USER);
+	openlog(argv[0]+2, LOG_PID, LOG_USER);
 	syslog(LOG_NOTICE, "%s started", argv[0]+2);
 
 	struct file_view fvs[2];
@@ -118,7 +118,7 @@ int main(int argc, char* argv[])  {
 				ui_end(&i);
 				fprintf(stderr, "path too long: it's %lu, limit is %d\n",
 						strlen(fvs[v].wd), PATH_MAX);
-				exit(1);
+				exit(EXIT_FAILURE);
 			}
 			free(e);
 		}
@@ -127,7 +127,7 @@ int main(int argc, char* argv[])  {
 			ui_end(&i);
 			fprintf(stderr, "cannot scan directory '%s': %s (%d)\n",
 					fvs[v].wd, strerror(r), r);
-			exit(1);
+			exit(EXIT_FAILURE);
 		}
 		first_entry(&fvs[v]);
 	}
@@ -168,6 +168,24 @@ int main(int argc, char* argv[])  {
 				break;
 			case CMD_ENTRY_UP:
 				prev_entry(pv);
+				break;
+			case CMD_OPEN_FILE:
+				{
+				utf8* file = malloc(PATH_MAX);
+				strcpy(file, pv->wd);
+				enter_dir(file, pv->file_list[pv->selection]->file_name);
+				if (is_dir(file)) {
+					free(file);
+					break;
+				}
+				utf8* cmd = malloc(PATH_MAX);
+				snprintf(cmd, PATH_MAX, "less '%s'", file); // TODO recognize format
+				ui_pause(&i);
+				system(cmd);
+				ui_restore(&i);
+				free(cmd);
+				free(file);
+				}
 				break;
 			case CMD_CD:
 				t.dst = calloc(PATH_MAX, sizeof(char));
@@ -443,18 +461,18 @@ int main(int argc, char* argv[])  {
 				t.s = TASK_STATE_GATHERING_DATA;
 				prompt_open(&i, i.chmod->tmp, i.chmod->tmp, LOGIN_NAME_MAX);
 				break;
-			case CMD_TOGGLE_UIOX: TOGGLE_BIT(i.chmod->m, S_ISUID); break;
-			case CMD_TOGGLE_GIOX: TOGGLE_BIT(i.chmod->m, S_ISGID); break;
-			case CMD_TOGGLE_SB: TOGGLE_BIT(i.chmod->m, S_ISVTX); break;
-			case CMD_TOGGLE_UR: TOGGLE_BIT(i.chmod->m, S_IRUSR); break;
-			case CMD_TOGGLE_UW: TOGGLE_BIT(i.chmod->m, S_IWUSR); break;
-			case CMD_TOGGLE_UX: TOGGLE_BIT(i.chmod->m, S_IXUSR); break;
-			case CMD_TOGGLE_GR: TOGGLE_BIT(i.chmod->m, S_IRGRP); break;
-			case CMD_TOGGLE_GW: TOGGLE_BIT(i.chmod->m, S_IWGRP); break;
-			case CMD_TOGGLE_GX: TOGGLE_BIT(i.chmod->m, S_IXGRP); break;
-			case CMD_TOGGLE_OR: TOGGLE_BIT(i.chmod->m, S_IROTH); break;
-			case CMD_TOGGLE_OW: TOGGLE_BIT(i.chmod->m, S_IWOTH); break;
-			case CMD_TOGGLE_OX: TOGGLE_BIT(i.chmod->m, S_IXOTH); break;
+			case CMD_TOGGLE_UIOX: i.chmod->m ^= S_ISUID; break;
+			case CMD_TOGGLE_GIOX: i.chmod->m ^= S_ISGID; break;
+			case CMD_TOGGLE_SB: i.chmod->m ^= S_ISVTX; break;
+			case CMD_TOGGLE_UR: i.chmod->m ^= S_IRUSR; break;
+			case CMD_TOGGLE_UW: i.chmod->m ^= S_IWUSR; break;
+			case CMD_TOGGLE_UX: i.chmod->m ^= S_IXUSR; break;
+			case CMD_TOGGLE_GR: i.chmod->m ^= S_IRGRP; break;
+			case CMD_TOGGLE_GW: i.chmod->m ^= S_IWGRP; break;
+			case CMD_TOGGLE_GX: i.chmod->m ^= S_IXGRP; break;
+			case CMD_TOGGLE_OR: i.chmod->m ^= S_IROTH; break;
+			case CMD_TOGGLE_OW: i.chmod->m ^= S_IWOTH; break;
+			case CMD_TOGGLE_OX: i.chmod->m ^= S_IXOTH; break;
 			default: break;
 			}
 		} // MODE_CHMOD

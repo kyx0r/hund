@@ -44,9 +44,6 @@
 
 #include "path.h"
 
-// If bit (B) is set, unset it and vice versa
-#define TOGGLE_BIT(M, B) if ((M) & (B)) { (M) &= ~(B); } else { (M) |= (B); }
-
 /* From LSB to MSB, by bit index */
 static const char* const mode_bit_meaning[] = {
 	"execute/sears by others",
@@ -75,8 +72,8 @@ bool is_dir(const char*);
 bool file_exists(const char*);
 int scan_dir(const char*, struct file_record***, fnum_t*);
 void delete_file_list(struct file_record***, fnum_t*);
-void file_index(struct file_record**, fnum_t, const char*, fnum_t*);
-void file_find(struct file_record**, fnum_t, const char*, fnum_t*);
+void file_index(struct file_record**, fnum_t, const char* const, fnum_t*);
+void file_find(struct file_record**, fnum_t, const char* const, fnum_t*);
 
 int file_move(const char*, const char*);
 int file_remove(const char*);

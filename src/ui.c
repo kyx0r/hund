@@ -100,6 +100,15 @@ struct ui ui_init(struct file_view* pv, struct file_view* sv) {
 	return i;
 }
 
+void ui_pause(struct ui* const i) {
+	def_prog_mode();
+	endwin();
+}
+
+void ui_restore(struct ui* const i) {
+	refresh();
+}
+
 void ui_end(struct ui* const i) {
 	/* Delete panel first, THEN it's window.
 	 * If you resize the terminal window at least once and then quit (q)

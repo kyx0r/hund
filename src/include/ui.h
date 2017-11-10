@@ -59,6 +59,7 @@ enum command {
 	CMD_RENAME,
 	CMD_TOGGLE_HIDDEN,
 	CMD_CD,
+	CMD_OPEN_FILE,
 	CMD_FIND,
 
 	CMD_CHMOD,
@@ -107,6 +108,7 @@ static const struct key2cmd key_mapping[] = {
 	{ .ks = { 'd', 0, 0, 0 }, .d = "up dir", .m = MODE_MANAGER, .c = CMD_UP_DIR },
 	{ .ks = { 'i', 0, 0, 0 }, .d = "enter dir", .m = MODE_MANAGER, .c = CMD_ENTER_DIR },
 	{ .ks = { 'e', 0, 0, 0 }, .d = "enter dir", .m = MODE_MANAGER, .c = CMD_ENTER_DIR },
+	{ .ks = { 'o', 0, 0, 0 }, .d = "open file", .m = MODE_MANAGER, .c = CMD_OPEN_FILE },
 	{ .ks = { '/', 0, 0, 0 }, .d = "find", .m = MODE_MANAGER, .c = CMD_FIND },
 	{ .ks = { 'h', 0, 0, 0 }, .d = "toggle hidden", .m = MODE_MANAGER, .c = CMD_TOGGLE_HIDDEN },
 	{ .ks = { 'c', 'd', 0, 0 }, .d = "open directory", .m = MODE_MANAGER, .c = CMD_CD },
@@ -212,6 +214,8 @@ struct ui {
 };
 
 struct ui ui_init(struct file_view*, struct file_view*);
+void ui_pause(struct ui* const);
+void ui_restore(struct ui* const);
 void ui_end(struct ui* const);
 void ui_draw(struct ui* const);
 void ui_update_geometry(struct ui* const);

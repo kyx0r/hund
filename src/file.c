@@ -114,7 +114,7 @@ void delete_file_list(struct file_record*** file_list, fnum_t* num_files) {
  * If not found, leaves SELection unchanged
  */
 void file_index(struct file_record** fl, fnum_t nf,
-		const char* name, fnum_t* sel) {
+		const char* const name, fnum_t* sel) {
 	fnum_t i = 0;
 	while (i < nf && strcmp(fl[i]->file_name, name)) {
 		i += 1;
@@ -128,7 +128,7 @@ void file_index(struct file_record** fl, fnum_t nf,
  * If nothing found, does not modify SELection
  */
 void file_find(struct file_record** fl, fnum_t nf,
-		const char* name, fnum_t* sel) {
+		const char* const name, fnum_t* sel) {
 	fnum_t i = 0;
 	while (i < nf && strncmp(fl[i]->file_name, name, strlen(name))) {
 		i += 1;
@@ -139,7 +139,6 @@ void file_find(struct file_record** fl, fnum_t nf,
 }
 
 int file_move(const char* src, const char* dst) {
-	syslog(LOG_DEBUG, "file_move(\"%s\", \"%s\")", src, dst);
 	// Split dst[] to name[] and dst_dir[]
 	// to check if destination and source are on the same filesystem
 	// In case they are on the same FS,
@@ -174,7 +173,6 @@ int file_move(const char* src, const char* dst) {
  * (All functions that may fail here, return errno)
  */
 int file_remove(const char* src) {
-	syslog(LOG_DEBUG, "file_remove(\"%s\")", src);
 	struct stat s;
 	if (lstat(src, &s)) return errno;
 	if (S_ISDIR(s.st_mode)) {
@@ -198,7 +196,6 @@ int file_remove(const char* src) {
 }
 
 int file_copy(const char* src, const char* dest) {
-	syslog(LOG_DEBUG, "file_copy(\"%s\", \"%s\")", src, dest);
 	struct stat srcs;
 	if (lstat(src, &srcs)) return errno;
 	if (S_ISDIR(srcs.st_mode)) {
@@ -248,7 +245,6 @@ int file_copy(const char* src, const char* dest) {
 }
 
 int dir_make(const char* path) {
-	syslog(LOG_DEBUG, "dir_make(\"%s\")", path);
 	if (mkdir(path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)) {
 		return errno;
 	}
