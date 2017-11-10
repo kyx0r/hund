@@ -88,15 +88,34 @@ struct ui ui_init(struct file_view* pv, struct file_view* sv) {
 	i.find = NULL;
 	i.error = NULL;
 	i.info = NULL;
+	i.kmap = malloc(default_mapping_length*sizeof(struct input2cmd));
+	for (size_t k = 0; k < default_mapping_length; ++k) {
+		i.kmap[k].m = default_mapping[k].m;
+		i.kmap[k].c = default_mapping[k].c;
+		i.kmap[k].sd = default_mapping[k].sd;
+		i.kmap[k].ld = default_mapping[k].ld;
+		for (int il = 0; il < INPUT_LIST_LENGTH; ++il) {
+			i.kmap[k].i[il].t = default_mapping[k].i[il].t;
+			switch (i.kmap[k].i[il].t) {
+			case NONE: break;
+			case UTF8:
+				strcpy(i.kmap[k].i[il].utf, default_mapping[k].i[il].utf);
+				break;
+			case SPECIAL:
+				i.kmap[k].i[il].c = default_mapping[k].i[il].c;
+				break;
+			case CTRL:
+				i.kmap[k].i[il].ctrl = default_mapping[k].i[il].ctrl;
+				break;
+			}
+		}
+	}
 	WINDOW* sw = newwin(1, 1, 0, 0);
 	keypad(sw, TRUE);
 	//wtimeout(hw, DEFAULT_GETCH_TIMEOUT);
 	i.status = new_panel(sw);
-	i.kml = 0;
-	while (key_mapping[i.kml].ks[0]) {
-		i.kml += 1;
-	}
-	i.mks = calloc(i.kml, sizeof(int));
+	i.kml = default_mapping_length;
+	i.mks = calloc(default_mapping_length, sizeof(int));
 	return i;
 }
 
@@ -303,24 +322,30 @@ void ui_draw(struct ui* const i) {
 	else {
 		mvwprintw(sw, 0, 0, "%*c", i->scrw-1, ' ');
 		wmove(sw, 0, 0);
-		for (int x = 0; x < i->kml; ++x) {
+		for (size_t x = 0; x < i->kml; ++x) {
 			if (!i->mks[x]) continue;
-			int c = 0;
 			wprintw(sw, " ");
-			int k;
-			while ((k = key_mapping[x].ks[c])) {
-				switch (k) {
-				case '\t':
-					wprintw(sw, "TAB");
+			const struct input* const ins = i->kmap[x].i;
+			int c = 0;
+			while (ins[c].t != NONE && c < INPUT_LIST_LENGTH) {
+				switch (ins[c].t) {
+				case NONE: break;
+				case UTF8:
+					wprintw(sw, "%s", ins[c].utf);
+					break;
+				case SPECIAL:
+					wprintw(sw, "special lol");
+					break;
+				case CTRL:
+					wprintw(sw, "^%c", ins[c].ctrl);
 					break;
 				default:
-					wprintw(sw, "%c", key_mapping[x].ks[c]);
 					break;
 				}
 				c += 1;
 			}
 			wattron(sw, COLOR_PAIR(2));
-			wprintw(sw, "%s", key_mapping[x].d);
+			wprintw(sw, "%s", i->kmap[x].sd);
 			wattroff(sw, COLOR_PAIR(2));
 		}
 	}
@@ -492,76 +517,95 @@ struct input get_input(WINDOW* w) {
 }
 
 enum command get_cmd(struct ui* i) {
-	static int keyseq[MAX_KEYSEQ_LENGTH] = { 0 };
-	static int ksi = 0;
-	int c = getch(); // TODO redo with get_input()
-	//syslog(LOG_DEBUG, "%d, (%d) %d %d %d %d",
-			//c, ksi, keyseq[0], keyseq[1], keyseq[2], keyseq[3]);
-
-	if (c == -1 && !ksi) return CMD_NONE;
-	if (c == 27) {
-		//syslog(LOG_DEBUG, "esc?");
-		//timeout();
-		int cc = getch();
-		//timeout(DEFAULT_GETCH_TIMEOUT);
-		if (cc == -1) {
-			//syslog(LOG_DEBUG, "esc");
-			memset(i->mks, 0, i->kml*sizeof(int));
-			memset(keyseq, 0, sizeof(keyseq));
-			ksi = 0;
-			return CMD_NONE;
-		}
-		else {
-			//syslog(LOG_DEBUG, "alt");
-			return CMD_NONE;
-		}
-	}
-	if (c != -1 || !ksi) {
-		keyseq[ksi] = c;
-		ksi += 1;
-	}
-
+	static struct input il[INPUT_LIST_LENGTH];
+	static int ili = 0;
+	struct input newinput = get_input(stdscr);
 	memset(i->mks, 0, i->kml*sizeof(int));
-	for (int c = 0; c < i->kml; c++) {
-		if (key_mapping[c].m != i->m) continue;
-		int s = 0;
-		while (keyseq[s]) {
-			/* mks[c] will contain length of matching sequence
-			 * mks[c] will be zeroed if sequence broken at any point
-			 */
-			if (key_mapping[c].ks[s] == keyseq[s]) {
-				i->mks[c] += 1;
-			}
-			else {
-				i->mks[c] = 0;
+
+	if (newinput.t == NONE) return CMD_NONE;
+	else if (newinput.t == CTRL && newinput.ctrl == '[') {
+		ili = 0;
+		return CMD_NONE;
+	}
+	il[ili] = newinput;
+	ili += 1;
+
+	/* Find matching mappings
+	 * If input is ESC or no mapping matches,
+	 * clear il, ili, and hint/matching table
+	 * If there are a few, do nothing,
+	 * wait longer (but fill table informing what is matching)
+	 * If there is only one, send it and clear il and ili
+	 */
+	for (size_t m = 0; m < i->kml; ++m) {
+		const struct input2cmd* const i2c = &i->kmap[m];
+		if (i2c->m != i->m) continue; // mode mismatch
+		const struct input* const in = i2c->i;
+		for (int s = 0; s < ili; ++s) {
+			if (in[s].t != il[s].t) break;
+			bool match = false;
+			switch (in[s].t) {
+			case NONE: break;
+			case UTF8:
+				match = !strcmp(in[s].utf, il[s].utf);
+				break;
+			case SPECIAL:
+				match = in[s].c == il[s].c;
+				break;
+			case CTRL:
+				match = in[s].ctrl == il[s].ctrl;
 				break;
 			}
-			s += 1;
-		}
-	}
-
-	bool match = false; // At least one match
-	for (int c = 0; c < i->kml; c++) {
-		match = match || i->mks[c];
-	}
-
-	enum command cmd = CMD_NONE;
-	if (match) {
-		for (int c = 0; c < i->kml; c++) {
-			int ksl = 0;
-			for (int s = 0; key_mapping[c].ks[s]; s++) {
-				ksl += 1;
+			if (match) {
+				i->mks[m] += 1;
 			}
-			if (i->mks[c] == ksl) {
-				cmd = key_mapping[c].c;
+			else {
+				i->mks[m] = 0;
+				break;
 			}
 		}
 	}
-	if (!match || ksi == MAX_KEYSEQ_LENGTH || cmd != CMD_NONE) {
-		memset(keyseq, 0, sizeof(keyseq));
-		ksi = 0;
+
+	int matches = 0;
+	size_t mi = 0;
+	for (size_t m = 0; m < i->kml; ++m) {
+		if (i->mks[m]) {
+			matches += 1;
+			mi = m;
+		}
 	}
-	return cmd;
+
+	if (!matches) {
+		ili = 0;
+		memset(i->mks, 0, i->kml*sizeof(int));
+		return CMD_NONE;
+	}
+	else if (matches == 1) {
+		bool fullmatch = true;
+		for (int s = 0; s < INPUT_LIST_LENGTH && i->kmap[mi].i[s].t != NONE; ++s) {
+			fullmatch = fullmatch && il[s].t == i->kmap[mi].i[s].t;
+			switch (il[s].t) {
+			case NONE: break;
+			case UTF8:
+				fullmatch = fullmatch && !strcmp(il[s].utf, i->kmap[mi].i[s].utf);
+				break;
+			case SPECIAL:
+				fullmatch = fullmatch && il[s].c == i->kmap[mi].i[s].c;
+				break;
+			case CTRL:
+				fullmatch = fullmatch && il[s].ctrl == i->kmap[mi].i[s].ctrl;
+				break;
+			}
+		}
+		if (fullmatch) {
+			ili = 0;
+			return i->kmap[mi].c;
+		}
+	}
+	else { // some matches
+
+	}
+	return CMD_NONE;
 }
 
 /* Gets input to buffer
