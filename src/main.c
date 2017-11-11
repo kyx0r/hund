@@ -53,13 +53,20 @@ struct task {
 	utf8 *src, *dst;
 };
 
+static utf8* failed(const utf8* f, int e) {
+	utf8* m = malloc(MSG_BUFFER_SIZE);
+	snprintf(m, MSG_BUFFER_SIZE, "%s failed: %s", f, strerror(e));
+	return m;
+}
+
 int main(int argc, char* argv[])  {
 	static const char* help = \
 	"Usage: hund [OPTION] [left panel] [right panel]\n"
 	"Options:\n"
 	"  -c, --chdir=PATH\t\tchange initial directory\n"
 	"  -v, --verbose\t\tbe verbose\n"
-	"  -h, --help\t\tdisplay this help message\n";
+	"  -h, --help\t\tdisplay this help message\n"
+	"Type `?` while in hund for keybindings\n";
 
 	static const char sopt[] = "vhc:";
 	static const struct option lopt[] = {
@@ -82,7 +89,6 @@ int main(int argc, char* argv[])  {
 			printf(help);
 			exit(EXIT_SUCCESS);
 		default:
-			puts("unknown argument");
 			exit(1);
 		}
 	}
@@ -95,7 +101,8 @@ int main(int argc, char* argv[])  {
 			init_wd_top += 1;
 		}
 		else {
-			//
+			fprintf(stderr, "invalid argument: '%s'\n", argv[optind]);
+			exit(EXIT_FAILURE);
 		}
 		optind += 1;
 	}
@@ -139,8 +146,10 @@ int main(int argc, char* argv[])  {
 		.dst = NULL,
 	};
 
+	int err;
 	bool run = true;
 	while (run) {
+		err = 0;
 		ui_update_geometry(&i);
 		ui_draw(&i);
 
@@ -198,26 +207,20 @@ int main(int argc, char* argv[])  {
 			case CMD_ENTER_DIR:
 				if (!pv->show_hidden && !ifaiv(pv, pv->selection)) break;
 				else if (S_ISDIR(pv->file_list[pv->selection]->s.st_mode)) {
-					int r = enter_dir(pv->wd,
+					err = enter_dir(pv->wd,
 							pv->file_list[pv->selection]->file_name);
-					if (r) {
-						i.error = malloc(MSG_BUFFER_SIZE);
-						snprintf(i.error, MSG_BUFFER_SIZE,
-								"path too long: it's %lu, limit is %d",
-								strlen(pv->wd), PATH_MAX);
+					if (err) {
+						i.error = failed("enter dir", ENAMETOOLONG);
 						break;
 					}
 				}
 				else if (S_ISLNK(pv->file_list[pv->selection]->s.st_mode)) {
 					utf8* p = malloc(PATH_MAX);
 					strcpy(p, pv->wd);
-					int r = enter_dir(p,
+					err = enter_dir(p,
 							pv->file_list[pv->selection]->link_path);
-					if (r) {
-						i.error = malloc(MSG_BUFFER_SIZE);
-						snprintf(i.error, MSG_BUFFER_SIZE,
-								"path too long: it's %lu, limit is %d",
-								strlen(pv->wd), PATH_MAX);
+					if (err) {
+						i.error = failed("enter dir", ENAMETOOLONG);
 						free(p);
 						break;
 					}
@@ -231,9 +234,7 @@ int main(int argc, char* argv[])  {
 				{
 				int r = scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				if (r) {
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"cannot scan directory: %s (%d)", strerror(r), r);
+					i.error = failed("directory scan", r);
 					up_dir(pv->wd);
 					r = scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 					if (r) abort(); // TODO
@@ -247,13 +248,11 @@ int main(int argc, char* argv[])  {
 				utf8* prevdir = malloc(NAME_MAX);
 				current_dir(pv->wd, prevdir);
 				up_dir(pv->wd);
-				int r = scan_dir(pv->wd, &pv->file_list, &pv->num_files);
-				if (r) {
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"cannot scan directory: %s (%d)", strerror(r), r);
-					r = enter_dir(pv->wd, prevdir);
-					if (r) abort(); // TODO
+				err = scan_dir(pv->wd, &pv->file_list, &pv->num_files);
+				if (err) {
+					i.error = failed("directory scan", err);
+					err = enter_dir(pv->wd, prevdir);
+					if (err) abort(); // TODO
 					free(prevdir);
 					break;
 				}
@@ -266,15 +265,11 @@ int main(int argc, char* argv[])  {
 				}
 				break;
 			case CMD_COPY:
-				{
 				t.src = calloc(PATH_MAX, sizeof(char));
 				strcpy(t.src, pv->wd);
-				int r = enter_dir(t.src, pv->file_list[pv->selection]->file_name);
-				if (r) {
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"path too long: it's %lu, limit is %d",
-							strlen(pv->wd), PATH_MAX);
+				err = enter_dir(t.src, pv->file_list[pv->selection]->file_name);
+				if (err) {
+					i.error = failed("copy", ENAMETOOLONG);
 					t.s = TASK_STATE_FINISHED;
 					break;
 				}
@@ -285,52 +280,38 @@ int main(int argc, char* argv[])  {
 				t.s = TASK_STATE_GATHERING_DATA;
 				prompt_open(&i, t.dst+strlen(t.dst),
 						t.dst+strlen(t.dst), NAME_MAX);
-				}
 				break;
 			case CMD_MOVE:
-				{
 				t.src = calloc(PATH_MAX, sizeof(char));
 				strcpy(t.src, pv->wd);
-				int r = enter_dir(t.src, pv->file_list[pv->selection]->file_name);
-				if (r) {
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"source path too long: it's %lu, limit is %d",
-							strlen(pv->wd), PATH_MAX);
+				err = enter_dir(t.src, pv->file_list[pv->selection]->file_name);
+				if (err) {
+					i.error = failed("move", ENAMETOOLONG);
 					t.s = TASK_STATE_FINISHED;
 					break;
 				}
 				t.dst = calloc(PATH_MAX, sizeof(char));
 				strcpy(t.dst, sv->wd);
-				r += enter_dir(t.dst, pv->file_list[pv->selection]->file_name);
-				if (r) {
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"destination path too long: it's %lu, limit is %d",
-							strlen(pv->wd), PATH_MAX);
+				err = enter_dir(t.dst, pv->file_list[pv->selection]->file_name);
+				if (err) {
+					i.error = failed("move", ENAMETOOLONG);
 					t.s = TASK_STATE_FINISHED;
 					break;
 				}
 				t.t = TASK_MOVE;
 				t.s = TASK_STATE_DATA_GATHERED;
-				}
 				break;
 			case CMD_REMOVE:
-				{
 				t.src = calloc(PATH_MAX, sizeof(char));
 				strcpy(t.src, pv->wd);
-				int r = enter_dir(t.src, pv->file_list[pv->selection]->file_name);
-				if (r) {
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"path too long: it's %lu, limit is %d",
-							strlen(pv->wd), PATH_MAX);
+				err = enter_dir(t.src, pv->file_list[pv->selection]->file_name);
+				if (err) {
+					i.error = failed("remove", ENAMETOOLONG);
 					t.s = TASK_STATE_FINISHED;
 					break;
 				}
 				t.t = TASK_RM;
 				t.s = TASK_STATE_DATA_GATHERED;
-				}
 				break;
 			case CMD_CREATE_DIR:
 				t.src = calloc(PATH_MAX, sizeof(char));
@@ -357,12 +338,9 @@ int main(int argc, char* argv[])  {
 				{
 				utf8* p = malloc(PATH_MAX);
 				strcpy(p, pv->wd);
-				int r = enter_dir(p, pv->file_list[pv->selection]->file_name);
-				if (r) {
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"path too long: it's %lu, limit is %d",
-							strlen(pv->wd), PATH_MAX);
+				err = enter_dir(p, pv->file_list[pv->selection]->file_name);
+				if (err) {
+					i.error = failed("chmod", ENAMETOOLONG);
 					free(p);
 					break;
 				}
@@ -375,19 +353,14 @@ int main(int argc, char* argv[])  {
 				size_t fnlen = strlen(pv->file_list[pv->selection]->file_name);
 				t.src = calloc(PATH_MAX, sizeof(char));
 				strcpy(t.src, pv->wd);
-				int r = enter_dir(t.src, pv->file_list[pv->selection]->file_name);
-				if (r) {
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"path too long: it's %lu, limit is %d",
-							strlen(pv->wd), PATH_MAX);
+				err = enter_dir(t.src, pv->file_list[pv->selection]->file_name);
+				if (err) {
+					i.error = failed("rename", ENAMETOOLONG);
 					t.s = TASK_STATE_FINISHED;
 					break;
 				}
 				if (!utf8_validate(t.src)) {
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"this filename is not a valid UTF-8");
+					i.error = failed("rename", EILSEQ);
 					// TODO offer clearing entire name and giving it a new one
 					t.s = TASK_STATE_FINISHED;
 					break;
@@ -400,26 +373,14 @@ int main(int argc, char* argv[])  {
 				}
 				break;
 			case CMD_TOGGLE_HIDDEN:
-				/* Cursed CMD_TOGGLE_HIDDEN!
-				 * FIXME when i enter /root or lost+found (as not-root)
-				 * and toggle hidden two times,
-				 * then hund segfaults
-				 * I think I should write handles to scan_dir() errors...
-				 */
 				pv->show_hidden = !pv->show_hidden;
 				if (!pv->show_hidden && !ifaiv(pv, pv->selection)) {
 					first_entry(pv);
 				}
 				break;
 			case CMD_REFRESH:
-				{
-				int r = scan_dir(pv->wd, &pv->file_list, &pv->num_files);
-				if (r) {
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"cannot scan directory: %s (%d)", strerror(r), r);
-				}
-				}
+				err = scan_dir(pv->wd, &pv->file_list, &pv->num_files);
+				if (err) i.error = failed("refresh", err);
 				break;
 			default:
 				break;
@@ -452,27 +413,19 @@ int main(int argc, char* argv[])  {
 				syslog(LOG_DEBUG, "chmod %s: %o, %d:%d",
 						i.chmod->path, i.chmod->m, i.chmod->o, i.chmod->g);
 				if (chmod(i.chmod->path, i.chmod->m)) {
-					int err = errno;
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"chmod failed: %s", strerror(err));
+					i.error = failed("chmod", errno);
 				}
 				if (lchown(i.chmod->path, i.chmod->o, i.chmod->g)) {
-					int err = errno;
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"chown failed: %s", strerror(err));
+					i.error = failed("chmod", errno);
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				chmod_close(&i);
 				break;
 			case CMD_CHOWN:
-				{
 				i.chmod->tmp = calloc(LOGIN_NAME_MAX, sizeof(char));
 				t.t = TASK_CHOWN;
 				t.s = TASK_STATE_GATHERING_DATA;
 				prompt_open(&i, i.chmod->tmp, i.chmod->tmp, LOGIN_NAME_MAX);
-				}
 				break;
 			case CMD_CHGRP:
 				i.chmod->tmp = calloc(LOGIN_NAME_MAX, sizeof(char));
@@ -541,11 +494,8 @@ int main(int argc, char* argv[])  {
 				/* Some username was entered
 				 * check if such user exists */
 				struct passwd* pwd = getpwnam(i.chmod->tmp);
-				int err = errno;
-				if (err) {
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"chown failed: %s", strerror(err));
+				if (errno) {
+					i.error = failed("chown", errno);
 				}
 				else {
 					i.chmod->o = pwd->pw_uid;
@@ -559,11 +509,8 @@ int main(int argc, char* argv[])  {
 				/* Some group was entered
 				 * check if such group exists */
 				struct group* grp = getgrnam(i.chmod->tmp);
-				int err = errno;
-				if (err) {
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"chown failed: %s", strerror(err));
+				if (errno) {
+					i.error = failed("chgrp", errno);
 				}
 				else {
 					i.chmod->g = grp->gr_gid;
@@ -576,9 +523,7 @@ int main(int argc, char* argv[])  {
 				syslog(LOG_DEBUG, "task_mkdir %s", t.src);
 				err = dir_make(t.src);
 				if (err) {
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"mkdir failed: %s", strerror(err));
+					i.error = failed("mkdir", err);
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				/* Truth table - "Highlight new directory?"
@@ -601,36 +546,26 @@ int main(int argc, char* argv[])  {
 				{
 				char* path = malloc(PATH_MAX);
 				strcpy(path, pv->wd);
-				int r = enter_dir(path, t.dst);
-				if (r) {
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"path too long: it's %lu, limit is %d",
-							strlen(pv->wd), PATH_MAX);
+				err = enter_dir(path, t.dst);
+				if (err) {
+					i.error = failed("cd", ENAMETOOLONG);
 				}
 				syslog(LOG_DEBUG, "task_cd %s", path);
 				if (!file_exists(path)) {
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"cd failed: File does not exist");
+					i.error = failed("cd", ENOENT);
 					t.s = TASK_STATE_FINISHED;
 					free(path);
 					break;
 				}
 				if (!is_dir(path)) {
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"cd failed: Not a directory");
+					i.error = failed("cd", EISDIR);
 					t.s = TASK_STATE_FINISHED;
 					free(path);
 					break;
 				}
 				err = enter_dir(pv->wd, path);
 				if (err) {
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"path too long: it's %lu, limit is %d",
-							strlen(pv->wd), PATH_MAX);
+					i.error = failed("cd", ENAMETOOLONG);
 					t.s = TASK_STATE_FINISHED;
 					free(path);
 					break;
@@ -645,9 +580,7 @@ int main(int argc, char* argv[])  {
 				syslog(LOG_DEBUG, "task_rmdir %s", t.src);
 				err = file_remove(t.src);
 				if (err) {
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"rmdir failed: %s", strerror(err));
+					i.error = failed("rmdir", err);
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				prev_entry(pv);
@@ -659,17 +592,13 @@ int main(int argc, char* argv[])  {
 			case TASK_COPY:
 				syslog(LOG_DEBUG, "task_copy %s -> %s", t.src, t.dst);
 				if (file_exists(t.dst)) {
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"cp failed: File exists");
+					i.error = failed("copy", EEXIST);
 					t.s = TASK_STATE_FINISHED;
 					break;
 				}
 				err = file_copy(t.src, t.dst);
 				if (err) {
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"cp failed: %s", strerror(err));
+					i.error = failed("copy", err);
 				}
 				i.info = malloc(MSG_BUFFER_SIZE);
 				snprintf(i.info, MSG_BUFFER_SIZE,
@@ -681,9 +610,7 @@ int main(int argc, char* argv[])  {
 				{
 				syslog(LOG_DEBUG, "task_rename %s -> %s", t.src, t.dst);
 				if (file_exists(t.dst)) {
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"rn failed: File exists");
+					i.error = failed("rename", EEXIST);
 					t.s = TASK_STATE_FINISHED;
 					break;
 				}
@@ -691,9 +618,7 @@ int main(int argc, char* argv[])  {
 				current_dir(t.dst, named);
 				err = rename(t.src, t.dst);
 				if (err) {
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"rn failed: %s", strerror(err));
+					i.error = failed("rename", err);
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				if (!pv->show_hidden && !ifaiv(pv, pv->selection)) {
@@ -710,17 +635,15 @@ int main(int argc, char* argv[])  {
 			case TASK_MOVE:
 				syslog(LOG_DEBUG, "task_move %s -> %s", t.src, t.dst);
 				if (file_exists(t.dst)) {
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"mv failed: File exists");
+					i.error = failed("move", EEXIST);
 					t.s = TASK_STATE_FINISHED;
 					break;
 				}
 				err = file_move(t.src, t.dst);
 				if (err) {
-					i.error = malloc(MSG_BUFFER_SIZE);
-					snprintf(i.error, MSG_BUFFER_SIZE,
-							"mv failed: %s", strerror(err));
+					i.error = failed("move", err);
+					t.s = TASK_STATE_FINISHED;
+					break;
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
 				scan_dir(sv->wd, &sv->file_list, &sv->num_files);
