@@ -157,6 +157,9 @@ int main(int argc, char* argv[])  {
 			case CMD_QUIT:
 				run = false;
 				break;
+			case CMD_HELP:
+				help_open(&i);
+				break;
 			case CMD_SWITCH_PANEL:
 				sv = i.fvs[i.active_view];
 				i.active_view += 1;
@@ -422,6 +425,25 @@ int main(int argc, char* argv[])  {
 				break;
 			}
 		} // MODE_MANGER
+
+		else if (i.m == MODE_HELP) {
+			switch (get_cmd(&i)) {
+			case CMD_RETURN:
+				help_close(&i);
+				break;
+			case CMD_ENTRY_DOWN:
+				if (i.helpy < cmd_help_length-1) {
+					i.helpy += 1;
+				}
+				break;
+			case CMD_ENTRY_UP:
+				if (i.helpy > 0) {
+					i.helpy -= 1;
+				}
+				break;
+			default: break;
+			}
+		} // MODE_HELP
 
 		else if (i.m == MODE_CHMOD) {
 			switch (get_cmd(&i)) {
