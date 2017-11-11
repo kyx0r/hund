@@ -124,28 +124,32 @@ void file_index(struct file_record** fl, fnum_t nf,
 	}
 }
 
-#define abs(V) ((V) < 0 ? -(V) : (V))
-#define min(A,B) ((A) > (B) ? (B) : (A))
-void file_find(struct file_record** fl, fnum_t nf,
+/* Initial Matching Bytes */
+size_t imb(const char* const a, const char* const b) {
+	size_t m = 0;
+	const char* aa = a;
+	const char* bb = b;
+	while (*aa && *bb && *aa == *bb) {
+		aa += 1;
+		bb += 1;
+		m += 1;
+	}
+	return m;
+}
+
+bool file_find(struct file_record** fl, fnum_t nf,
 		const char* const name, fnum_t* sel, fnum_t start) {
-	fnum_t bm = *sel; // Best Match
-	unsigned int bmv = ~0; // Best Match Value
 	for (fnum_t i = start; i < nf; ++i) {
-		for (size_t j = 0; strlen(fl[i]->file_name+j); ++j) {
-			size_t s = min(strlen(fl[i]->file_name+j), strlen(name));
-			unsigned int c = abs(strncmp(fl[i]->file_name+j, name, s));
-			if (c < bmv) {
-				bmv = c;
-				bm = i;
+		for (size_t j = 0; strlen(fl[i]->file_name+j) >= strlen(name); ++j) {
+			size_t s = imb(fl[i]->file_name+j, name);
+			if (s == strlen(name)) {
+				*sel = i;
+				return true;
 			}
 		}
 	}
-	if (!bmv) {
-		*sel = bm;
-	}
+	return false;
 }
-#undef abs
-#undef min
 
 int file_move(const char* src, const char* dst) {
 	// Split dst[] to name[] and dst_dir[]

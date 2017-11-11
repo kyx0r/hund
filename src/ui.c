@@ -746,6 +746,8 @@ enum command get_cmd(struct ui* i) {
  * If text is ready (enter pressed) returns 0,
  * If aborted, returns -1.
  * If keeps gathering, returns 1.
+ * Additionally:
+ * returns 2 on ^N and -2 on ^P
  */
 int fill_textbox(utf8* buf, utf8** buftop, size_t bsize, int coff, WINDOW* w) {
 	curs_set(2);
@@ -755,6 +757,8 @@ int fill_textbox(utf8* buf, utf8** buftop, size_t bsize, int coff, WINDOW* w) {
 	curs_set(0);
 	if (i.t == END) return 1;
 	if (i.t == CTRL && i.ctrl == '[') return -1;
+	else if (i.t == CTRL && i.ctrl == 'N') return 2;
+	else if (i.t == CTRL && i.ctrl == 'P') return -2;
 	else if ((i.t == CTRL && i.ctrl == 'J') ||
 			(i.t == UTF8 && (i.utf[0] == '\n' || i.utf[0] == '\r'))) {
 		if (*buftop != buf) return 0;

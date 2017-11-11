@@ -458,13 +458,19 @@ int main(int argc, char* argv[])  {
 			else if (r == 0) {
 				find_close(&i, true);
 			}
-			else if (i.find->t_top != i.find->t) {
-				do {
-					file_find(pv->file_list, pv->num_files,
-						i.find->t, &pv->selection, pv->selection);
+			else if (r == 2 || i.find->t_top != i.find->t) {
+				fnum_t s = 0;
+				if (r == 2) {
+					s = pv->selection+1;
 				}
-				while (!pv->show_hidden && !ifaiv(pv, pv->selection) &&
-						pv->selection < pv->num_files-1 && (pv->selection += 1));
+				bool found = true;
+				do {
+					found = file_find(pv->file_list, pv->num_files,
+						i.find->t, &pv->selection, s);
+				} while (!found && s < pv->num_files-1 && (s += 1));
+				if (!found) {
+					//i.error = failed("find", ENOENT);
+				}
 			}
 			else {
 				pv->selection = i.find->sbfc;
@@ -673,9 +679,12 @@ int main(int argc, char* argv[])  {
 			t.src = t.dst = NULL;
 			t.s = TASK_STATE_CLEAN;
 			t.t = TASK_NONE;
-		} // task state
+		}
 	} // while (run)
 
+	for (int v = 0; v < 2; ++v) {
+		delete_file_list(&fvs[v].file_list, &fvs[v].num_files);
+	}
 	ui_end(&i);
 	syslog(LOG_NOTICE, "hund finished");
 	closelog();
