@@ -12,36 +12,41 @@ A terminal file manager.
 #### Planned features
 - Open in external program, based on extension
 - Rename multiple files at once (somewhat like ranger)
+- Select files and perform operations on them
 - Task queue of some sort
 - Fancy file sorting
 - Configuration in a file
 #### UI
 Hund uses dual-panel view just like GNU Midnight Commander does. And it uses ncurses too.
 #### Commands
-- `qq` exit
-- `ESC` reset command/get rid of error message
-- `j` entry down
-- `k` entry up
-- `u` or `d` up directory
-- `i` or `e` enter directory
-- `gg` go to the first file in directory
-- `G` go to the last file in directory
-- `TAB` change active view
-- `cp` copy highlighted file from active view to the other view
-- `mv` move highlighted file from active view to the other view
-- `rm` remove highlighted file
-- `rr` rescan active view
-- `rn` rename highlighted file
-- `mk` create directory
-- `cd` open directory
-- `/` find file in working directory (opens PROMPT)
-	- aborting search returns to entry highlighted before searching
-	- applying search leaves selection at found entry
-- `ch` change file permissions
-	- `qq` abort changes and quit chmod
-	- `ch` apply changes and quit chmod
-	- `co` change owner (prompts for owner login)
-	- `cg` change group (prompts for group name)
+- `FILE VIEW`
+	- `qq` exit
+	- `?` display help screen
+	- `ESC` reset command/get rid of error message
+	- `^N` or `j` entry down
+	- `^P` or `k` entry up
+	- `u` or `d` up directory
+	- `i` or `e` enter directory
+	- `o` open in external program (right now, everything is opened with less)
+	- `gg` go to the first file in directory
+	- `G` go to the last file in directory
+	- `TAB` change active view
+	- `cp` copy highlighted file from active view to the other view (opens `PROMPT`)
+	- `mv` move highlighted file from active view to the other view
+	- `rm` remove highlighted file
+	- `rr` rescan active view
+	- `rn` rename highlighted file (opens `PROMPT`)
+	- `mk` create directory (opens `PROMPT`)
+	- `cd` open directory
+	- `/` find file in working directory (opens `PROMPT`)
+		- aborting search returns to entry highlighted before searching
+		- applying search leaves selection at found entry
+	- `ch` change file permissions (opens `CHMOD`)
+- `CHMOD`
+	- `qq` abort changes and quit `CHMOD`
+	- `ch` apply changes and quit `CHMOD`
+	- `co` change owner (opens `PROMPT`)
+	- `cg` change group (opens `PROMPT`)
 	- `ui` toggle set user id on execution
 	- `gi` toggle set group id on execution
 	- `os` toggle sticky bit
@@ -54,15 +59,15 @@ Hund uses dual-panel view just like GNU Midnight Commander does. And it uses ncu
 	- `or` toggle other read
 	- `ow` toggle other write
 	- `ox` toggle other execute
-- PROMPT
-	- `ENTER` or `^J` accept input
-	- `ESC` or `^[` abort input
-	- `BACKSPACE` or `^H' backspace (delete before cursor)
-	- `DELETE` or `^D` delete after cursor
-	- `HOME` or `^A` place cursor at the begining of input
-	- `END` or `^E` place cursor at the end of input
-	- `RIGHT` or `^F` go right
-	- `LEFT` or `^B` go left
+- `PROMPT`
+	- `^J` or `ENTER` accept input and quit `PROMPT`
+	- `^[` or `ESC` abort input and quit `PROMPT`
+	- `^H` or `BACKSPACE` backspace (delete before cursor)
+	- `^D` or `DELETE` delete after cursor
+	- `^A` or `HOME` place cursor at the begining of input
+	- `^E` or `END` place cursor at the end of input
+	- `^F` or `ARROW RIGHT` go right
+	- `^B` or `ARROW LEFT` go left
 	- `^U` clear whole input
 	- `^K` clear input after cursor
 #### Name
