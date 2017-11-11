@@ -770,6 +770,8 @@ int fill_textbox(utf8* buf, utf8** buftop, size_t bsize, int coff, WINDOW* w) {
 			utf8_remove(buf, utf8_ng_till(buf, *buftop)-1);
 			*buftop -= before - strlen(buf);
 		}
+		else if (strlen(buf));
+ 		// Exit only when buf is empty
 		else return -1;
 	}
 	else if ((i.t == CTRL && i.ctrl == 'D') ||
