@@ -432,9 +432,7 @@ int main(int argc, char* argv[])  {
 				help_close(&i);
 				break;
 			case CMD_ENTRY_DOWN:
-				if (i.helpy < cmd_help_length-1) {
-					i.helpy += 1;
-				}
+				i.helpy += 1;
 				break;
 			case CMD_ENTRY_UP:
 				if (i.helpy > 0) {

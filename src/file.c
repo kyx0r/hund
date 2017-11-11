@@ -141,7 +141,6 @@ void file_find(struct file_record** fl, fnum_t nf,
 		}
 	}
 	if (!bmv) {
-		syslog(LOG_DEBUG, "found: %s", fl[bm]->file_name);
 		*sel = bm;
 	}
 }

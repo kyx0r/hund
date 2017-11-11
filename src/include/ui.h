@@ -34,11 +34,12 @@
 #define MSG_BUFFER_SIZE 256
 
 enum mode {
-	MODE_MANAGER,
+	MODE_MANAGER = 0,
 	MODE_PROMPT,
 	MODE_FIND,
 	MODE_CHMOD,
 	MODE_HELP,
+	MODE_NUM
 };
 
 enum command {
