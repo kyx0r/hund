@@ -34,11 +34,11 @@
 #define MSG_BUFFER_SIZE 256
 
 enum mode {
-	MODE_MANAGER = 0,
+	MODE_HELP = 0,
+	MODE_MANAGER,
+	MODE_CHMOD,
 	MODE_PROMPT,
 	MODE_FIND,
-	MODE_CHMOD,
-	MODE_HELP,
 	MODE_NUM
 };
 
@@ -63,12 +63,12 @@ enum command {
 	CMD_OPEN_FILE,
 	CMD_HELP,
 	CMD_FIND,
-
 	CMD_CHMOD,
+
 	CMD_RETURN,
+	CMD_CHANGE,
 	CMD_CHOWN,
 	CMD_CHGRP,
-	CMD_CHANGE,
 	CMD_TOGGLE_UIOX,
 	CMD_TOGGLE_GIOX,
 	CMD_TOGGLE_SB,
@@ -81,6 +81,10 @@ enum command {
 	CMD_TOGGLE_OR,
 	CMD_TOGGLE_OW,
 	CMD_TOGGLE_OX,
+
+	CMD_HELP_QUIT,
+	CMD_HELP_UP,
+	CMD_HELP_DOWN,
 
 	CMD_NUM,
 };
@@ -119,28 +123,51 @@ struct input2cmd {
 static const struct input2cmd default_mapping[] = {
 	/* MODE MANGER */
 	{ .i={ UTF8("q"), UTF8("q"), ENDK }, .m=MODE_MANAGER, .c=CMD_QUIT },
+
 	{ .i={ UTF8("g"), UTF8("g"), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTRY_FIRST },
+	{ .i={ SPEC(KEY_HOME), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTRY_FIRST },
+
 	{ .i={ UTF8("G"), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTRY_LAST },
+	{ .i={ SPEC(KEY_END), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTRY_LAST },
+
 	{ .i={ UTF8("j"), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTRY_DOWN },
 	{ .i={ CTRL('N'), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTRY_DOWN },
+
 	{ .i={ UTF8("k"), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTRY_UP },
 	{ .i={ CTRL('P'), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTRY_UP },
+
 	{ .i={ UTF8("c"), UTF8("p"), ENDK }, .m=MODE_MANAGER, .c=CMD_COPY },
+
 	{ .i={ UTF8("r"), UTF8("m"), ENDK }, .m=MODE_MANAGER, .c=CMD_REMOVE },
+	{ .i={ CTRL('K'), ENDK }, .m=MODE_MANAGER, .c=CMD_REMOVE },
+
 	{ .i={ UTF8("r"), UTF8("n"), ENDK }, .m=MODE_MANAGER, .c=CMD_RENAME },
+
 	{ .i={ UTF8("m"), UTF8("v"), ENDK }, .m=MODE_MANAGER, .c=CMD_MOVE },
+
 	{ .i={ CTRL('I'), ENDK }, .m=MODE_MANAGER, .c=CMD_SWITCH_PANEL },
+
 	{ .i={ UTF8("r"), UTF8("r"), ENDK }, .m=MODE_MANAGER, .c=CMD_REFRESH },
+	{ .i={ CTRL('L'), ENDK }, .m=MODE_MANAGER, .c=CMD_REFRESH },
+
 	{ .i={ UTF8("m"), UTF8("k"), ENDK }, .m=MODE_MANAGER, .c=CMD_CREATE_DIR },
+
 	{ .i={ UTF8("u"), ENDK }, .m=MODE_MANAGER, .c=CMD_UP_DIR },
 	{ .i={ UTF8("d"), ENDK }, .m=MODE_MANAGER, .c=CMD_UP_DIR },
+
 	{ .i={ UTF8("i"), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTER_DIR },
 	{ .i={ UTF8("e"), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTER_DIR },
+
 	{ .i={ UTF8("o"), ENDK }, .m=MODE_MANAGER, .c=CMD_OPEN_FILE },
+
 	{ .i={ UTF8("/"), ENDK }, .m=MODE_MANAGER, .c=CMD_FIND },
+
 	{ .i={ UTF8("h"), ENDK }, .m=MODE_MANAGER, .c=CMD_TOGGLE_HIDDEN },
+
 	{ .i={ UTF8("?"), ENDK }, .m=MODE_MANAGER, .c=CMD_HELP },
+
 	{ .i={ UTF8("c"), UTF8("d"), ENDK }, .m=MODE_MANAGER, .c=CMD_CD },
+
 	{ .i={ UTF8("c"), UTF8("h"), ENDK }, .m=MODE_MANAGER, .c=CMD_CHMOD },
 
 	/* MODE CHMOD */
@@ -162,9 +189,13 @@ static const struct input2cmd default_mapping[] = {
 	{ .i={ UTF8("o"), UTF8("x"), ENDK }, .m=MODE_CHMOD, .c=CMD_TOGGLE_OX },
 
 	/* MODE HELP */
-	{ .i={ UTF8("q"), ENDK }, .m=MODE_HELP, .c=CMD_RETURN },
-	{ .i={ UTF8("j"), ENDK }, .m=MODE_HELP, .c=CMD_ENTRY_DOWN },
-	{ .i={ UTF8("k"), ENDK }, .m=MODE_HELP, .c=CMD_ENTRY_UP },
+	{ .i={ UTF8("q"), ENDK }, .m=MODE_HELP, .c=CMD_HELP_QUIT },
+
+	{ .i={ UTF8("j"), ENDK }, .m=MODE_HELP, .c=CMD_HELP_DOWN },
+	{ .i={ CTRL('N'), ENDK }, .m=MODE_HELP, .c=CMD_HELP_DOWN },
+
+	{ .i={ UTF8("k"), ENDK }, .m=MODE_HELP, .c=CMD_HELP_UP },
+	{ .i={ CTRL('P'), ENDK }, .m=MODE_HELP, .c=CMD_HELP_UP },
 };
 
 static const size_t default_mapping_length = (sizeof(default_mapping)/sizeof(struct input2cmd));
@@ -181,11 +212,11 @@ static const struct cmd2help cmd_help[] = {
 	{ .c = CMD_MOVE, .hint = "move", .help = "Move selected file to the other directory." },
 	{ .c = CMD_REMOVE, .hint = "remove", .help = "Remove selected file." },
 	{ .c = CMD_SWITCH_PANEL, .hint = "switch", .help = "Switch active panel." },
-	{ .c = CMD_UP_DIR, .hint = "up dir", .help = "..." },
+	{ .c = CMD_UP_DIR, .hint = "up dir", .help = "Move up in directory tree." },
 	{ .c = CMD_ENTER_DIR, .hint = "enter dir", .help = "Enter selected directory." },
 	{ .c = CMD_REFRESH, .hint = "refresh", .help = "Rescan directories and redraw window." },
-	{ .c = CMD_ENTRY_UP, .hint = "up", .help = "..." },
-	{ .c = CMD_ENTRY_DOWN, .hint = "down", .help = "..." },
+	{ .c = CMD_ENTRY_UP, .hint = "up", .help = "Select previous entry." },
+	{ .c = CMD_ENTRY_DOWN, .hint = "down", .help = "Select next entry." },
 	{ .c = CMD_CREATE_DIR, .hint = "create dir", .help = "Create new directory. Prompts for name." },
 	{ .c = CMD_ENTRY_FIRST, .hint = "top", .help = "Select top file in directory." },
 	{ .c = CMD_ENTRY_LAST, .hint = "bottom", .help = "Select bottom file in directory." },
@@ -200,18 +231,22 @@ static const struct cmd2help cmd_help[] = {
 	{ .c = CMD_CHOWN, .hint = "change owner", .help = "Change owner of file. Prompts for login." },
 	{ .c = CMD_CHGRP, .hint = "change group", .help = "Change group of file. Prompts for group name." },
 	{ .c = CMD_CHANGE, .hint = "change ", .help = "Apply changes and return." },
-	{ .c = CMD_TOGGLE_UIOX, .hint = "toggle setuid", .help = "..." },
-	{ .c = CMD_TOGGLE_GIOX, .hint = "toggle setgid", .help = "" },
-	{ .c = CMD_TOGGLE_SB, .hint = "toggle sticky bit", .help = "" },
-	{ .c = CMD_TOGGLE_UR, .hint = "toggle user read", .help = "" },
-	{ .c = CMD_TOGGLE_UW, .hint = "toggle user write", .help = "" },
-	{ .c = CMD_TOGGLE_UX, .hint = "toggle user execute", .help = "" },
-	{ .c = CMD_TOGGLE_GR, .hint = "toggle group read", .help = "" },
-	{ .c = CMD_TOGGLE_GW, .hint = "toggle group write", .help = "" },
-	{ .c = CMD_TOGGLE_GX, .hint = "toggle group execute", .help = "" },
-	{ .c = CMD_TOGGLE_OR, .hint = "toggle other read", .help = "" },
-	{ .c = CMD_TOGGLE_OW, .hint = "toggle other write", .help = "" },
-	{ .c = CMD_TOGGLE_OX, .hint = "toggle other execute", .help = "" },
+	{ .c = CMD_TOGGLE_UIOX, .hint = "toggle setuid", .help = "Toggle set user ID on execution." },
+	{ .c = CMD_TOGGLE_GIOX, .hint = "toggle setgid", .help = "Toggle set group ID on execution." },
+	{ .c = CMD_TOGGLE_SB, .hint = "toggle sticky bit", .help = "Toggle sticky bit." },
+	{ .c = CMD_TOGGLE_UR, .hint = "toggle user read", .help = "Toggle user read." },
+	{ .c = CMD_TOGGLE_UW, .hint = "toggle user write", .help = "Toggle user write." },
+	{ .c = CMD_TOGGLE_UX, .hint = "toggle user execute", .help = "Toggle user execute." },
+	{ .c = CMD_TOGGLE_GR, .hint = "toggle group read", .help = "Toggle group read." },
+	{ .c = CMD_TOGGLE_GW, .hint = "toggle group write", .help = "Toggle group write." },
+	{ .c = CMD_TOGGLE_GX, .hint = "toggle group execute", .help = "Toggle group execute." },
+	{ .c = CMD_TOGGLE_OR, .hint = "toggle other read", .help = "Toggle other read." },
+	{ .c = CMD_TOGGLE_OW, .hint = "toggle other write", .help = "Toggle other write." },
+	{ .c = CMD_TOGGLE_OX, .hint = "toggle other execute", .help = "Toggle other execute." },
+
+	{ .c = CMD_HELP_UP, .hint = "up", .help = "Scroll up." },
+	{ .c = CMD_HELP_DOWN, .hint = "down", .help = "Scroll down." },
+	{ .c = CMD_HELP_QUIT, .hint = "quit", .help = "Quit help screen." },
 };
 
 static const size_t cmd_help_length = sizeof(cmd_help)/sizeof(struct cmd2help);

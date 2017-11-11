@@ -428,13 +428,13 @@ int main(int argc, char* argv[])  {
 
 		else if (i.m == MODE_HELP) {
 			switch (get_cmd(&i)) {
-			case CMD_RETURN:
+			case CMD_HELP_QUIT:
 				help_close(&i);
 				break;
-			case CMD_ENTRY_DOWN:
+			case CMD_HELP_DOWN:
 				i.helpy += 1;
 				break;
-			case CMD_ENTRY_UP:
+			case CMD_HELP_UP:
 				if (i.helpy > 0) {
 					i.helpy -= 1;
 				}

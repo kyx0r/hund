@@ -304,7 +304,82 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 }
 
 static void ui_draw_help(struct ui* const i) {
-
+	WINDOW* hw = panel_window(i->help);
+	int hheight = i->scrh-1;
+	int lines = 3*2 + cmd_help_length - 1;
+	int dr = -i->helpy;
+	if (dr + lines < hheight) {
+		dr = hheight - lines;
+		i->helpy = -dr;
+	}
+	for (size_t m = 0; m < MODE_NUM; ++m) {
+		wattron(hw, A_BOLD);
+		switch (m) {
+		case MODE_HELP:
+			mvwprintw(hw, dr, 0, "HELP SCREEN%*c", i->scrw-4, ' ');
+			break;
+		case MODE_CHMOD:
+			mvwprintw(hw, dr, 0, "CHMOD%*c", i->scrw-5, ' ');
+			break;
+		case MODE_MANAGER:
+			mvwprintw(hw, dr, 0, "FILE VIEW%*c", i->scrw-7, ' ');
+			break;
+		default: continue;
+		}
+		wattroff(hw, A_BOLD);
+		dr += 1;
+		for (size_t c = 1; c < CMD_NUM; ++c) {
+			size_t w = 0;
+			int last = -1;
+			for (size_t k = 0; k < i->kml; ++k) {
+				if (i->kmap[k].c != c || i->kmap[k].m != m) continue;
+				int ks = 0;
+				last = k;
+				const int cp = 9;
+				wattron(hw, COLOR_PAIR(cp));
+				wattron(hw, A_BOLD);
+				int ww = 0;
+				while (i->kmap[k].i[ks].t != END) {
+					switch (i->kmap[k].i[ks].t) {
+					case UTF8:
+						mvwprintw(hw, dr, w, "%s", i->kmap[k].i[ks].utf);
+						w += utf8_width(i->kmap[k].i[ks].utf);
+						ww += utf8_width(i->kmap[k].i[ks].utf);
+						break;
+					case CTRL:
+						mvwprintw(hw, dr, w, "^%c", i->kmap[k].i[ks].ctrl);
+						w += 2;
+						ww += 2;
+						break;
+					case SPECIAL:
+						mvwprintw(hw, dr, w, "%s",
+								keyname(i->kmap[k].i[ks].c)+4);
+						w += strlen(keyname(i->kmap[k].i[ks].c)+4);
+						ww += strlen(keyname(i->kmap[k].i[ks].c)+4);
+						break;
+					default: break;
+					}
+					ks += 1;
+				}
+				wattroff(hw, COLOR_PAIR(cp));
+				wattroff(hw, A_BOLD);
+				const int tab = INPUT_LIST_LENGTH+2;
+				mvwprintw(hw, dr, w, "%*c", tab-ww, ' ');
+				w += tab-ww;
+			}
+			if (last != -1) { // -1 suggests that there was no matching command
+				const int tab = (INPUT_LIST_LENGTH+2)*(INPUT_LIST_LENGTH-1);
+				utf8* help = get_help_data(i->kmap[last].c)->help;
+				mvwprintw(hw, dr, w, "%*c%s%*c",
+						tab-w+1, ' ', help,
+						i->scrw-w-strlen(help), ' ');
+				dr += 1;
+			}
+		}
+		mvwprintw(hw, dr, 0, "%*c", i->scrw, ' ');
+		dr += 1;
+	}
+	wrefresh(hw);
 }
 
 static void ui_draw_hintbar(struct ui* const i, WINDOW* const sw) {
@@ -322,7 +397,7 @@ static void ui_draw_hintbar(struct ui* const i, WINDOW* const sw) {
 				wprintw(sw, "%s", ins[c].utf);
 				break;
 			case SPECIAL:
-				wprintw(sw, "special lol");
+				wprintw(sw, "%s", keyname(ins[c].c)+4);
 				break;
 			case CTRL:
 				wprintw(sw, "^%c", ins[c].ctrl);
