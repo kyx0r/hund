@@ -458,16 +458,36 @@ int main(int argc, char* argv[])  {
 			else if (r == 0) {
 				find_close(&i, true);
 			}
-			else if (r == 2 || i.find->t_top != i.find->t) {
+			else if (r == 2 || r == -2 || i.find->t_top != i.find->t) {
 				fnum_t s = 0;
+				fnum_t e = pv->num_files-1;
+				bool dofind = true;
 				if (r == 2) {
-					s = pv->selection+1;
+					if (pv->selection < pv->num_files-1) {
+						s = pv->selection+1;
+						e = pv->num_files-1;
+					}
+					else {
+						// If hit the end of list, dont search
+						dofind = false;
+					}
 				}
-				bool found = true;
-				do {
-					found = file_find(pv->file_list, pv->num_files,
-						i.find->t, &pv->selection, s);
-				} while (!found && s < pv->num_files-1 && (s += 1));
+				else if (r == -2) {
+					if (pv->selection > 0) {
+						s = pv->selection-1;
+						e = 0;
+					}
+					else {
+						// If hit the begining of list, dont search
+						dofind = false;
+					}
+				}
+				bool found = false;
+				if (dofind) {
+					found = file_find(pv->file_list, i.find->t,
+							&pv->selection, s, e);
+					// TODO keep looking until file is visible
+				}
 				if (!found) {
 					//i.error = failed("find", ENOENT);
 				}
@@ -589,7 +609,12 @@ int main(int argc, char* argv[])  {
 					i.error = failed("rmdir", err);
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
-				prev_entry(pv);
+				if (pv->selection >= pv->num_files-1) {
+					last_entry(pv);
+				}
+				if (!pv->show_hidden && !ifaiv(pv, pv->selection)){
+					next_entry(pv);
+				}
 				i.info = malloc(MSG_BUFFER_SIZE);
 				snprintf(i.info, MSG_BUFFER_SIZE,
 						"removed %s", t.src+current_dir_i(t.src));

@@ -137,25 +137,43 @@ size_t imb(const char* const a, const char* const b) {
 	return m;
 }
 
-bool file_find(struct file_record** fl, fnum_t nf,
-		const char* const name, fnum_t* sel, fnum_t start) {
-	for (fnum_t i = start; i < nf; ++i) {
-		for (size_t j = 0; strlen(fl[i]->file_name+j) >= strlen(name); ++j) {
-			size_t s = imb(fl[i]->file_name+j, name);
-			if (s == strlen(name)) {
-				*sel = i;
-				return true;
+bool file_find(struct file_record** fl, const char* const name,
+		fnum_t* sel, fnum_t start, fnum_t end) {
+	syslog(LOG_DEBUG, "%u %u", start, end);
+	if (start <= end) {
+		for (fnum_t i = start; i <= end; ++i) {
+			for (size_t j = 0; strlen(fl[i]->file_name+j) >= strlen(name); ++j) {
+				size_t s = imb(fl[i]->file_name+j, name);
+				if (s == strlen(name)) {
+					*sel = i;
+					return true;
+				}
 			}
+			//if (i == end) break;
+		}
+	}
+	else if (end < start) {
+		for (fnum_t i = start; i >= end; --i) {
+			for (size_t j = 0; strlen(fl[i]->file_name+j) >= strlen(name); ++j) {
+				size_t s = imb(fl[i]->file_name+j, name);
+				if (s == strlen(name)) {
+					*sel = i;
+					return true;
+				}
+			}
+			if (i == end) break;
+			// ^ prevents unsigned integer underflow
+			// TODO do it better
 		}
 	}
 	return false;
 }
 
+// Split dst[] to name[] and dst_dir[]
+// to check if destination and source are on the same filesystem
+// In case they are on the same FS,
+// then it's just one library function to call: rename()
 int file_move(const char* src, const char* dst) {
-	// Split dst[] to name[] and dst_dir[]
-	// to check if destination and source are on the same filesystem
-	// In case they are on the same FS,
-	// then it's just one library function to call: rename()
 	char* name = malloc(NAME_MAX);
 	current_dir(dst, name);
 	char* dst_dir = strdup(dst);

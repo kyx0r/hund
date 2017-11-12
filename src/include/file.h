@@ -75,8 +75,8 @@ void delete_file_list(struct file_record***, fnum_t*);
 void file_index(struct file_record**, fnum_t, const char* const, fnum_t*);
 
 size_t imb(const char* const, const char* const);
-bool file_find(struct file_record**, fnum_t,
-		const char* const, fnum_t*, fnum_t);
+bool file_find(struct file_record**, const char* const,
+		fnum_t*, fnum_t, fnum_t);
 
 int file_move(const char*, const char*);
 int file_remove(const char*);
