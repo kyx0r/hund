@@ -1,5 +1,6 @@
 #include "test.h"
 #include "../src/include/path.h"
+#include "../src/include/file_view.h"
 #include "../src/include/utf8.h"
 
 int main() {
@@ -160,6 +161,24 @@ int main() {
 
 
 	END_SECTION("utf8");
+
+
+	SECTION("file");
+
+	TEST(imb("1234567", "123") == 3, "");
+	TEST(imb("1234567", "023") == 0, "");
+	TEST(imb("1234567", "1234567") == 7, "");
+	TEST(imb("1034567", "1214567") == 1, "");
+
+	TEST(contains("lol", "lol"), "");
+	TEST(contains("lolz", "lol"), "");
+	TEST(contains("qqlolz", "lol"), "");
+	TEST(contains("qłąkąz", "łąką"), "");
+	TEST(!contains("qqloz", "lol"), "");
+	TEST(!contains("qqlooolz", "looool"), "");
+
+
+	END_SECTION("file");
 
 	END_TESTS;
 }
