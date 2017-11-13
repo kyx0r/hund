@@ -59,6 +59,16 @@ static utf8* failed(const utf8* f, int e) {
 	return m;
 }
 
+static int open_file(const utf8* const path) {
+	if (is_dir(path)) return EISDIR;
+	static const utf8* prog = "less";
+	utf8* cmd = malloc(strlen(path)+strlen(prog)+2+1+1);
+	snprintf(cmd, PATH_MAX, "%s '%s'", prog, path); // TODO recognize format
+	ui_system(cmd);
+	free(cmd);
+	return 0;
+}
+
 int main(int argc, char* argv[])  {
 	static const char* help = \
 	"Usage: hund [OPTION] [left panel] [right panel]\n"
@@ -186,15 +196,7 @@ int main(int argc, char* argv[])  {
 				utf8* file = malloc(PATH_MAX);
 				strcpy(file, pv->wd);
 				enter_dir(file, pv->file_list[pv->selection]->file_name);
-				if (is_dir(file)) {
-					free(file);
-					break;
-				}
-				static const char* prog = "less";
-				utf8* cmd = malloc(strlen(file)+strlen(prog)+2+1+1);
-				snprintf(cmd, PATH_MAX, "%s '%s'", prog, file); // TODO recognize format
-				ui_system(cmd);
-				free(cmd);
+				open_file(file);
 				free(file);
 				}
 				break;
@@ -256,16 +258,12 @@ int main(int argc, char* argv[])  {
 					free(prevdir);
 					break;
 				}
-				file_index(pv->file_list, pv->num_files,
-						prevdir, &pv->selection);
-				if (!pv->show_hidden && !ifaiv(pv, pv->selection)) {
-					first_entry(pv);
-				}
+				file_index(pv, prevdir);
 				free(prevdir);
 				}
 				break;
 			case CMD_COPY:
-				t.src = calloc(PATH_MAX, sizeof(char));
+				t.src = malloc(PATH_MAX);
 				strcpy(t.src, pv->wd);
 				err = enter_dir(t.src, pv->file_list[pv->selection]->file_name);
 				if (err) {
@@ -302,6 +300,7 @@ int main(int argc, char* argv[])  {
 				t.s = TASK_STATE_DATA_GATHERED;
 				break;
 			case CMD_REMOVE:
+				if (!pv->num_files) break;
 				t.src = calloc(PATH_MAX, sizeof(char));
 				strcpy(t.src, pv->wd);
 				err = enter_dir(t.src, pv->file_list[pv->selection]->file_name);
@@ -324,7 +323,7 @@ int main(int argc, char* argv[])  {
 				break;
 			case CMD_FIND:
 				{
-				utf8* t = calloc(NAME_MAX, 1);
+				utf8* t = calloc(NAME_MAX, sizeof(char));
 				find_open(&i, t, t, NAME_MAX);
 				}
 				break;
@@ -467,27 +466,17 @@ int main(int argc, char* argv[])  {
 						s = pv->selection+1;
 						e = pv->num_files-1;
 					}
-					else {
-						// If hit the end of list, dont search
-						dofind = false;
-					}
+					else dofind = false;
 				}
 				else if (r == -2) {
 					if (pv->selection > 0) {
 						s = pv->selection-1;
 						e = 0;
 					}
-					else {
-						// If hit the begining of list, dont search
-						dofind = false;
-					}
+					else dofind = false;
 				}
 				bool found = false;
-				if (dofind) {
-					found = file_find(pv->file_list, i.find->t,
-							&pv->selection, s, e);
-					// TODO keep looking until file is visible
-				}
+				if (dofind) found = file_find(pv, i.find->t, s, e);
 				if (!found) {
 					//i.error = failed("find", ENOENT);
 				}
@@ -552,19 +541,8 @@ int main(int argc, char* argv[])  {
 					i.error = failed("mkdir", err);
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
-				/* Truth table - "Highlight new directory?"
-				 *            .dir | dir
-				 * show_hidden 0 |0|1|
-				 * show_hidden 1 |1|1|
-				 */
 				int fno = current_dir_i(t.src);
-				if (pv->show_hidden || t.src[fno] != '.') {
-					file_index(pv->file_list, pv->num_files,
-							t.src+fno, &pv->selection);
-				}
-				else {
-					first_entry(pv);
-				}
+				file_index(pv, t.src+fno);
 				t.s = TASK_STATE_FINISHED;
 				}
 				break;
@@ -609,11 +587,16 @@ int main(int argc, char* argv[])  {
 					i.error = failed("rmdir", err);
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
-				if (pv->selection >= pv->num_files-1) {
-					last_entry(pv);
+				if (pv->num_files) {
+					if (pv->selection >= pv->num_files-1) {
+						last_entry(pv);
+					}
+					if (!pv->show_hidden && !ifaiv(pv, pv->selection)){
+						next_entry(pv);
+					}
 				}
-				if (!pv->show_hidden && !ifaiv(pv, pv->selection)){
-					next_entry(pv);
+				else {
+					pv->selection = 0;
 				}
 				i.info = malloc(MSG_BUFFER_SIZE);
 				snprintf(i.info, MSG_BUFFER_SIZE,
@@ -652,13 +635,7 @@ int main(int argc, char* argv[])  {
 					i.error = failed("rename", err);
 				}
 				scan_dir(pv->wd, &pv->file_list, &pv->num_files);
-				if (!pv->show_hidden && !ifaiv(pv, pv->selection)) {
-					next_entry(pv);
-				}
-				else {
-					file_index(pv->file_list, pv->num_files,
-							named, &pv->selection);
-				}
+				file_index(pv, named);
 				t.s = TASK_STATE_FINISHED;
 				free(named);
 				}
@@ -708,7 +685,7 @@ int main(int argc, char* argv[])  {
 	} // while (run)
 
 	for (int v = 0; v < 2; ++v) {
-		delete_file_list(&fvs[v].file_list, &fvs[v].num_files);
+		delete_file_list(&fvs[v]);
 	}
 	ui_end(&i);
 	syslog(LOG_NOTICE, "hund finished");

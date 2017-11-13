@@ -25,7 +25,10 @@ bool ifaiv(const struct file_view* const fv, const fnum_t i) {
 }
 
 void next_entry(struct file_view* fv) {
-	if (!fv->num_files) return;
+	if (!fv->num_files || fv->selection > fv->num_files-1) {
+		fv->selection = 0;
+		return;
+	}
 	if (fv->show_hidden) {
 		if (fv->selection < fv->num_files-1) {
 			fv->selection += 1;
@@ -49,7 +52,10 @@ void next_entry(struct file_view* fv) {
 }
 
 void prev_entry(struct file_view* fv) {
-	if (!fv->num_files) return;
+	if (!fv->num_files || fv->selection > fv->num_files-1) {
+		fv->selection = 0;
+		return;
+	}
 	if (fv->show_hidden) {
 		if (fv->selection > 0) {
 			fv->selection -= 1;
@@ -120,4 +126,82 @@ void last_entry(struct file_view* fv) {
 			fv->selection = i;
 		}
 	}
+}
+
+void delete_file_list(struct file_view* fv) {
+	if (fv->num_files) {
+		for (fnum_t i = 0; i < fv->num_files; i++) {
+			free(fv->file_list[i]->file_name);
+			free(fv->file_list[i]->link_path);
+			free(fv->file_list[i]);
+		}
+		free(fv->file_list);
+		fv->file_list = NULL;
+		fv->num_files = 0;
+	}
+}
+
+/* Finds and highlighs file with given name */
+void file_index(struct file_view* fv, const utf8* const name) {
+	fnum_t i = 0;
+	while (i < fv->num_files &&	strcmp(fv->file_list[i]->file_name, name)) {
+		i += 1;
+	}
+	if (i != fv->num_files) {
+		if (fv->show_hidden || ifaiv(fv, i)) {
+			fv->selection = i;
+		}
+		else {
+			first_entry(fv);
+		}
+	}
+}
+
+/* Initial Matching Bytes */
+size_t imb(const char* const a, const char* const b) {
+	size_t m = 0;
+	const char* aa = a;
+	const char* bb = b;
+	while (*aa && *bb && *aa == *bb) {
+		aa += 1;
+		bb += 1;
+		m += 1;
+	}
+	return m;
+}
+
+/* Checks if STRing contains SUBString */
+bool contains(const char* const str, const char* const subs) {
+	for (size_t j = 0; strlen(str+j) >= strlen(subs); ++j) {
+		if (strlen(subs) == imb(str+j, subs)) return true;
+	}
+	return false;
+}
+
+bool file_find(struct file_view* fv, const utf8* const name,
+		fnum_t start, fnum_t end) {
+	syslog(LOG_DEBUG, "%u %u", start, end);
+	if (start <= end) {
+		for (fnum_t i = start; i <= end; ++i) {
+			if ((fv->show_hidden || ifaiv(fv, i)) &&
+					contains(fv->file_list[i]->file_name, name)) {
+				fv->selection = i;
+				return true;
+			}
+			//if (i == end) break;
+		}
+	}
+	else if (end < start) {
+		for (fnum_t i = start; i >= end; --i) {
+			if ((fv->show_hidden || ifaiv(fv, i)) &&
+					contains(fv->file_list[i]->file_name, name)) {
+				fv->selection = i;
+				return true;
+			}
+			if (i == end) break;
+			// ^ prevents unsigned integer underflow
+			// TODO do it better
+		}
+	}
+	return false;
 }

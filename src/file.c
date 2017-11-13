@@ -51,7 +51,17 @@ bool file_exists(const char* path) {
  */
 int scan_dir(const char* wd, struct file_record*** file_list,
 		fnum_t* num_files) {
-	delete_file_list(file_list, num_files);
+	if (*num_files) { // TODO maybe move scan_dir to file_view?
+		for (fnum_t i = 0; i < *num_files; i++) {
+			free((*file_list)[i]->file_name);
+			free((*file_list)[i]->link_path);
+			free((*file_list)[i]);
+		}
+		free(*file_list);
+		*file_list = NULL;
+		*num_files = 0;
+	}
+	//delete_file_list(file_list, num_files);
 	struct dirent** namelist;
 	DIR* dir = opendir(wd);
 	int r = scandir(wd, &namelist, file_filter, file_sort);
@@ -97,78 +107,6 @@ int scan_dir(const char* wd, struct file_record*** file_list,
 	return 0;
 }
 
-void delete_file_list(struct file_record*** file_list, fnum_t* num_files) {
-	if (*num_files) {
-		for (fnum_t i = 0; i < *num_files; i++) {
-			free((*file_list)[i]->file_name);
-			free((*file_list)[i]->link_path);
-			free((*file_list)[i]);
-		}
-		free(*file_list);
-		*file_list = NULL;
-		*num_files = 0;
-	}
-}
-
-/* Finds file with given name and returns it's position in file_list
- * If not found, leaves SELection unchanged
- */
-void file_index(struct file_record** fl, fnum_t nf,
-		const char* const name, fnum_t* sel) {
-	fnum_t i = 0;
-	while (i < nf && strcmp(fl[i]->file_name, name)) {
-		i += 1;
-	}
-	if (i != nf) {
-		*sel = i;
-	}
-}
-
-/* Initial Matching Bytes */
-size_t imb(const char* const a, const char* const b) {
-	size_t m = 0;
-	const char* aa = a;
-	const char* bb = b;
-	while (*aa && *bb && *aa == *bb) {
-		aa += 1;
-		bb += 1;
-		m += 1;
-	}
-	return m;
-}
-
-bool file_find(struct file_record** fl, const char* const name,
-		fnum_t* sel, fnum_t start, fnum_t end) {
-	syslog(LOG_DEBUG, "%u %u", start, end);
-	if (start <= end) {
-		for (fnum_t i = start; i <= end; ++i) {
-			for (size_t j = 0; strlen(fl[i]->file_name+j) >= strlen(name); ++j) {
-				size_t s = imb(fl[i]->file_name+j, name);
-				if (s == strlen(name)) {
-					*sel = i;
-					return true;
-				}
-			}
-			//if (i == end) break;
-		}
-	}
-	else if (end < start) {
-		for (fnum_t i = start; i >= end; --i) {
-			for (size_t j = 0; strlen(fl[i]->file_name+j) >= strlen(name); ++j) {
-				size_t s = imb(fl[i]->file_name+j, name);
-				if (s == strlen(name)) {
-					*sel = i;
-					return true;
-				}
-			}
-			if (i == end) break;
-			// ^ prevents unsigned integer underflow
-			// TODO do it better
-		}
-	}
-	return false;
-}
-
 // Split dst[] to name[] and dst_dir[]
 // to check if destination and source are on the same filesystem
 // In case they are on the same FS,
@@ -191,9 +129,9 @@ int file_move(const char* src, const char* dst) {
 	else {
 		int r;
 		r = file_copy(src, dst);
-		if (r) return errno;
+		if (r) return r;
 		r = file_remove(src);
-		if (r) return errno;
+		if (r) return r;
 	}
 	free(name);
 	free(dst_dir);
@@ -215,10 +153,20 @@ int file_remove(const char* src) {
 			// TODO minimalize copying paths if possible
 			strcpy(path, src);
 			enter_dir(path, fl[i]->file_name);
-			int r;
-			if ((r = file_remove(path))) return r;
+			int r = file_remove(path);
+			if (r) return r;
 		}
-		delete_file_list(&fl, &fn);
+		if (fn) { // TODO
+			for (fnum_t i = 0; i < fn; i++) {
+				free(fl[i]->file_name);
+				free(fl[i]->link_path);
+				free(fl[i]);
+			}
+			free(fl);
+			fl = NULL;
+			fn = 0;
+		}
+		//delete_file_list(&fl, &fn);
 		free(path);
 		if (rmdir(src)) return errno;
 	}
@@ -246,7 +194,17 @@ int file_copy(const char* src, const char* dest) {
 				return r;
 			}
 		}
-		delete_file_list(&fl, &fn);
+		if (fn) { // TODO
+			for (fnum_t i = 0; i < fn; i++) {
+				free(fl[i]->file_name);
+				free(fl[i]->link_path);
+				free(fl[i]);
+			}
+			free(fl);
+			fl = NULL;
+			fn = 0;
+		}
+		//delete_file_list(&fl, &fn);
 		free(src_path);
 		free(dst_path);
 	}

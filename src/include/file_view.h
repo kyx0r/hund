@@ -36,4 +36,11 @@ void first_entry(struct file_view*);
 void prev_entry(struct file_view*);
 void last_entry(struct file_view*);
 
+void delete_file_list(struct file_view*);
+void file_index(struct file_view*, const char* const);
+
+size_t imb(const char* const, const char* const);
+bool contains(const char* const, const char* const);
+bool file_find(struct file_view*, const char* const, fnum_t, fnum_t);
+
 #endif
