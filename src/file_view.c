@@ -19,7 +19,22 @@
 
 #include "include/file_view.h"
 
+/* This file contains file_view-related helper functions.
+ *
+ * They do things that would otherwise clutter main loop.
+ * The main problem that inspired separating those tasks from main loop
+ * was performing visibility tests.
+ *
+ * They are supposed to care about:
+ * - selection position and it's validity
+ * - whether file is visible or not
+ * - whether file_list is empty or not
+ * - error codes/failure of functions that they call
+ * - rescanning file_list (if needed)
+ */
+
 // Is File At Index Visible
+// TODO include test for show_hidden and cut it out of functions
 bool ifaiv(const struct file_view* const fv, const fnum_t i) {
 	return fv->file_list[i]->file_name[0] != '.';
 }
@@ -204,4 +219,58 @@ bool file_find(struct file_view* fv, const utf8* const name,
 		}
 	}
 	return false;
+}
+
+int file_view_enter_selected_dir(struct file_view* fv) {
+	if (!fv->show_hidden && !ifaiv(fv, fv->selection)) return 0;
+	int err;
+	if (S_ISDIR(fv->file_list[fv->selection]->s.st_mode)) {
+		err = enter_dir(fv->wd, fv->file_list[fv->selection]->file_name);
+		if (err) return ENAMETOOLONG;
+	}
+	else if (S_ISLNK(fv->file_list[fv->selection]->s.st_mode)) {
+		utf8* p = malloc(PATH_MAX);
+		strcpy(p, fv->wd);
+		err = enter_dir(p, fv->file_list[fv->selection]->link_path);
+		if (err) {
+			free(p);
+			return ENAMETOOLONG;
+		}
+		if (is_dir(p)) {
+			enter_dir(fv->wd, fv->file_list[fv->selection]->link_path);
+		}
+		free(p);
+	}
+	else return ENOTDIR;
+	int r = scan_dir(fv->wd, &fv->file_list, &fv->num_files);
+	if (r) {
+		up_dir(fv->wd);
+		r = scan_dir(fv->wd, &fv->file_list, &fv->num_files);
+		if (r) abort(); // TODO
+		return r;
+	}
+	first_entry(fv);
+	return 0;
+}
+
+void file_view_afterdel(struct file_view* fv) {
+	scan_dir(fv->wd, &fv->file_list, &fv->num_files);
+	if (fv->num_files) {
+		if (fv->selection >= fv->num_files-1) {
+			last_entry(fv);
+		}
+		if (!fv->show_hidden && !ifaiv(fv, fv->selection)){
+			next_entry(fv);
+		}
+	}
+	else {
+		fv->selection = 0;
+	}
+}
+
+void file_view_toggle_hidden(struct file_view* fv) {
+	fv->show_hidden = !fv->show_hidden;
+	if (!fv->show_hidden && !ifaiv(fv, fv->selection)) {
+		first_entry(fv);
+	}
 }

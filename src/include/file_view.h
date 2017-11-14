@@ -42,5 +42,9 @@ void file_index(struct file_view*, const char* const);
 size_t imb(const char* const, const char* const);
 bool contains(const char* const, const char* const);
 bool file_find(struct file_view*, const char* const, fnum_t, fnum_t);
+int file_view_enter_selected_dir(struct file_view*);
+
+void file_view_afterdel(struct file_view*);
+void file_view_toggle_hidden(struct file_view*);
 
 #endif
