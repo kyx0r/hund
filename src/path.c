@@ -171,3 +171,17 @@ int current_dir_i(const char path[PATH_MAX]) {
 	}
 	return i+1; // i will point last slash in path
 }
+
+/* Finds SUBString at the begining of STRing and changes it ti REPLacement
+ * useful to altering paths in move anc copy tasks
+ */
+bool substitute(char* str, char* subs, char* repl) {
+	const size_t subs_l = strlen(subs);
+	const size_t str_l = strlen(str);
+	if (subs_l > str_l) return false;
+	if (memcmp(str, subs, subs_l)) return false;
+	const size_t repl_l = strlen(repl);
+	memmove(str+repl_l, str+subs_l, str_l-subs_l+1);
+	memcpy(str, repl, repl_l);
+	return true;
+}
