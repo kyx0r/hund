@@ -31,6 +31,7 @@ struct file_view {
 };
 
 bool ifaiv(const struct file_view* const, const fnum_t);
+
 void next_entry(struct file_view*);
 void first_entry(struct file_view*);
 void prev_entry(struct file_view*);
@@ -42,9 +43,13 @@ void file_index(struct file_view*, const char* const);
 size_t imb(const char* const, const char* const);
 bool contains(const char* const, const char* const);
 bool file_find(struct file_view*, const char* const, fnum_t, fnum_t);
+
 int file_view_enter_selected_dir(struct file_view*);
+int file_view_up_dir(struct file_view*);
 
 void file_view_afterdel(struct file_view*);
 void file_view_toggle_hidden(struct file_view*);
+
+utf8* file_view_path_to_selected(struct file_view*);
 
 #endif

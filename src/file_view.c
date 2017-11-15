@@ -253,6 +253,22 @@ int file_view_enter_selected_dir(struct file_view* fv) {
 	return 0;
 }
 
+int file_view_up_dir(struct file_view* fv) {
+	utf8* prevdir = malloc(NAME_MAX);
+	current_dir(fv->wd, prevdir);
+	up_dir(fv->wd);
+	int err = scan_dir(fv->wd, &fv->file_list, &fv->num_files);
+	if (err) {
+		err = enter_dir(fv->wd, prevdir);
+		if (err) abort(); // TODO
+		free(prevdir);
+		return err;
+	}
+	file_index(fv, prevdir);
+	free(prevdir);
+	return 0;
+}
+
 void file_view_afterdel(struct file_view* fv) {
 	scan_dir(fv->wd, &fv->file_list, &fv->num_files);
 	if (fv->num_files) {
@@ -273,4 +289,14 @@ void file_view_toggle_hidden(struct file_view* fv) {
 	if (!fv->show_hidden && !ifaiv(fv, fv->selection)) {
 		first_entry(fv);
 	}
+}
+
+utf8* file_view_path_to_selected(struct file_view* fv) {
+	utf8* p = malloc(PATH_MAX);
+	strcpy(p, fv->wd);
+	if (enter_dir(p, fv->file_list[fv->selection]->file_name)) {
+		free(p);
+		return NULL;
+	}
+	return p;
 }
