@@ -19,6 +19,11 @@
 
 #include "include/ui.h"
 
+/* This file contains UI-related functions
+ * These functions are supposed to draw elements of UI.
+ * They are supposed to read file_view contents, but never modify it.
+ */
+
 /* get cmd2help coresponding to given command */
 static const struct cmd2help* get_help_data(const enum command c) {
 	for (size_t i = 0; i < CMD_NUM && i < cmd_help_length; ++i) {
@@ -82,22 +87,21 @@ struct ui ui_init(struct file_view* pv, struct file_view* sv) {
 	init_pair(13, COLOR_YELLOW, COLOR_BLACK);
 	init_pair(14, COLOR_BLACK, COLOR_YELLOW);
 
-	i.fvs[0] = pv;
-	i.fvs[1] = sv;
+	i.fvs[0] = i.pv = pv;
+	i.fvs[1] = i.sv = sv;
 	for (int x = 0; x < 2; ++x) {
 		WINDOW* tmpwin = newwin(1, 1, 0, 0);
 		i.fvp[x] = new_panel(tmpwin);
 	}
 	i.scrw = i.scrh = 0;
-	i.active_view = 0;
 	i.m = MODE_MANAGER;
 	i.prompt = NULL;
 	i.chmod = NULL;
 	i.find = NULL;
-	i.error = NULL;
-	i.info = NULL;
+	i.error[0] = i.info[0] = 0;
 	i.helpy = 0;
 	i.help = NULL;
+	i.run = true;
 	i.kml = default_mapping_length;
 	i.mks = calloc(default_mapping_length, sizeof(int));
 	i.kmap = malloc(default_mapping_length*sizeof(struct input2cmd));
@@ -246,7 +250,7 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 			padding = pw - fnwidth;
 			enlen = fnwidth + 1;
 		}
-		if (e == s->selection && v == i->active_view) {
+		if (e == s->selection && i->fvs[v] == i->pv) {
 			color_pair_enabled += 1;
 		}
 		wattron(w, COLOR_PAIR(color_pair_enabled));
@@ -449,19 +453,21 @@ void ui_draw(struct ui* const i) {
 	}
 
 	WINDOW* sw = panel_window(i->status);
-	if (i->error) {
+	if (i->error[0]) {
 		wattron(sw, COLOR_PAIR(4));
 		mvwprintw(sw, 0, 0, "%s", i->error);
 		wattroff(sw, COLOR_PAIR(4));
 		mvwprintw(sw, 0, strlen(i->error), "%*c",
 				i->scrw-utf8_width(i->error), ' ');
+		i->error[0] = 0;
 	}
-	else if (i->info) {
+	else if (i->info[0]) {
 		wattron(sw, COLOR_PAIR(10));
 		mvwprintw(sw, 0, 0, "%s", i->info);
 		wattroff(sw, COLOR_PAIR(10));
 		mvwprintw(sw, 0, strlen(i->info), "%*c",
 				i->scrw-utf8_width(i->info), ' ');
+		i->info[0] = 0;
 	}
 	else if (i->find) {
 		mvwprintw(sw, 0, 0, "/%s%*c", i->find->t,
@@ -581,7 +587,7 @@ void prompt_close(struct ui* i) {
 void find_open(struct ui* i, utf8* t, utf8* t_top, size_t t_size) {
 	i->find = malloc(sizeof(struct ui_find));
 	i->find->mb = i->m;
-	i->find->sbfc = i->fvs[i->active_view]->selection;
+	i->find->sbfc = i->pv->selection;
 	i->find->t = t;
 	i->find->t_top = t_top;
 	i->find->t_size = t_size;
@@ -589,7 +595,7 @@ void find_open(struct ui* i, utf8* t, utf8* t_top, size_t t_size) {
 }
 
 void find_close(struct ui* i, bool success) {
-	if (!success) i->fvs[i->active_view]->selection = i->find->sbfc;
+	if (!success) i->pv->selection = i->find->sbfc;
 	i->m = i->find->mb;
 	free(i->find->t);
 	free(i->find);
@@ -618,7 +624,7 @@ struct input get_input(WINDOW* const w) {
 	int init = wgetch(w);
 	const utf8 u = (utf8)init;
 	const char* kn = keyname(init);
-	syslog(LOG_DEBUG, "get_input: %s (%d)", kn, init);
+	//syslog(LOG_DEBUG, "get_input: %s (%d)", kn, init);
 	if (init == -1) {
 		r.t = END;
 	}

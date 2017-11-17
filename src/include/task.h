@@ -50,35 +50,55 @@ enum task_state {
 	TASK_STATE_GATHERING_DATA,
 	TASK_STATE_DATA_GATHERED, // AKA ready to execute
 	TASK_STATE_EXECUTING,
-	TASK_STATE_FINISHED // AKA all done, cleanme
+	TASK_STATE_FINISHED, // AKA all done, cleanme
+	TASK_STATE_NUM
+};
+
+// TODO TODO_MOVE because two heap path take up place
+enum todo {
+	TODO_REMOVE,
+	TODO_COPY,
 };
 
 struct file_todo {
 	struct file_todo* next;
+	enum todo td;
 	utf8* path;
 	struct stat s;
-	uintmax_t progress;
+	ssize_t progress;
 };
 
 struct task {
 	enum task_state s;
 	enum task_type t;
-	utf8 *src, *dst; // *ch
+	utf8 *src;
+	utf8 *dst;
+	utf8 *src_2repl;
 	struct file_todo* checklist;
-	FILE* working;
-	uintmax_t size_total;
-	uintmax_t size_done;
-	uintmax_t files_total;
-	uintmax_t files_done;
+	int in;
+	int out;
+	ssize_t size_total;
+	ssize_t size_done;
+	ssize_t files_total;
+	ssize_t files_done;
 };
 
-struct task task_new(enum task_type, utf8*, utf8*);
+void task_new(struct task*, enum task_type, utf8*, utf8*);
+
 int task_build_file_list(struct task*);
 void task_check_file(struct task*);
 void task_clean(struct task*);
 
-int do_remove(struct task*, int);
-int do_move(struct task*, int);
-int do_copy(struct task*, int);
+enum do_flag {
+	FLAG_NONE = 0,
+	//FLAG_DEREF_LINKS = 1<<1,
+	//FLAG_COPY_LINKS = 1<<2,
+	//FLAG_MERGE = 1<<3,
+	//FLAG_CONFLICT_REPLACE = 1<<4
+	//FLAG_CONFLICT_SKIP = 1<<5
+	//FLAG_CONFLICT_LEAVE = 1<<6
+};
+
+int do_task(struct task*, int);
 
 #endif

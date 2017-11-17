@@ -304,11 +304,13 @@ struct ui_prompt {
 
 struct ui {
 	int scrh, scrw; // Need this for detecting changes in window size
+	bool run;
 	enum mode m;
 
-	int active_view;
 	PANEL* fvp[2];
 	struct file_view* fvs[2];
+	struct file_view* pv;
+	struct file_view* sv;
 
 	PANEL* status;
 	size_t helpy;
@@ -317,8 +319,8 @@ struct ui {
 	struct ui_prompt* prompt;
 	struct ui_chmod* chmod;
 	struct ui_find* find;
-	utf8* error;
-	utf8* info;
+	utf8 error[MSG_BUFFER_SIZE];
+	utf8 info[MSG_BUFFER_SIZE];
 
 	struct input2cmd* kmap;
 	size_t kml; // Key Mapping Length
