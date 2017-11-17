@@ -223,7 +223,7 @@ bool file_find(struct file_view* fv, const utf8* const name,
 
 int file_view_enter_selected_dir(struct file_view* fv) {
 	if (!fv->show_hidden && !ifaiv(fv, fv->selection)) return 0;
-	int err;
+	int err = 0;
 	if (S_ISDIR(fv->file_list[fv->selection]->s.st_mode)) {
 		err = enter_dir(fv->wd, fv->file_list[fv->selection]->file_name);
 		if (err) return ENAMETOOLONG;
@@ -237,7 +237,11 @@ int file_view_enter_selected_dir(struct file_view* fv) {
 			return ENAMETOOLONG;
 		}
 		if (is_dir(p)) {
-			enter_dir(fv->wd, fv->file_list[fv->selection]->link_path);
+			err = enter_dir(fv->wd, fv->file_list[fv->selection]->link_path);
+			if (err) {
+				free(p);
+				return ENAMETOOLONG;
+			}
 		}
 		free(p);
 	}
@@ -245,12 +249,12 @@ int file_view_enter_selected_dir(struct file_view* fv) {
 	int r = scan_dir(fv->wd, &fv->file_list, &fv->num_files);
 	if (r) {
 		up_dir(fv->wd);
-		r = scan_dir(fv->wd, &fv->file_list, &fv->num_files);
-		if (r) abort(); // TODO
+		err = scan_dir(fv->wd, &fv->file_list, &fv->num_files);
+		if (err) abort(); // TODO
 		return r;
 	}
 	first_entry(fv);
-	return 0;
+	return err;
 }
 
 int file_view_up_dir(struct file_view* fv) {

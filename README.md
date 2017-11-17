@@ -39,6 +39,8 @@ Hund uses dual-panel view just like GNU Midnight Commander does. And it uses ncu
 	- `mk` create directory (opens `PROMPT`)
 	- `cd` open directory
 	- `/` find file in working directory (opens `PROMPT`)
+		- `^N` find next (search forward)
+		- `^P` find previous (search backward)
 		- aborting search returns to entry highlighted before searching
 		- applying search leaves selection at found entry
 	- `ch` change file permissions (opens `CHMOD`)
@@ -70,5 +72,9 @@ Hund uses dual-panel view just like GNU Midnight Commander does. And it uses ncu
 	- `^B` or `ARROW LEFT` go left
 	- `^U` clear whole input
 	- `^K` clear input after cursor
+- `HELP`
+	- `q` quit help screen
+	- `^N` or `j` scroll down
+	- `^P` or `k` scroll up
 #### Name
 _Hund_ is a german word for _dog_.
