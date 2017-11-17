@@ -123,7 +123,7 @@ size_t utf8_cp2nb(codepoint_t cp) {
 	return 0;
 }
 
-/* apparent width */
+/* Apparent width */
 size_t utf8_width(const utf8* const b) {
 	size_t g = 0;
 	const utf8* p = b;
@@ -156,12 +156,21 @@ size_t utf8_ng_till(const utf8* const a, const utf8* const b) {
 }
 
 bool utf8_validate(const utf8* const b) {
-	size_t bl = strlen(b);
-	const utf8* t = b;
+	const size_t bl = strlen(b);
 	size_t i = 0;
 	while (i < bl) {
-		size_t s = utf8_g2nb(t+i);
+		size_t s = utf8_g2nb(b+i);
 		if (!s) break;
+		/* Now check if bytes following the
+		 * inital byte are like 10xxxxxx
+		 */
+		if (s > 1) {
+			const utf8* v = b+i+1;
+			while (v < b+i+s) {
+				if ((*v & 0xc0) != 0x80) return false;
+				v += 1;
+			}
+		}
 		i += s;
 	}
 	return i == bl;
@@ -178,8 +187,7 @@ void utf8_insert(utf8* const a, utf8* const b, size_t pos) {
 	memcpy(t, b, bl);
 }
 
-/* remove glyph at index
- */
+/* Remove glyph at index */
 void utf8_remove(utf8* const a, size_t j) {
 	utf8* t = a;
 	for (size_t i = 0; i < j; ++i) {
