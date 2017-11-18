@@ -156,8 +156,16 @@ void delete_file_list(struct file_view* fv) {
 	}
 }
 
+bool file_on_list(struct file_view* fv, const utf8* const name) {
+	fnum_t i = 0;
+	while (i < fv->num_files &&	strcmp(fv->file_list[i]->file_name, name)) {
+		i += 1;
+	}
+	return i != fv->num_files;
+}
+
 /* Finds and highlighs file with given name */
-void file_index(struct file_view* fv, const utf8* const name) {
+void file_highlight(struct file_view* fv, const utf8* const name) {
 	fnum_t i = 0;
 	while (i < fv->num_files &&	strcmp(fv->file_list[i]->file_name, name)) {
 		i += 1;
@@ -268,7 +276,7 @@ int file_view_up_dir(struct file_view* fv) {
 		free(prevdir);
 		return err;
 	}
-	file_index(fv, prevdir);
+	file_highlight(fv, prevdir);
 	free(prevdir);
 	return 0;
 }

@@ -38,7 +38,8 @@ void prev_entry(struct file_view*);
 void last_entry(struct file_view*);
 
 void delete_file_list(struct file_view*);
-void file_index(struct file_view*, const char* const);
+bool file_on_list(struct file_view*, const utf8* const);
+void file_highlight(struct file_view*, const utf8* const);
 
 size_t imb(const char* const, const char* const);
 bool contains(const char* const, const char* const);
