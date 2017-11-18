@@ -51,10 +51,10 @@ enum task_state {
 	TASK_STATE_DATA_GATHERED, // AKA ready to execute
 	TASK_STATE_EXECUTING,
 	TASK_STATE_FINISHED, // AKA all done, cleanme
+	//TASK_STATE_FAILED
 	TASK_STATE_NUM
 };
 
-// TODO TODO_MOVE because two heap path take up place
 enum todo {
 	TODO_REMOVE,
 	TODO_COPY,
@@ -71,19 +71,15 @@ struct file_todo {
 struct task {
 	enum task_state s;
 	enum task_type t;
-	utf8 *src;
-	utf8 *dst;
-	utf8 *src_2repl;
+	utf8 *src, *dst, *newname;
 	struct file_todo* checklist;
-	int in;
-	int out;
-	ssize_t size_total;
-	ssize_t size_done;
-	ssize_t files_total;
-	ssize_t files_done;
+	int in, out;
+	ssize_t size_total, size_done;
+	int files_total, files_done;
+	int dirs_total, dirs_done;
 };
 
-void task_new(struct task*, enum task_type, utf8*, utf8*);
+void task_new(struct task*, enum task_type, utf8*, utf8*, utf8*);
 
 int task_build_file_list(struct task*);
 void task_check_file(struct task*);
@@ -98,6 +94,9 @@ enum do_flag {
 	//FLAG_CONFLICT_SKIP = 1<<5
 	//FLAG_CONFLICT_LEAVE = 1<<6
 };
+
+bool substitute(char*, char*, char*);
+utf8* build_new_path(struct task*, utf8*);
 
 int do_task(struct task*, int);
 

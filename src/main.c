@@ -163,16 +163,41 @@ static void mode_find(struct ui* i, struct task* t) {
 }
 
 static void mode_prompt(struct ui* i, struct task* t) {
-	/*int r = fill_textbox(i->prompt->tb, &i->prompt->tb_top,
+	int r = fill_textbox(i->prompt->tb, &i->prompt->tb_top,
 			i->prompt->tb_size, 0, panel_window(i->status));
-	if (!r) {
+	if (!r || r == -1) {
 		if (t->t != TASK_NONE && t->s == TASK_STATE_GATHERING_DATA) {
 			t->s = TASK_STATE_DATA_GATHERED;
 		}
+		prompt_close(i);
+	}
+}
+
+static void prepare_manipulation(struct ui* i, struct task* t,
+		enum task_type tt, const utf8* const err) {
+	if (!i->pv->num_files) return;
+	utf8* src = file_view_path_to_selected(i->pv);
+	utf8* dst = NULL;
+	utf8* newname = NULL;
+	if (!src) {
+		failed(i->error, err, ENAMETOOLONG);
+		task_clean(t);
 		return;
 	}
-	else if (r == -1) return;
-	prompt_close(i);*/
+	const utf8* const fn = i->pv->file_list[i->pv->selection]->file_name;
+	if (tt == TASK_MOVE || tt == TASK_COPY) {
+		dst = malloc(PATH_MAX);
+		strcpy(dst, i->sv->wd);
+		if (file_on_list(i->sv, fn)) {
+			newname = calloc(NAME_MAX, sizeof(utf8));
+			strcpy(newname, fn);
+			prompt_open(i, newname, newname+strlen(newname), NAME_MAX);
+		}
+	}
+	task_new(t, tt, src, dst, newname);
+	if (!newname) {
+		t->s = TASK_STATE_DATA_GATHERED;
+	}
 }
 
 static void mode_manager(struct ui* i, struct task* t) {
@@ -222,49 +247,13 @@ static void mode_manager(struct ui* i, struct task* t) {
 		if (err) failed(i->error, "up dir", err);
 		break;
 	case CMD_COPY:
-		{
-		utf8* src = malloc(PATH_MAX);
-		strcpy(src, i->pv->wd);
-		err = enter_dir(src, i->pv->file_list[i->pv->selection]->file_name);
-		if (err) {
-			failed(i->error, "copy", ENAMETOOLONG);
-			task_clean(t);
-			break;
-		}
-		utf8* dst = malloc(PATH_MAX);
-		strcpy(dst, i->sv->wd);
-		strcat(dst, "/");
-		task_new(t, TASK_COPY, src, dst);
-		prompt_open(i, dst+strlen(dst),
-				dst+strlen(dst), NAME_MAX);
-		}
+		prepare_manipulation(i, t, TASK_COPY, "copy");
 		break;
 	case CMD_MOVE:
-		{
-		utf8* src = file_view_path_to_selected(i->pv);
-		if (!src) {
-			failed(i->error, "move", ENAMETOOLONG);
-			task_clean(t);
-			break;
-		}
-		utf8* dst = malloc(PATH_MAX);
-		strcpy(dst, i->sv->wd);
-		task_new(t, TASK_MOVE, src, dst);
-		t->s = TASK_STATE_DATA_GATHERED;
-		}
+		prepare_manipulation(i, t, TASK_MOVE, "move");
 		break;
 	case CMD_REMOVE:
-		{
-		if (!i->pv->num_files) break;
-		utf8* src = file_view_path_to_selected(i->pv);
-		if (!src) {
-			failed(i->error, "remove", ENAMETOOLONG);
-			task_clean(t);
-			break;
-		}
-		task_new(t, TASK_RM, src, NULL);
-		t->s = TASK_STATE_DATA_GATHERED;
-		}
+		prepare_manipulation(i, t, TASK_RM, "remove");
 		break;
 	/*case CMD_CREATE_DIR:
 		t->src = calloc(PATH_MAX, sizeof(char));
@@ -448,18 +437,6 @@ void task_state_data_gathered(struct ui* i, struct task* t) {
 		}
 		t->s = TASK_STATE_EXECUTING;
 		}
-		/*if (file_exists(t.dst)) {
-			i.error = failed("move", EEXIST);
-			t.s = TASK_STATE_FINISHED;
-			break;
-		}
-		err = file_move(t.src, t.dst);
-		if (err) {
-			i.error = failed("move", err);
-			t.s = TASK_STATE_FINISHED;
-			break;
-		}*/
-		break;
 	case TASK_NONE:
 		break;
 	}
@@ -471,31 +448,35 @@ void task_state_data_gathered(struct ui* i, struct task* t) {
 void task_state_executing(struct ui* i, struct task* t) {
 	wtimeout(stdscr, 20);
 	int e = do_task(t, 1024);
-	if (e) failed(i->error, "", e);
+	if (e) {
+		failed(i->error, "task", e);
+		t->s = TASK_STATE_FINISHED;
+	}
 	else progress(i->info, t);
 }
 
 /* Display message and clean task */
 void task_state_finished(struct ui* i, struct task* t) {
-	/*if (t->t == TASK_RM) {
-		snprintf(i->info, MSG_BUFFER_SIZE,
-				"removed %s", t->src);
-		file_view_afterdel(i->pv);
+	if (t->t == TASK_RM || t->t == TASK_MOVE || t->t == TASK_COPY) {
 		wtimeout(stdscr, -1);
 	}
+	utf8* what = "?";
+	if (t->t == TASK_RM) {
+		scan_dir(i->pv->wd, &i->pv->file_list, &i->pv->num_files);
+		what = "removed";
+		//file_view_afterdel(i->pv);
+	}
+	else if (t->t == TASK_COPY) {
+		scan_dir(i->sv->wd, &i->sv->file_list, &i->sv->num_files);
+		what = "copied";
+	}
 	else if (t->t == TASK_MOVE) {
-		prev_entry(i->pv);
-		snprintf(i->info, MSG_BUFFER_SIZE,
-				"moved to %s", t->dst);
-		wtimeout(stdscr, -1);
 		scan_dir(i->pv->wd, &i->pv->file_list, &i->pv->num_files);
 		scan_dir(i->sv->wd, &i->sv->file_list, &i->sv->num_files);
-	}*/
-
-	scan_dir(i->pv->wd, &i->pv->file_list, &i->pv->num_files);
-	scan_dir(i->sv->wd, &i->sv->file_list, &i->sv->num_files);
-
-	wtimeout(stdscr, -1);
+		what = "moved";
+		//prev_entry(i->pv);
+	}
+	snprintf(i->info, MSG_BUFFER_SIZE, "%s %s", what, t->src);
 	task_clean(t);
 }
 
