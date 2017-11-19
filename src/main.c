@@ -32,7 +32,7 @@ static void failed(utf8* error, const utf8* f, int e) {
 	snprintf(error, MSG_BUFFER_SIZE, "%s failed: %s (%d)", f, strerror(e), e);
 }
 
-static utf8* progress(utf8* info, struct task* t) {
+static void progress(utf8* info, struct task* t) {
 	const utf8* what = "?";
 	switch (t->t) {
 	case TASK_COPY: what = "copying"; break;
@@ -41,7 +41,7 @@ static utf8* progress(utf8* info, struct task* t) {
 	default: break;
 	}
 	snprintf(info, MSG_BUFFER_SIZE,
-			"%s %lu/%lu, %luB/%luB", what,
+			"%s %d/%d, %luB/%luB", what,
 			t->files_done, t->files_total,
 			t->size_done, t->size_total);
 }
@@ -227,9 +227,6 @@ static void mode_manager(struct ui* i, struct task* t) {
 		if (path) {
 			open_file(path);
 			free(path);
-		}
-		else {
-			failed(i->error, "open", ENAMETOOLONG);
 		}
 		break;
 	/*case CMD_CD:
