@@ -173,6 +173,12 @@ static void mode_prompt(struct ui* i, struct task* t) {
 	}
 }
 
+static void mode_wait(struct ui* i, struct task* t) {
+	switch (get_cmd(i)) {
+	default: break;
+	}
+}
+
 static void prepare_manipulation(struct ui* i, struct task* t,
 		enum task_type tt, const utf8* const err) {
 	if (!i->pv->num_files) return;
@@ -181,7 +187,7 @@ static void prepare_manipulation(struct ui* i, struct task* t,
 	utf8* newname = NULL;
 	if (!src) {
 		failed(i->error, err, ENAMETOOLONG);
-		task_clean(t);
+		free(src);
 		return;
 	}
 	const utf8* const fn = i->pv->file_list[i->pv->selection]->file_name;
@@ -195,6 +201,7 @@ static void prepare_manipulation(struct ui* i, struct task* t,
 		}
 	}
 	task_new(t, tt, src, dst, newname);
+	i->m = MODE_WAIT;
 	if (!newname) {
 		t->s = TASK_STATE_DATA_GATHERED;
 	}
@@ -313,7 +320,11 @@ static void mode_manager(struct ui* i, struct task* t) {
 		break;
 	case CMD_REFRESH:
 		err = scan_dir(i->pv->wd, &i->pv->file_list, &i->pv->num_files);
-		if (err) failed(i->error, "refresh", err);
+		if (err) {
+			delete_file_list(i->pv);
+			failed(i->error, "refresh", err);
+		}
+		else file_view_afterdel(i->pv);
 		break;
 	default:
 		break;
@@ -464,7 +475,7 @@ void task_state_finished(struct ui* i, struct task* t) {
 	if (t->t == TASK_RM) {
 		scan_dir(i->pv->wd, &i->pv->file_list, &i->pv->num_files);
 		what = "removed";
-		//file_view_afterdel(i->pv);
+		file_view_afterdel(i->pv);
 	}
 	else if (t->t == TASK_COPY) {
 		scan_dir(i->sv->wd, &i->sv->file_list, &i->sv->num_files);
@@ -474,10 +485,11 @@ void task_state_finished(struct ui* i, struct task* t) {
 		scan_dir(i->pv->wd, &i->pv->file_list, &i->pv->num_files);
 		scan_dir(i->sv->wd, &i->sv->file_list, &i->sv->num_files);
 		what = "moved";
-		//prev_entry(i->pv);
+		prev_entry(i->pv);
 	}
 	snprintf(i->info, MSG_BUFFER_SIZE, "%s %s", what, t->src);
 	task_clean(t);
+	i->m = MODE_MANAGER;
 }
 
 int main(int argc, char* argv[])  {
@@ -571,6 +583,7 @@ int main(int argc, char* argv[])  {
 		[MODE_MANAGER] = mode_manager,
 		[MODE_CHMOD] = mode_chmod,
 		[MODE_PROMPT] = mode_prompt,
+		[MODE_WAIT] = mode_wait,
 		[MODE_FIND] = mode_find,
 	};
 

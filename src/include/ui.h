@@ -39,6 +39,7 @@ enum mode {
 	MODE_CHMOD,
 	MODE_PROMPT,
 	MODE_FIND,
+	MODE_WAIT,
 	MODE_NUM
 };
 
