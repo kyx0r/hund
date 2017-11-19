@@ -269,8 +269,7 @@ int file_view_up_dir(struct file_view* fv) {
 	up_dir(fv->wd);
 	int err = scan_dir(fv->wd, &fv->file_list, &fv->num_files);
 	if (err) {
-		err = enter_dir(fv->wd, prevdir);
-		if (err) abort(); // TODO
+		delete_file_list(fv);
 		free(prevdir);
 		return err;
 	}
@@ -280,7 +279,6 @@ int file_view_up_dir(struct file_view* fv) {
 }
 
 void file_view_afterdel(struct file_view* fv) {
-	scan_dir(fv->wd, &fv->file_list, &fv->num_files);
 	if (fv->num_files) {
 		if (fv->selection >= fv->num_files-1) {
 			last_entry(fv);
