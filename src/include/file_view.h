@@ -28,6 +28,7 @@ struct file_view {
 	fnum_t num_files;
 	fnum_t selection;
 	bool show_hidden;
+	bool tlnk; // Transparent LiNKs
 };
 
 bool ifaiv(const struct file_view* const, const fnum_t);
@@ -50,6 +51,7 @@ int file_view_up_dir(struct file_view*);
 
 void file_view_afterdel(struct file_view*);
 void file_view_toggle_hidden(struct file_view*);
+void file_view_toggle_link_transparency(struct file_view*);
 
 utf8* file_view_path_to_selected(struct file_view*);
 

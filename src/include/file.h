@@ -67,6 +67,7 @@ struct file_record {
 	char* file_name;
 	char* link_path;
 	struct stat s;
+	struct stat l;
 };
 
 bool is_dir(const char*);

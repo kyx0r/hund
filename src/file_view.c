@@ -230,13 +230,17 @@ bool file_find(struct file_view* fv, const utf8* const name,
 }
 
 int file_view_enter_selected_dir(struct file_view* fv) {
-	if (!fv->show_hidden && !ifaiv(fv, fv->selection)) return 0;
+	if (!fv->num_files || !fv->show_hidden && !ifaiv(fv, fv->selection)) return 0;
 	int err = 0;
-	if (S_ISDIR(fv->file_list[fv->selection]->s.st_mode)) {
+	mode_t m;
+	if (fv->tlnk) m = fv->file_list[fv->selection]->l.st_mode;
+	else m = fv->file_list[fv->selection]->s.st_mode;
+	if (S_ISDIR(m)) {
+		syslog(LOG_DEBUG, "enter dir %s", fv->file_list[fv->selection]->file_name);
 		err = enter_dir(fv->wd, fv->file_list[fv->selection]->file_name);
 		if (err) return ENAMETOOLONG;
 	}
-	else if (S_ISLNK(fv->file_list[fv->selection]->s.st_mode)) {
+	else if (S_ISLNK(m)) {
 		utf8* p = malloc(PATH_MAX);
 		strcpy(p, fv->wd);
 		err = enter_dir(p, fv->file_list[fv->selection]->link_path);
@@ -244,12 +248,10 @@ int file_view_enter_selected_dir(struct file_view* fv) {
 			free(p);
 			return ENAMETOOLONG;
 		}
+		syslog(LOG_DEBUG, "enter link %s (%s)",
+				fv->file_list[fv->selection]->link_path, p);
 		if (is_dir(p)) {
-			err = enter_dir(fv->wd, fv->file_list[fv->selection]->link_path);
-			if (err) {
-				free(p);
-				return ENAMETOOLONG;
-			}
+			strcpy(fv->wd, p);
 		}
 		free(p);
 	}
@@ -301,6 +303,10 @@ void file_view_toggle_hidden(struct file_view* fv) {
 	if (!fv->show_hidden && !ifaiv(fv, fv->selection)) {
 		first_entry(fv);
 	}
+}
+
+void file_view_toggle_link_transparency(struct file_view* fv) {
+	fv->tlnk = !fv->tlnk;
 }
 
 utf8* file_view_path_to_selected(struct file_view* fv) {

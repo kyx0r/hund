@@ -308,6 +308,9 @@ static void mode_manager(struct ui* i, struct task* t) {
 		}
 		break;
 		*/
+	case CMD_TOGGLE_LINK_TRANSPARENCY:
+		file_view_toggle_link_transparency(i->pv);
+		break;
 	case CMD_TOGGLE_HIDDEN:
 		file_view_toggle_hidden(i->pv);
 		break;

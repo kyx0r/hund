@@ -78,7 +78,7 @@ int scan_dir(const char* wd, struct file_record*** file_list,
 		struct file_record* const fr = (*file_list)[i];
 		fr->file_name = strdup(namelist[i]->d_name);
 		fr->link_path = NULL;
-		if (lstat(path, &fr->s)) {
+		if (lstat(path, &fr->s) || stat(path, &fr->l)) {
 			for (fnum_t j = 0; j <= i; ++j) {
 				free((*file_list)[i]->file_name);
 				if ((*file_list)[i]->link_path) {

@@ -59,6 +59,7 @@ enum command {
 	CMD_ENTRY_LAST,
 	CMD_RENAME,
 	CMD_TOGGLE_HIDDEN,
+	CMD_TOGGLE_LINK_TRANSPARENCY,
 	CMD_CD,
 	CMD_OPEN_FILE,
 	CMD_HELP,
@@ -164,6 +165,7 @@ static const struct input2cmd default_mapping[] = {
 
 	{ .i={ UTF8("h"), ENDK }, .m=MODE_MANAGER, .c=CMD_TOGGLE_HIDDEN },
 
+	{ .i={ UTF8("t"), UTF8("l"), ENDK }, .m=MODE_MANAGER, .c=CMD_TOGGLE_LINK_TRANSPARENCY },
 	{ .i={ UTF8("?"), ENDK }, .m=MODE_MANAGER, .c=CMD_HELP },
 
 	{ .i={ UTF8("c"), UTF8("d"), ENDK }, .m=MODE_MANAGER, .c=CMD_CD },
@@ -222,6 +224,7 @@ static const struct cmd2help cmd_help[] = {
 	{ .c = CMD_ENTRY_LAST, .hint = "bottom", .help = "Select bottom file in directory." },
 	{ .c = CMD_RENAME, .hint = "rename", .help = "Rename selected file. Prompts for new name." },
 	{ .c = CMD_TOGGLE_HIDDEN, .hint = "hide", .help = "Switch between hiding/showing hidden files." },
+	{ .c = CMD_TOGGLE_LINK_TRANSPARENCY, .hint = "link transparency", .help = "Switch method of handling symlinks." },
 	{ .c = CMD_CD, .hint = "change dir", .help = "Jump to some directory. Prompts for path." },
 	{ .c = CMD_OPEN_FILE, .hint = "open", .help = "Open selected file in less." },
 	{ .c = CMD_FIND, .hint = "find", .help = "Search for files in current directory. Case sensitive." },

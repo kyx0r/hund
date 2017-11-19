@@ -194,10 +194,17 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	 * to fill remaining space.
 	 */
 	fnum_t nhf = 0; // Number of Hidden Files
+	fnum_t nsl = 0; // Number of SymLinks
 	fnum_t hi = 0; // Highlighted file Index
+	bool sisl = false; // Selected Is SymLink
 	for (fnum_t i = 0; i < s->num_files && !sh; ++i) {
 		if (!ifaiv(s, i)) nhf += 1;
-		if (i == s->selection) hi = i-nhf;
+		const bool sl = S_ISLNK(s->file_list[i]->s.st_mode);
+		if (sl) nsl += 1;
+		if (i == s->selection) {
+			hi = i-nhf;
+			sisl = sl;
+		}
 	}
 
 	fnum_t me = ph - 3; // Max Entries
@@ -232,8 +239,11 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 			e += 1;
 			continue;
 		}
+		mode_t m;
 		const struct file_record* const cfr = s->file_list[e];
-		const int type = mode2type(cfr->s.st_mode);
+		if (s->tlnk) m = cfr->l.st_mode;
+		else m = cfr->s.st_mode;
+		const int type = mode2type(m);
 		const char type_symbol = type_symbol_mapping[type][0];
 		int color_pair_enabled = type_symbol_mapping[type][1];
 		// TODO is is utf-8 at all? validate
@@ -281,24 +291,26 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 		snprintf(status, status_size, empty);
 	}
 	else if (s->num_files - nhf) {
-		const size_t fsize = (s->selection < s->num_files ?
-				s->file_list[s->selection]->s.st_size : 0);
-		time_t lt = s->file_list[s->selection]->s.st_mtim.tv_sec;
+		const off_t statsize = (s->tlnk ?
+				s->file_list[s->selection]->l.st_size :
+				s->file_list[s->selection]->s.st_size);
+		const off_t fsize = (s->selection < s->num_files ? statsize : 0);
+		const time_t lt = s->file_list[s->selection]->s.st_mtim.tv_sec;
 		struct tm* tt = localtime(&lt);
 		strftime(time, time_size, timefmt, tt);
 		if (s->show_hidden) {
-			snprintf(status, status_size, "%u/%u %o %zuB",
-					s->selection+1, s->num_files,
+			snprintf(status, status_size, "%u/%u %c%u %o %zuB",
+					s->selection+1, s->num_files, (sisl ? 'L' : 'l'), nsl,
 					s->file_list[s->selection]->s.st_mode & 0xfff, fsize);
 		}
 		else {
-			snprintf(status, status_size, "%u/%u h%u %o %zuB",
-					hi+1, s->num_files-nhf, nhf,
+			snprintf(status, status_size, "%u/%u h%u %c%u, %o %zuB",
+					hi+1, s->num_files-nhf, nhf, (sisl ? 'L' : 'l'), nsl,
 					s->file_list[s->selection]->s.st_mode & 0xfff, fsize);
 		}
 	}
 	else {
-		snprintf(status, status_size, "h%u", nhf);
+		snprintf(status, status_size, "h%u l%u", nhf, nsl);
 	}
 	mvwprintw(w, dr, 0, " %s%*c%s ", status,
 			pw-utf8_width(status)-strlen(time)-2, ' ', time);
