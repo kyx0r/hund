@@ -153,6 +153,7 @@ void delete_file_list(struct file_view* fv) {
 		free(fv->file_list);
 		fv->file_list = NULL;
 		fv->num_files = 0;
+		fv->selection = 0;
 	}
 }
 
@@ -230,41 +231,36 @@ bool file_find(struct file_view* fv, const utf8* const name,
 }
 
 int file_view_enter_selected_dir(struct file_view* fv) {
-	if (!fv->num_files || !fv->show_hidden && !ifaiv(fv, fv->selection)) return 0;
-	int err = 0;
+	if (!fv->num_files || (!fv->show_hidden &&
+				!ifaiv(fv, fv->selection))) return 0;
 	mode_t m;
+	utf8* fn = fv->file_list[fv->selection]->file_name;
+	utf8* lp = fv->file_list[fv->selection]->link_path;
 	if (fv->tlnk) m = fv->file_list[fv->selection]->l.st_mode;
 	else m = fv->file_list[fv->selection]->s.st_mode;
 	if (S_ISDIR(m)) {
-		syslog(LOG_DEBUG, "enter dir %s", fv->file_list[fv->selection]->file_name);
-		err = enter_dir(fv->wd, fv->file_list[fv->selection]->file_name);
-		if (err) return ENAMETOOLONG;
+		if (enter_dir(fv->wd, fn)) return ENAMETOOLONG;
 	}
-	else if (S_ISLNK(m)) {
+	else if (S_ISLNK(m) && S_ISDIR(fv->file_list[fv->selection]->l.st_mode)) {
 		utf8* p = malloc(PATH_MAX);
 		strcpy(p, fv->wd);
-		err = enter_dir(p, fv->file_list[fv->selection]->link_path);
-		if (err) {
+		if (enter_dir(p, lp)) {
 			free(p);
 			return ENAMETOOLONG;
 		}
-		syslog(LOG_DEBUG, "enter link %s (%s)",
-				fv->file_list[fv->selection]->link_path, p);
 		if (is_dir(p)) {
 			strcpy(fv->wd, p);
 		}
 		free(p);
 	}
 	else return ENOTDIR;
-	int r = scan_dir(fv->wd, &fv->file_list, &fv->num_files);
-	if (r) {
-		up_dir(fv->wd);
-		err = scan_dir(fv->wd, &fv->file_list, &fv->num_files);
-		if (err) abort(); // TODO
-		return r;
+	int err = scan_dir(fv->wd, &fv->file_list, &fv->num_files);
+	if (err) {
+		delete_file_list(fv);
+		return err;
 	}
 	first_entry(fv);
-	return err;
+	return 0;
 }
 
 int file_view_up_dir(struct file_view* fv) {
@@ -310,6 +306,7 @@ void file_view_toggle_link_transparency(struct file_view* fv) {
 }
 
 utf8* file_view_path_to_selected(struct file_view* fv) {
+	if (!fv->num_files) return NULL;
 	utf8* p = malloc(PATH_MAX);
 	strcpy(p, fv->wd);
 	if (enter_dir(p, fv->file_list[fv->selection]->file_name)) {
