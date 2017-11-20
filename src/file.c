@@ -33,6 +33,12 @@ static int file_sort(const struct dirent** a, const struct dirent** b) {
 	else return strcmp((*a)->d_name, (*b)->d_name);
 }
 
+bool is_lnk(const char* path) {
+	struct stat s;
+	int r = lstat(path, &s);
+	return (!r && S_ISLNK(s.st_mode));
+}
+
 /* Checks if that thing pointed by path is a directory
  * If path points to link, then pointed file is checked
  */
@@ -46,64 +52,94 @@ bool file_exists(const char* path) {
 	return !access(path, F_OK);
 }
 
+void _scan_clean(struct file_record*** fl, fnum_t* nf) {
+	if (!*nf) return;
+	for (fnum_t i = 0; i < *nf; ++i) {
+		free((*fl)[i]->file_name);
+		free((*fl)[i]->link_path);
+		free((*fl)[i]);
+	}
+	free(*fl);
+	*fl = NULL;
+	*nf = 0;
+}
+
 /* Cleans up old data and scans working directory,
  * putting data into variables passed in arguments.
+ *
+ * On ENOMEM, stops scanning, leaving list as is, and returns proper error.
+ * On other errors (failed stat or lstat) failed flag is set.
+ * This is so that one failed file doesn't stop entire scan,
+ * and further toubleshooting is possible.
+ *
+ * TODO it's quite complicated; go through it again
+ * TODO goto would be useful here
+ * TODO check if fstatat could help
  */
-int scan_dir(const char* wd, struct file_record*** file_list,
-		fnum_t* num_files) {
-	if (*num_files) { // TODO maybe move scan_dir to file_view?
-		for (fnum_t i = 0; i < *num_files; i++) {
-			free((*file_list)[i]->file_name);
-			free((*file_list)[i]->link_path);
-			free((*file_list)[i]);
-		}
-		free(*file_list);
-		*file_list = NULL;
-		*num_files = 0;
-	}
-	//delete_file_list(file_list, num_files);
-	struct dirent** namelist;
+int scan_dir(const char* wd, struct file_record*** fl, fnum_t* nf) {
+	_scan_clean(fl, nf);
+	int r = 0;
 	DIR* dir = opendir(wd);
-	int r = scandir(wd, &namelist, file_filter, file_sort);
-	if (r == -1) return errno;
-	if (closedir(dir)) return errno;
-	*num_files = r;
-	*file_list = malloc(sizeof(struct file_record*) * (*num_files));
-	char* path = malloc(PATH_MAX);
-	char* link_path = malloc(PATH_MAX);
-	for (fnum_t i = 0; i < (*num_files); ++i) {
-		strcpy(path, wd);
-		enter_dir(path, namelist[i]->d_name);
-		(*file_list)[i] = malloc(sizeof(struct file_record));
-		struct file_record* const fr = (*file_list)[i];
-		fr->file_name = strdup(namelist[i]->d_name);
-		fr->link_path = NULL;
-		if (lstat(path, &fr->s) || stat(path, &fr->l)) {
-			for (fnum_t j = 0; j <= i; ++j) {
-				free((*file_list)[i]->file_name);
-				if ((*file_list)[i]->link_path) {
-					free((*file_list)[i]->link_path);
+	if (!dir) return errno;
+	utf8 fpath[PATH_MAX]; // Stack should be fine with them
+	utf8 lpath[PATH_MAX];
+	struct dirent* de;
+	while ((de = readdir(dir)) != NULL) {
+		if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, "..")) continue;
+		void* tmp = realloc(*fl, sizeof(struct file_record*) * (*nf+1));
+		if (!tmp) {
+			r = ENOMEM;
+			_scan_clean(fl, nf);
+			break;
+		}
+		*nf += 1;
+		*fl = tmp;
+		struct file_record* nfr = (*fl)[(*nf)-1] = NULL;
+		nfr->ff = FAILED_NOT;
+		tmp = malloc(sizeof(struct file_record));
+		if (!tmp) {
+			r = ENOMEM;
+			_scan_clean(fl, nf);
+			break;
+		}
+		nfr = tmp;
+		nfr->file_name = strdup(de->d_name);
+		if (!nfr->file_name) nfr->ff |= FAILED_NAME;
+		strcpy(fpath, wd);
+		strcat(fpath, "/");
+		strcat(fpath, de->d_name);
+		if (lstat(fpath, &nfr->s)) nfr->ff |= FAILED_STAT;
+		if (S_ISLNK(nfr->s.st_mode)) {
+			nfr->l = malloc(sizeof(struct stat));
+			if (!nfr->l || stat(fpath, nfr->l)) nfr->ff |= FAILED_LSTAT;
+			else {
+				const int lp_len = readlink(fpath, lpath, PATH_MAX);
+				nfr->link_path = malloc(lp_len+1);
+				if (memcpy(nfr->link_path, lpath, lp_len+1)) {
+					nfr->link_path[lp_len] = 0;
 				}
-				free((*file_list)[i]);
+				else nfr->ff |= FAILED_LPATH;
 			}
-			*num_files = 0;
-			*file_list = NULL;
-			return errno;
 		}
-		else if (S_ISLNK(fr->s.st_mode)) {
-			// Readlink does not append NULL terminator,
-			// but it returns the length of copied path
-			const int lp_len = readlink(path, link_path, PATH_MAX);
-			fr->link_path = malloc(lp_len+1);
-			memcpy(fr->link_path, link_path, lp_len+1);
-			fr->link_path[lp_len] = 0; // NULL terminator
+		else {
+			nfr->l = &nfr->s;
 		}
-		// I'm keeping d_name, don't need the rest
-		free(namelist[i]);
 	}
-	free(link_path);
-	free(path);
-	free(namelist);
+	closedir(dir);
+	return r;
+}
+
+/* Copies link from src to dst */
+int link_copy(const char* const src, const char* const dst) {
+	if (!src || !dst) return EINVAL;
+	struct stat src_s;
+	if (lstat(src, &src_s)) return errno;
+	if (!S_ISLNK(src_s.st_mode)) return EINVAL;
+	char lpath[PATH_MAX];
+	const ssize_t ll = readlink(src, lpath, PATH_MAX);
+	if (ll == -1) return errno;
+	lpath[ll] = 0;
+	if (symlink(lpath, dst)) return errno;
 	return 0;
 }
 
