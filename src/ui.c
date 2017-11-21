@@ -161,6 +161,7 @@ void ui_end(struct ui* const i) {
 }
 
 static void ui_draw_panel(struct ui* const i, const int v) {
+	// TODO make readable
 	const struct file_view* const s = i->fvs[v];
 	const bool sh = s->show_hidden;
 	WINDOW* const w = panel_window(i->fvp[v]);
@@ -197,13 +198,15 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	fnum_t nsl = 0; // Number of SymLinks
 	fnum_t hi = 0; // Highlighted file Index
 	bool sisl = false; // Selected Is SymLink
-	for (fnum_t i = 0; i < s->num_files && !sh; ++i) {
-		if (!ifaiv(s, i)) nhf += 1;
+	const struct file_record* hfr = NULL;
+	for (fnum_t i = 0; i < s->num_files; ++i) {
+		if (hidden(s, i)) nhf += 1;
 		const bool sl = S_ISLNK(s->file_list[i]->s.st_mode);
 		if (sl) nsl += 1;
 		if (i == s->selection) {
 			hi = i-nhf;
 			sisl = sl;
+			hfr = s->file_list[i];
 		}
 	}
 
@@ -216,7 +219,7 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	fnum_t ui = 1; // Under Index
 	/* How many entries are under selection? */
 	while (s->num_files-nhf && s->selection+ui < s->num_files && eu <= me/2) {
-		if (sh || ifaiv(s, s->selection+ui)) {
+		if (visible(s, s->selection+ui)) {
 			eu += 1;
 		}
 		ui += 1;
@@ -225,7 +228,7 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	 * (If there are few entries under, then use up all remaining space)
 	 */
 	while (s->num_files-nhf && s->selection >= oi && eo + 1 + eu <= me) {
-		if (sh || ifaiv(s, s->selection-oi)) {
+		if (visible(s, s->selection-oi)) {
 			eo += 1;
 		}
 		bi = s->selection-oi;
@@ -235,15 +238,16 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	fnum_t dr = 1; // Drawing Row
 	fnum_t e = bi;
 	while (s->num_files-nhf && e < s->num_files && dr < ph-1) {
-		if (!sh && !ifaiv(s, e)) {
+		if (!visible(s, e)) {
 			e += 1;
 			continue;
 		}
-		mode_t m;
 		const struct file_record* const cfr = s->file_list[e];
-		if (s->tlnk) m = cfr->l.st_mode;
-		else m = cfr->s.st_mode;
-		const int type = mode2type(m);
+		//if (!cfr) continue;
+		const struct stat* st;
+		if (s->tlnk) st = cfr->l;
+		else st = &cfr->s;
+		const int type = mode2type(st->st_mode);
 		const char type_symbol = type_symbol_mapping[type][0];
 		int color_pair_enabled = type_symbol_mapping[type][1];
 		// TODO is is utf-8 at all? validate
@@ -291,26 +295,27 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 		snprintf(status, status_size, empty);
 	}
 	else if (s->num_files - nhf) {
-		const off_t statsize = (s->tlnk ?
-				s->file_list[s->selection]->l.st_size :
-				s->file_list[s->selection]->s.st_size);
-		const off_t fsize = (s->selection < s->num_files ? statsize : 0);
-		const time_t lt = s->file_list[s->selection]->s.st_mtim.tv_sec;
+		const struct stat* st = (s->tlnk ? hfr->l : &hfr->s);
+		const off_t fsize = (s->selection < s->num_files ? st->st_size : 0);
+		const time_t lt = st->st_mtim.tv_sec;
 		struct tm* tt = localtime(&lt);
 		strftime(time, time_size, timefmt, tt);
-		if (s->show_hidden) {
-			snprintf(status, status_size, "%u/%u %c%u %o %zuB",
-					s->selection+1, s->num_files, (sisl ? 'L' : 'l'), nsl,
-					s->file_list[s->selection]->s.st_mode & 0xfff, fsize);
-		}
-		else {
-			snprintf(status, status_size, "%u/%u h%u %c%u, %o %zuB",
-					hi+1, s->num_files-nhf, nhf, (sisl ? 'L' : 'l'), nsl,
-					s->file_list[s->selection]->s.st_mode & 0xfff, fsize);
-		}
+		snprintf(status, status_size, "%u/%u %c%u %c%u hl%lu, %o %zuB",
+				hi+1, s->num_files-nhf,
+				(sh ? 'H' : 'h'), nhf,
+				(sisl ? 'L' : 'l'), nsl,
+				st->st_nlink,
+				st->st_mode & 0xfff, fsize);
+		/* BTW chmod man page says chmod
+		 * cannot change symlink permissions.
+		 * ...but that is not and issue since
+		 * symlinks permissions are never used.
+		 */
 	}
 	else {
-		snprintf(status, status_size, "h%u l%u", nhf, nsl);
+		snprintf(status, status_size,
+				"h%u %c%u", nhf,
+				(sisl ? 'L' : 'l'), nsl);
 	}
 	mvwprintw(w, dr, 0, " %s%*c%s ", status,
 			pw-utf8_width(status)-strlen(time)-2, ' ', time);
@@ -591,7 +596,6 @@ void prompt_open(struct ui* i, utf8* tb, utf8* tb_top, size_t tb_size) {
 
 void prompt_close(struct ui* i) {
 	i->m = i->prompt->mb;
-	//free(i->prompt->tb);
 	free(i->prompt);
 	i->prompt = NULL;
 }
