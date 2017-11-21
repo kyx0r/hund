@@ -21,6 +21,7 @@
 #define FILE_VIEW_H
 
 #include "file.h"
+#include "utf8.h"
 
 struct file_view {
 	char wd[PATH_MAX];
@@ -31,7 +32,8 @@ struct file_view {
 	bool tlnk; // Transparent LiNKs
 };
 
-bool ifaiv(const struct file_view* const, const fnum_t);
+bool hidden(const struct file_view* const, const fnum_t);
+bool visible(const struct file_view* const, const fnum_t);
 
 void next_entry(struct file_view*);
 void first_entry(struct file_view*);

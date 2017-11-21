@@ -33,10 +33,19 @@
  * - rescanning file_list (if needed)
  */
 
-// Is File At Index Visible
-// TODO include test for show_hidden and cut it out of functions
-bool ifaiv(const struct file_view* const fv, const fnum_t i) {
-	return fv->file_list[i]->file_name[0] != '.';
+/* checks if file is hidden just by looking at the name */
+bool hidden(const struct file_view* const fv, const fnum_t i) {
+	return fv->file_list[i]->file_name[0] == '.';
+}
+
+/* checks if file is visible at the moment */
+/* Truth table - is file visible at the moment?
+ *          file.ext | .hidden.ext
+ * show_hidden = 1 |1|1|
+ * show_hidden = 0 |1|0|
+ */
+bool visible(const struct file_view* const fv, const fnum_t i) {
+	return fv->show_hidden || !hidden(fv, i);
 }
 
 void next_entry(struct file_view* fv) {
@@ -54,13 +63,13 @@ void next_entry(struct file_view* fv) {
 		/* Truth table - "Keep looking?" or "What to put in while"
 		 * 1 = Keep looking
 		 * 0 = Give up
-		 *        visible | hidden
+		 *        visible | not visible
 		 * out of array |0|0|
 		 * in array     |0|1|
 		 */
 		do {
 			i += 1;
-		} while (i <= fv->num_files-1 && fv->file_list[i]->file_name[0] == '.');
+		} while (i <= fv->num_files-1 && hidden(fv, i));
 		if (i > fv->num_files-1) return;
 		fv->selection = i;
 	}
@@ -77,14 +86,14 @@ void prev_entry(struct file_view* fv) {
 		}
 	}
 	/* Truth table - "Perform backward search?"
-	 *    .hidden | visible
+	 * .notvisible | visible
 	 * sel == 0 |1*|0| * = first_entry()
 	 * sel != 0 |1 |1|
 	 */
-	else if (fv->selection == 0 && !ifaiv(fv, fv->selection)) {
+	else if (fv->selection == 0 && hidden(fv, fv->selection)) {
 		first_entry(fv);
 	}
-   	else if (fv->selection != 0 && ifaiv(fv, fv->selection)) {
+	else if (fv->selection != 0 && !hidden(fv, fv->selection)) {
 	   	/* Truth table - "Keep looking?" or "What to put in while"
 	   	 * 1 = Keep looking
 	   	 * 0 = Stop looking
@@ -95,8 +104,8 @@ void prev_entry(struct file_view* fv) {
 	   	fnum_t i = fv->selection;
 	   	do {
 	   		i -= 1;
-	   	} while (i != 0 && fv->file_list[i]->file_name[0] == '.');
-	   	if (i == 0 && !ifaiv(fv, i)) {
+		} while (i != 0 && hidden(fv, i));
+		if (i == 0 && hidden(fv, i)) {
 			first_entry(fv);
 		}
 		else {
@@ -112,10 +121,10 @@ void first_entry(struct file_view* fv) {
 	}
 	else {
 		fnum_t i = 0;
-		while (i < fv->num_files-1 && !ifaiv(fv, i)) {
+		while (i < fv->num_files-1 && hidden(fv, i)) {
 			i += 1;
 		}
-		if (i == fv->num_files-1 && !ifaiv(fv, i)) {
+		if (i == fv->num_files-1 && hidden(fv, i)) {
 			fv->selection = 0;
 		}
 		else {
@@ -131,10 +140,10 @@ void last_entry(struct file_view* fv) {
 	}
 	else {
 		fnum_t i = fv->num_files-1;
-		while (i != 0 && !ifaiv(fv, i)) {
+		while (i != 0 && hidden(fv, i)) {
 			i -= 1;
 		}
-		if (i == 0 && !ifaiv(fv, i)) {
+		if (i == 0 && hidden(fv, i)) {
 			fv->selection = 0;
 		}
 		else {
@@ -144,17 +153,8 @@ void last_entry(struct file_view* fv) {
 }
 
 void delete_file_list(struct file_view* fv) {
-	if (fv->num_files) {
-		for (fnum_t i = 0; i < fv->num_files; i++) {
-			free(fv->file_list[i]->file_name);
-			free(fv->file_list[i]->link_path);
-			free(fv->file_list[i]);
-		}
-		free(fv->file_list);
-		fv->file_list = NULL;
-		fv->num_files = 0;
-		fv->selection = 0;
-	}
+	file_list_clean(&fv->file_list, &fv->num_files);
+	fv->selection = 0;
 }
 
 bool file_on_list(struct file_view* fv, const utf8* const name) {
@@ -172,7 +172,7 @@ void file_highlight(struct file_view* fv, const utf8* const name) {
 		i += 1;
 	}
 	if (i != fv->num_files) {
-		if (fv->show_hidden || ifaiv(fv, i)) {
+		if (visible(fv, i)) {
 			fv->selection = i;
 		}
 		else {
@@ -207,7 +207,7 @@ bool file_find(struct file_view* fv, const utf8* const name,
 	syslog(LOG_DEBUG, "%u %u", start, end);
 	if (start <= end) {
 		for (fnum_t i = start; i <= end; ++i) {
-			if ((fv->show_hidden || ifaiv(fv, i)) &&
+			if (visible(fv, i) &&
 					contains(fv->file_list[i]->file_name, name)) {
 				fv->selection = i;
 				return true;
@@ -217,7 +217,7 @@ bool file_find(struct file_view* fv, const utf8* const name,
 	}
 	else if (end < start) {
 		for (fnum_t i = start; i >= end; --i) {
-			if ((fv->show_hidden || ifaiv(fv, i)) &&
+			if (visible(fv, i) &&
 					contains(fv->file_list[i]->file_name, name)) {
 				fv->selection = i;
 				return true;
@@ -231,20 +231,20 @@ bool file_find(struct file_view* fv, const utf8* const name,
 }
 
 int file_view_enter_selected_dir(struct file_view* fv) {
-	if (!fv->num_files || (!fv->show_hidden &&
-				!ifaiv(fv, fv->selection))) return 0;
-	mode_t m;
+	if (!fv->num_files || !visible(fv, fv->selection)) return 0;
 	utf8* fn = fv->file_list[fv->selection]->file_name;
 	utf8* lp = fv->file_list[fv->selection]->link_path;
-	if (fv->tlnk) m = fv->file_list[fv->selection]->l.st_mode;
-	else m = fv->file_list[fv->selection]->s.st_mode;
-	if (S_ISDIR(m)) {
+	const struct stat* rst = &fv->file_list[fv->selection]->s;
+	const struct stat* lst = fv->file_list[fv->selection]->l;
+	const struct stat* st = (fv->tlnk ? lst : rst);
+	if (S_ISDIR(st->st_mode)) {
 		if (enter_dir(fv->wd, fn)) return ENAMETOOLONG;
 	}
-	else if (S_ISLNK(m) && S_ISDIR(fv->file_list[fv->selection]->l.st_mode)) {
+	else if (S_ISLNK(st->st_mode) && S_ISDIR(lst->st_mode)) {
 		utf8* p = malloc(PATH_MAX);
 		strcpy(p, fv->wd);
 		if (enter_dir(p, lp)) {
+			delete_file_list(fv);
 			free(p);
 			return ENAMETOOLONG;
 		}
@@ -283,7 +283,7 @@ void file_view_afterdel(struct file_view* fv) {
 		if (fv->selection >= fv->num_files-1) {
 			last_entry(fv);
 		}
-		if (!fv->show_hidden && !ifaiv(fv, fv->selection)){
+		if (!visible(fv, fv->selection)){
 			next_entry(fv);
 		}
 	}
@@ -294,7 +294,7 @@ void file_view_afterdel(struct file_view* fv) {
 
 void file_view_toggle_hidden(struct file_view* fv) {
 	fv->show_hidden = !fv->show_hidden;
-	if (!fv->show_hidden && !ifaiv(fv, fv->selection)) {
+	if (!visible(fv, fv->selection)) {
 		first_entry(fv);
 	}
 }
