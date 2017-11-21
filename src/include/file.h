@@ -43,7 +43,6 @@
 #include <syslog.h>
 
 #include "path.h"
-#include "utf8.h"
 
 /* From LSB to MSB, by bit index */
 static const char* const mode_bit_meaning[] = {
@@ -63,32 +62,28 @@ static const char* const mode_bit_meaning[] = {
 
 typedef unsigned int fnum_t; // Number of Files
 
-enum {
-	FAILED_NOT = 0,
-	FAILED_NAME = 1<<0,
-	FAILED_STAT = 1<<1, // file STAT
-	FAILED_LSTAT = 1<<2, // Link-sensitive STAT
-	FAILED_LPATH = 1<<3,
-};
-/* If file is a symlink, l will point stat of the pointed file.
- * Otherwise it will point s.
+/* If file is a symlink, l will point heap-allocated stat of the pointed file.
+ * Otherwise it will point &s.
  */
 struct file_record {
 	char* file_name;
 	char* link_path;
 	struct stat s;
 	struct stat* l;
-	int ff;
 };
 
 bool is_lnk(const char*);
 bool is_dir(const char*);
+
 bool file_exists(const char*);
+void file_list_clean(struct file_record***, fnum_t*);
 int scan_dir(const char*, struct file_record***, fnum_t*);
 int link_copy(const char* const, const char* const);
+
 int file_move(const char*, const char*);
 int file_remove(const char*);
 int file_copy(const char*, const char*);
 
 int dir_make(const char*);
+
 #endif

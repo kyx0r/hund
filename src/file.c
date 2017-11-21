@@ -19,20 +19,6 @@
 
 #include "include/file.h"
 
-static int file_filter(const struct dirent* d) {
-	// Skip . and ..
-	// Don't need them
-	return !((d->d_name[0] == '.' && d->d_name[1] == 0) ||
-			(d->d_name[0] == '.' && d->d_name[1] == '.' && d->d_name[2] == 0));
-}
-
-static int file_sort(const struct dirent** a, const struct dirent** b) {
-	// Directories first, then other files
-	if ((*a)->d_type == DT_DIR && (*b)->d_type != DT_DIR) return -1;
-	else if ((*b)->d_type == DT_DIR && (*a)->d_type != DT_DIR) return 1;
-	else return strcmp((*a)->d_name, (*b)->d_name);
-}
-
 bool is_lnk(const char* path) {
 	struct stat s;
 	int r = lstat(path, &s);
@@ -52,11 +38,12 @@ bool file_exists(const char* path) {
 	return !access(path, F_OK);
 }
 
-void _scan_clean(struct file_record*** fl, fnum_t* nf) {
+void file_list_clean(struct file_record*** fl, fnum_t* nf) {
 	if (!*nf) return;
 	for (fnum_t i = 0; i < *nf; ++i) {
 		free((*fl)[i]->file_name);
 		free((*fl)[i]->link_path);
+		if ((*fl)[i]->l != &(*fl)[i]->s) free((*fl)[i]->l);
 		free((*fl)[i]);
 	}
 	free(*fl);
@@ -67,58 +54,56 @@ void _scan_clean(struct file_record*** fl, fnum_t* nf) {
 /* Cleans up old data and scans working directory,
  * putting data into variables passed in arguments.
  *
- * On ENOMEM, stops scanning, leaving list as is, and returns proper error.
- * On other errors (failed stat or lstat) failed flag is set.
- * This is so that one failed file doesn't stop entire scan,
- * and further toubleshooting is possible.
+ * On ENOMEM: cleans everything
+ * On stat/lstat errors: zeroes failed fields
  *
- * TODO it's quite complicated; go through it again
- * TODO goto would be useful here
  * TODO check if fstatat could help
  */
 int scan_dir(const char* wd, struct file_record*** fl, fnum_t* nf) {
-	_scan_clean(fl, nf);
+	syslog(LOG_DEBUG, "scan_dir");
+	file_list_clean(fl, nf);
 	int r = 0;
 	DIR* dir = opendir(wd);
 	if (!dir) return errno;
-	utf8 fpath[PATH_MAX]; // Stack should be fine with them
-	utf8 lpath[PATH_MAX];
+	char fpath[PATH_MAX]; // Stack should be fine with them
+	char lpath[PATH_MAX];
 	struct dirent* de;
 	while ((de = readdir(dir)) != NULL) {
 		if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, "..")) continue;
 		void* tmp = realloc(*fl, sizeof(struct file_record*) * (*nf+1));
 		if (!tmp) {
 			r = ENOMEM;
-			_scan_clean(fl, nf);
+			file_list_clean(fl, nf);
 			break;
 		}
 		*nf += 1;
 		*fl = tmp;
-		struct file_record* nfr = (*fl)[(*nf)-1] = NULL;
-		nfr->ff = FAILED_NOT;
-		tmp = malloc(sizeof(struct file_record));
-		if (!tmp) {
+		(*fl)[(*nf)-1] = malloc(sizeof(struct file_record));
+		struct file_record* nfr = (*fl)[(*nf)-1];
+		if (!nfr) {
 			r = ENOMEM;
-			_scan_clean(fl, nf);
+			file_list_clean(fl, nf);
 			break;
 		}
-		nfr = tmp;
-		nfr->file_name = strdup(de->d_name);
-		if (!nfr->file_name) nfr->ff |= FAILED_NAME;
+		nfr->file_name = strdup(de->d_name); // TODO
+		nfr->link_path = NULL;
 		strcpy(fpath, wd);
 		strcat(fpath, "/");
 		strcat(fpath, de->d_name);
-		if (lstat(fpath, &nfr->s)) nfr->ff |= FAILED_STAT;
-		if (S_ISLNK(nfr->s.st_mode)) {
-			nfr->l = malloc(sizeof(struct stat));
-			if (!nfr->l || stat(fpath, nfr->l)) nfr->ff |= FAILED_LSTAT;
+		if (lstat(fpath, &nfr->s)) memset(&nfr->s, 0, sizeof(struct stat));
+		else if (S_ISLNK(nfr->s.st_mode)) {
+			nfr->l = malloc(sizeof(struct stat)); // TODO
+			if (!nfr->l);
+			else if(stat(fpath, nfr->l)) {
+				free(nfr->l);
+				nfr->l = NULL;
+			}
 			else {
 				const int lp_len = readlink(fpath, lpath, PATH_MAX);
 				nfr->link_path = malloc(lp_len+1);
 				if (memcpy(nfr->link_path, lpath, lp_len+1)) {
 					nfr->link_path[lp_len] = 0;
 				}
-				else nfr->ff |= FAILED_LPATH;
 			}
 		}
 		else {
