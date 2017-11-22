@@ -60,7 +60,6 @@ void file_list_clean(struct file_record*** fl, fnum_t* nf) {
  * TODO check if fstatat could help
  */
 int scan_dir(const char* wd, struct file_record*** fl, fnum_t* nf) {
-	syslog(LOG_DEBUG, "scan_dir");
 	file_list_clean(fl, nf);
 	int r = 0;
 	DIR* dir = opendir(wd);
@@ -112,6 +111,17 @@ int scan_dir(const char* wd, struct file_record*** fl, fnum_t* nf) {
 	}
 	closedir(dir);
 	return r;
+}
+
+static int _fcmp(const void* p1, const void* p2) {
+	const struct file_record* const fr1 = *((struct file_record**) p1);
+	const struct file_record* const fr2 = *((struct file_record**) p2);
+	return strcmp(fr1->file_name, fr2->file_name);
+}
+
+int sort_file_list(struct file_record** fl, fnum_t nf) {
+	qsort(fl, nf, sizeof(struct file_record*), _fcmp);
+	return 0;
 }
 
 /* Copies link from src to dst */
