@@ -60,7 +60,6 @@ enum command {
 	CMD_ENTRY_LAST,
 	CMD_RENAME,
 	CMD_TOGGLE_HIDDEN,
-	CMD_TOGGLE_LINK_TRANSPARENCY,
 	CMD_CD,
 	CMD_OPEN_FILE,
 	CMD_HELP,
@@ -164,9 +163,9 @@ static const struct input2cmd default_mapping[] = {
 
 	{ .i={ UTF8("/"), ENDK }, .m=MODE_MANAGER, .c=CMD_FIND },
 
-	{ .i={ UTF8("h"), ENDK }, .m=MODE_MANAGER, .c=CMD_TOGGLE_HIDDEN },
+	{ .i={ UTF8("s"), ENDK }, .m=MODE_MANAGER, .c=CMD_TOGGLE_HIDDEN },
+	{ .i={ CTRL('h'), ENDK }, .m=MODE_MANAGER, .c=CMD_TOGGLE_HIDDEN },
 
-	{ .i={ UTF8("t"), UTF8("l"), ENDK }, .m=MODE_MANAGER, .c=CMD_TOGGLE_LINK_TRANSPARENCY },
 	{ .i={ UTF8("?"), ENDK }, .m=MODE_MANAGER, .c=CMD_HELP },
 
 	{ .i={ UTF8("c"), UTF8("d"), ENDK }, .m=MODE_MANAGER, .c=CMD_CD },
@@ -225,7 +224,6 @@ static const struct cmd2help cmd_help[] = {
 	{ .c = CMD_ENTRY_LAST, .hint = "bottom", .help = "Select bottom file in directory." },
 	{ .c = CMD_RENAME, .hint = "rename", .help = "Rename selected file. Prompts for new name." },
 	{ .c = CMD_TOGGLE_HIDDEN, .hint = "hide", .help = "Switch between hiding/showing hidden files." },
-	{ .c = CMD_TOGGLE_LINK_TRANSPARENCY, .hint = "link transparency", .help = "Switch method of handling symlinks." },
 	{ .c = CMD_CD, .hint = "change dir", .help = "Jump to some directory. Prompts for path." },
 	{ .c = CMD_OPEN_FILE, .hint = "open", .help = "Open selected file in less." },
 	{ .c = CMD_FIND, .hint = "find", .help = "Search for files in current directory. Case sensitive." },
@@ -262,9 +260,10 @@ static const char type_symbol_mapping[][2] = {
 	[2] = { '|', 1 }, // FIFO
 	[3] = { ' ', 1 }, // REG
 	[4] = { '/', 9 }, // DIR
-	[5] = { '~', 3 }, // LNK
-	[6] = { '=', 5 }, // SOCK
-	[7] = { '?', 1 }, // default
+	[5] = { '=', 5 }, // SOCK
+	[6] = { '~', 9 }, // LNK DIR
+	[7] = { '@', 1 }, // LNK OTHER
+	[8] = { '?', 1 }, // default
 };
 
 struct ui_find {

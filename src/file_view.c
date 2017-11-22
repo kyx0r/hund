@@ -233,25 +233,10 @@ bool file_find(struct file_view* fv, const utf8* const name,
 int file_view_enter_selected_dir(struct file_view* fv) {
 	if (!fv->num_files || !visible(fv, fv->selection)) return 0;
 	utf8* fn = fv->file_list[fv->selection]->file_name;
-	utf8* lp = fv->file_list[fv->selection]->link_path;
 	const struct stat* rst = &fv->file_list[fv->selection]->s;
 	const struct stat* lst = fv->file_list[fv->selection]->l;
-	const struct stat* st = (fv->tlnk ? lst : rst);
-	if (S_ISDIR(st->st_mode)) {
+	if (S_ISDIR(rst->st_mode) || S_ISDIR(lst->st_mode)) {
 		if (enter_dir(fv->wd, fn)) return ENAMETOOLONG;
-	}
-	else if (S_ISLNK(st->st_mode) && S_ISDIR(lst->st_mode)) {
-		utf8* p = malloc(PATH_MAX);
-		strcpy(p, fv->wd);
-		if (enter_dir(p, lp)) {
-			delete_file_list(fv);
-			free(p);
-			return ENAMETOOLONG;
-		}
-		if (is_dir(p)) {
-			strcpy(fv->wd, p);
-		}
-		free(p);
 	}
 	else return ENOTDIR;
 	int err = scan_dir(fv->wd, &fv->file_list, &fv->num_files);
@@ -259,6 +244,7 @@ int file_view_enter_selected_dir(struct file_view* fv) {
 		delete_file_list(fv);
 		return err;
 	}
+	sort_file_list(fv->file_list, fv->num_files);
 	first_entry(fv);
 	return 0;
 }
@@ -273,6 +259,7 @@ int file_view_up_dir(struct file_view* fv) {
 		free(prevdir);
 		return err;
 	}
+	sort_file_list(fv->file_list, fv->num_files);
 	file_highlight(fv, prevdir);
 	free(prevdir);
 	return 0;
@@ -297,10 +284,6 @@ void file_view_toggle_hidden(struct file_view* fv) {
 	if (!visible(fv, fv->selection)) {
 		first_entry(fv);
 	}
-}
-
-void file_view_toggle_link_transparency(struct file_view* fv) {
-	fv->tlnk = !fv->tlnk;
 }
 
 utf8* file_view_path_to_selected(struct file_view* fv) {

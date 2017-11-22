@@ -32,7 +32,7 @@ static const struct cmd2help* get_help_data(const enum command c) {
 	return NULL;
 }
 
-static int mode2type(mode_t m) {
+static int mode2type(mode_t m, mode_t n) {
 	// TODO find a better way
 	// See sys_stat.h manpage for more info
 	switch (m & S_IFMT) {
@@ -41,9 +41,18 @@ static int mode2type(mode_t m) {
 	case S_IFIFO: return 2;
 	case S_IFREG: return 3;
 	case S_IFDIR: return 4;
-	case S_IFLNK: return 5;
-	case S_IFSOCK: return 6;
-	default: return 7;
+	case S_IFSOCK: return 5;
+	case S_IFLNK:
+		switch (n & S_IFMT) {
+		case S_IFBLK:
+		case S_IFCHR:
+		case S_IFIFO:
+		case S_IFREG:
+		case S_IFSOCK: return 7;
+		case S_IFDIR: return 6;
+		default: return 8;
+		}
+	default: return 8;
 	}
 }
 
@@ -160,6 +169,79 @@ void ui_end(struct ui* const i) {
 	endwin();
 }
 
+static void _printw_pathbar(const char* const path,
+		WINDOW* const w, fnum_t width) {
+	struct passwd* pwd = get_pwd();
+	const int pi = prettify_path_i(path, pwd->pw_dir);
+	size_t path_width = utf8_width(path+pi) + (pi ? 1 : 0);
+	wattron(w, COLOR_PAIR(2));
+	if (path_width <= width-2) {
+		mvwprintw(w, 0, 0, "%s%s%*c ",
+				(pi ? " ~" : " "),
+				path+pi, width-utf8_width(path+pi), ' ');
+	}
+	else {
+		size_t sg = path_width - (width-2) - (pi?1:0);
+		mvwprintw(w, 0, 0, " %s ",
+				path+pi+utf8_slice_length(path+pi, sg));
+	}
+	wattroff(w, COLOR_PAIR(2));
+}
+
+#define min(A,B) ((A)<(B) ? (A) : (B))
+static void _printw_entry(WINDOW* const w, const fnum_t dr,
+		const struct file_record* const cfr,
+		fnum_t width, bool highlight) {
+	// TODO is is utf-8 at all? validate
+	const int type = mode2type(cfr->s.st_mode, cfr->l->st_mode);
+	const char type_symbol = type_symbol_mapping[type][0];
+	int color_pair_enabled = type_symbol_mapping[type][1];
+	const size_t bufl = width*4;
+	char *buf = malloc(bufl);
+	memset(buf, ' ', bufl);
+	buf[bufl-1] = 0;
+	buf[strlen(buf)] = ' ';
+
+	if (highlight) {
+		color_pair_enabled += 1;
+	}
+	wattron(w, COLOR_PAIR(color_pair_enabled));
+	fnum_t space = width;
+	fnum_t begin = 0;
+	mvwprintw(w, dr, begin, "%c", type_symbol);
+	space -= 1;
+	begin += 1;
+
+	utf8 *fn = cfr->file_name;
+	utf8 *lp = cfr->link_path;
+
+	const size_t printfn = min(space, utf8_width(fn));
+	mvwprintw(w, dr, begin, "%.*s", utf8_slice_length(fn, printfn), fn);
+	space -= printfn;
+	begin += printfn;
+
+	if (!highlight) {
+		if (S_ISDIR(cfr->l->st_mode)) wattron(w, COLOR_PAIR(1));
+		else wattron(w, COLOR_PAIR(9));
+	}
+	if ((cfr->s.st_mode & S_IFMT) == S_IFLNK) {
+		const size_t printlp = min(space, 4+utf8_width(lp));
+		mvwprintw(w, dr, begin, " -> %.*s",
+				utf8_slice_length(lp, printlp), lp);
+		space -= printlp;
+		begin += printlp;
+	}
+	if (!highlight) {
+		if (S_ISDIR(cfr->l->st_mode)) wattroff(w, COLOR_PAIR(1));
+		else wattroff(w, COLOR_PAIR(9));
+	}
+	mvwprintw(w, dr, begin, "%*c", space, ' ');
+
+	wattroff(w, COLOR_PAIR(color_pair_enabled));
+	free(buf);
+}
+#undef min
+
 static void ui_draw_panel(struct ui* const i, const int v) {
 	// TODO make readable
 	const struct file_view* const s = i->fvs[v];
@@ -171,22 +253,7 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	const fnum_t ph = _ph, pw = _pw;
 
 	/* Top pathbar */
-	/* Padded on both sides with space */
-	struct passwd* pwd = get_pwd();
-	const int pi = prettify_path_i(s->wd, pwd->pw_dir);
-	size_t path_width = utf8_width(s->wd+pi) + (pi ? 1 : 0);
-	wattron(w, COLOR_PAIR(2));
-	if (path_width <= pw-2) {
-		mvwprintw(w, 0, 0, "%s%s%*c ",
-				(pi ? " ~" : " "),
-				s->wd+pi, pw-utf8_width(s->wd+pi), ' ');
-	}
-	else {
-		size_t sg = path_width - (pw-2) - (pi?1:0);
-		mvwprintw(w, 0, 0, " %s ",
-				s->wd+pi+utf8_slice_length(s->wd+pi, sg));
-	}
-	wattroff(w, COLOR_PAIR(2));
+	_printw_pathbar(s->wd, w, pw);
 
 	/* Entry list */
 	/* I'm drawing N entries before selection,
@@ -198,7 +265,7 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	fnum_t nsl = 0; // Number of SymLinks
 	fnum_t hi = 0; // Highlighted file Index
 	bool sisl = false; // Selected Is SymLink
-	const struct file_record* hfr = NULL;
+	struct file_record *hfr = NULL;
 	for (fnum_t i = 0; i < s->num_files; ++i) {
 		if (hidden(s, i)) nhf += 1;
 		const bool sl = S_ISLNK(s->file_list[i]->s.st_mode);
@@ -242,38 +309,8 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 			e += 1;
 			continue;
 		}
-		const struct file_record* const cfr = s->file_list[e];
-		//if (!cfr) continue;
-		const struct stat* st;
-		if (s->tlnk) st = cfr->l;
-		else st = &cfr->s;
-		const int type = mode2type(st->st_mode);
-		const char type_symbol = type_symbol_mapping[type][0];
-		int color_pair_enabled = type_symbol_mapping[type][1];
-		// TODO is is utf-8 at all? validate
-		//const size_t fnlen = strlen(cfr->file_name);
-		const size_t fnwidth = utf8_width(cfr->file_name);
-		size_t enlen; // ENtry LENgth
-		int padding;
-		if (fnwidth > pw - 1) {
-			// If file name can't fit in line, its just cut
-			padding = 0;
-			enlen = pw - 1; // 1 is for type symbol
-		}
-		else {
-			padding = pw - fnwidth;
-			enlen = fnwidth + 1;
-		}
-		if (e == s->selection && i->fvs[v] == i->pv) {
-			color_pair_enabled += 1;
-		}
-		wattron(w, COLOR_PAIR(color_pair_enabled));
-		mvwprintw(w, dr, 0, "%c%.*s", type_symbol,
-				utf8_slice_length(cfr->file_name, enlen), cfr->file_name);
-		if (padding) {
-			mvwprintw(w, dr, enlen, "%*c", padding, ' ');
-		}
-		wattroff(w, COLOR_PAIR(color_pair_enabled));
+		bool hl = (e == s->selection && i->fvs[v] == i->pv);
+		_printw_entry(w, dr, s->file_list[e], pw, hl);
 		dr += 1;
 		e += 1;
 	}
@@ -284,28 +321,26 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	/* Infobar */
 	/* Padded on both sides with space */
 	wattron(w, COLOR_PAIR(2));
-	const size_t status_size = 512;
+	const size_t status_size = pw*4;
 	char* status = malloc(status_size);
 	static char* timefmt = "%Y-%m-%d %H:%M";
-	const size_t time_size = 32;
+	const size_t time_size = 4+1+2+1+2+1+2+1+2+1;
 	char time[time_size];
-	memset(time, 0, sizeof(time));
 	static char* empty = "(empty)";
 	if (!s->num_files) {
 		snprintf(status, status_size, empty);
 	}
 	else if (s->num_files - nhf) {
-		const struct stat* st = (s->tlnk ? hfr->l : &hfr->s);
-		const off_t fsize = (s->selection < s->num_files ? st->st_size : 0);
-		const time_t lt = st->st_mtim.tv_sec;
+		const off_t fsize = (s->selection < s->num_files ? hfr->l->st_size : 0);
+		const time_t lt = hfr->l->st_mtim.tv_sec;
 		struct tm* tt = localtime(&lt);
 		strftime(time, time_size, timefmt, tt);
-		snprintf(status, status_size, "%u/%u %c%u %c%u hl%lu, %o %zuB",
+		snprintf(status, status_size, "%u/%u %c%u %c%u hL%lu, %o %zuB",
 				hi+1, s->num_files-nhf,
 				(sh ? 'H' : 'h'), nhf,
 				(sisl ? 'L' : 'l'), nsl,
-				st->st_nlink,
-				st->st_mode & 0xfff, fsize);
+				hfr->l->st_nlink,
+				hfr->l->st_mode & 0xfff, fsize);
 		/* BTW chmod man page says chmod
 		 * cannot change symlink permissions.
 		 * ...but that is not and issue since
