@@ -35,14 +35,14 @@
 
 enum task_type {
 	TASK_NONE = 0,
-	TASK_MKDIR, //dst = new dir path
-	TASK_RM, //src = path to what to remove
-	TASK_COPY, //src -> dst
-	TASK_MOVE, //src -> dst
-	TASK_CD, //dst = what to open
-	TASK_RENAME, //src = old name, dst = new name
-	TASK_CHOWN, //src = path to what change
-	TASK_CHGRP, //src = path to what change
+	//TASK_MKDIR,
+	TASK_RM,
+	TASK_COPY,
+	TASK_MOVE,
+	//TASK_CD,
+	//TASK_RENAME,
+	//TASK_CHOWN,
+	//TASK_CHGRP,
 };
 
 enum task_state {
@@ -64,7 +64,7 @@ struct file_todo {
 	struct file_todo* next;
 	enum todo td;
 	utf8* path;
-	struct stat s;
+	struct stat s; // TODO symlinks?
 	ssize_t progress;
 };
 
@@ -84,16 +84,6 @@ void task_new(struct task*, enum task_type, utf8*, utf8*, utf8*);
 int task_build_file_list(struct task*);
 void task_check_file(struct task*);
 void task_clean(struct task*);
-
-enum do_flag {
-	FLAG_NONE = 0,
-	//FLAG_DEREF_LINKS = 1<<1,
-	//FLAG_COPY_LINKS = 1<<2,
-	//FLAG_MERGE = 1<<3,
-	//FLAG_CONFLICT_REPLACE = 1<<4
-	//FLAG_CONFLICT_SKIP = 1<<5
-	//FLAG_CONFLICT_LEAVE = 1<<6
-};
 
 bool substitute(char*, char*, char*);
 utf8* build_new_path(struct task*, utf8*);

@@ -28,6 +28,8 @@
 #include "include/ui.h"
 #include "include/task.h"
 
+#define UNUSED_ARGUMENT(E) do { (void)(E); } while (0)
+
 static void failed(utf8* error, const utf8* f, int e) {
 	snprintf(error, MSG_BUFFER_SIZE, "%s failed: %s (%d)", f, strerror(e), e);
 }
@@ -41,8 +43,9 @@ static void progress(utf8* info, struct task* t) {
 	default: break;
 	}
 	snprintf(info, MSG_BUFFER_SIZE,
-			"%s %d/%d, %luB/%luB", what,
+			"%s %d/%df, %d/%dd, %lu/%luB", what,
 			t->files_done, t->files_total,
+			t->dirs_done, t->dirs_total,
 			t->size_done, t->size_total);
 }
 
@@ -62,6 +65,7 @@ static int open_file(const utf8* const path) {
 typedef void (*mode_handler)(struct ui*, struct task*);
 
 static void mode_help(struct ui* i, struct task* t) {
+	UNUSED_ARGUMENT(t);
 	switch (get_cmd(i)) {
 	case CMD_HELP_QUIT:
 		help_close(i);
@@ -125,6 +129,7 @@ static void mode_chmod(struct ui* i, struct task* t) {
 }
 
 static void mode_find(struct ui* i, struct task* t) {
+	UNUSED_ARGUMENT(t);
 	int r = fill_textbox(i->find->t, &i->find->t_top,
 			i->find->t_size, 1, panel_window(i->status));
 	if (r == -1) {
@@ -174,12 +179,12 @@ static void mode_prompt(struct ui* i, struct task* t) {
 }
 
 static void mode_wait(struct ui* i, struct task* t) {
-	switch (get_cmd(i)) {
+	/*switch (get_cmd(i)) {
 	default: break;
-	}
+	}*/
 }
 
-static void prepare_manipulation(struct ui* i, struct task* t,
+static void prepare_task(struct ui* i, struct task* t,
 		enum task_type tt, const utf8* const err) {
 	if (!i->pv->num_files) return;
 	utf8* src = file_view_path_to_selected(i->pv);
@@ -197,11 +202,13 @@ static void prepare_manipulation(struct ui* i, struct task* t,
 		if (file_on_list(i->sv, fn)) {
 			newname = calloc(NAME_MAX, sizeof(utf8));
 			strcpy(newname, fn);
+			i->m = MODE_WAIT; // TODO FIXME
+			// doing so will make prompt set mode to MODE_WAIT
 			prompt_open(i, newname, newname+strlen(newname), NAME_MAX);
 		}
 	}
 	task_new(t, tt, src, dst, newname);
-	i->m = MODE_WAIT;
+	if (i->m != MODE_PROMPT) i->m = MODE_WAIT; // TODO FIXME
 	if (!newname) {
 		t->s = TASK_STATE_DATA_GATHERED;
 	}
@@ -251,13 +258,13 @@ static void mode_manager(struct ui* i, struct task* t) {
 		if (err) failed(i->error, "up dir", err);
 		break;
 	case CMD_COPY:
-		prepare_manipulation(i, t, TASK_COPY, "copy");
+		prepare_task(i, t, TASK_COPY, "copy");
 		break;
 	case CMD_MOVE:
-		prepare_manipulation(i, t, TASK_MOVE, "move");
+		prepare_task(i, t, TASK_MOVE, "move");
 		break;
 	case CMD_REMOVE:
-		prepare_manipulation(i, t, TASK_RM, "remove");
+		prepare_task(i, t, TASK_RM, "remove");
 		break;
 	/*case CMD_CREATE_DIR:
 		t->src = calloc(PATH_MAX, sizeof(char));
@@ -312,9 +319,6 @@ static void mode_manager(struct ui* i, struct task* t) {
 		}
 		break;
 		*/
-	case CMD_TOGGLE_LINK_TRANSPARENCY:
-		file_view_toggle_link_transparency(i->pv);
-		break;
 	case CMD_TOGGLE_HIDDEN:
 		file_view_toggle_hidden(i->pv);
 		break;
@@ -471,19 +475,18 @@ void task_state_finished(struct ui* i, struct task* t) {
 	if (t->t == TASK_RM || t->t == TASK_MOVE || t->t == TASK_COPY) {
 		wtimeout(stdscr, -1);
 	}
+	// TODO
+	scan_dir(i->pv->wd, &i->pv->file_list, &i->pv->num_files);
+	scan_dir(i->sv->wd, &i->sv->file_list, &i->sv->num_files);
 	utf8* what = "?";
 	if (t->t == TASK_RM) {
-		scan_dir(i->pv->wd, &i->pv->file_list, &i->pv->num_files);
 		what = "removed";
 		file_view_afterdel(i->pv);
 	}
 	else if (t->t == TASK_COPY) {
-		scan_dir(i->sv->wd, &i->sv->file_list, &i->sv->num_files);
 		what = "copied";
 	}
 	else if (t->t == TASK_MOVE) {
-		scan_dir(i->pv->wd, &i->pv->file_list, &i->pv->num_files);
-		scan_dir(i->sv->wd, &i->sv->file_list, &i->sv->num_files);
 		what = "moved";
 		prev_entry(i->pv);
 	}
@@ -544,7 +547,7 @@ int main(int argc, char* argv[])  {
 		optind += 1;
 	}
 
-	openlog(argv[0]+2, LOG_PID, LOG_USER);
+	openlog(argv[0], LOG_PID, LOG_USER);
 	syslog(LOG_NOTICE, "%s started", argv[0]+2);
 
 	struct file_view fvs[2];

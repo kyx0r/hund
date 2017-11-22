@@ -49,6 +49,8 @@ static void _push_file_todo(struct task* t,
 		.s = s,
 		.progress = 0
 	};
+	t->checklist = ft;
+	// TODO symlinks
 	if (S_ISDIR(s.st_mode)) {
 		if ((t->t == TASK_RM && td == TODO_REMOVE) ||
 				(td == TODO_COPY && (t->t == TASK_COPY || t->t == TASK_MOVE))) {
@@ -62,7 +64,6 @@ static void _push_file_todo(struct task* t,
 			t->size_total += s.st_size;
 		}
 	}
-	t->checklist = ft;
 }
 
 /* removing:
@@ -82,7 +83,7 @@ static void _push_file_todo(struct task* t,
  * 	4. remove old directory
  *
  * TODO share paths to minimize memory usage when moving files
- * TODO follow links
+ * TODO symlinks
  */
 static int _build_file_list(struct task* t, utf8* path, enum task_type tt) {
 	int r = 0;
@@ -149,7 +150,6 @@ void task_file_done(struct task* t) {
 		}
 		else {
 			t->files_done += 1;
-			t->size_done += head->s.st_size;
 		}
 	}
 	free(head->path);
@@ -192,6 +192,7 @@ static inline int _close_inout(struct task* t) {
 static inline int _copy_some(struct task* t, utf8* npath, void* buf, int* c) {
 	if (t->out == -1 || t->in == -1) {
 		t->out = open(t->checklist->path, O_RDONLY);
+		// TODO fallocate?
 		if (t->out == -1) return errno;
 		t->in = open(npath, O_CREAT | O_WRONLY | t->checklist->s.st_mode);
 		if (t->in == -1) return errno;
@@ -326,9 +327,16 @@ int do_task(struct task* t, int c) {
 		bool islnk = (t->checklist->s.st_mode & S_IFMT) == S_IFLNK;
 		if (isdir) {
 			if (islnk) { // TODO TODO
-				syslog(LOG_DEBUG, "dir and link! %s", t->checklist->path);
-				task_file_done(t);
-				c -= 1;
+				if (t->checklist->td == TODO_COPY) {
+					syslog(LOG_DEBUG, "dir and link! %s", t->checklist->path);
+					task_file_done(t);
+					c -= 1;
+				}
+				else {
+					if (unlink(t->checklist->path)) return errno;
+					task_file_done(t);
+					c -= 1;
+				}
 			}
 			else {
 				if (t->checklist->td == TODO_COPY) {
@@ -347,9 +355,16 @@ int do_task(struct task* t, int c) {
 		}
 		else {
 			if (islnk) { // TODO TODO
-				syslog(LOG_DEBUG, "file and link! %s", t->checklist->path);
-				task_file_done(t);
-				c -= 1;
+				if (t->checklist->td == TODO_COPY) {
+					syslog(LOG_DEBUG, "file and link! %s", t->checklist->path);
+					task_file_done(t);
+					c -= 1;
+				}
+				else {
+					if (unlink(t->checklist->path)) return errno;
+					task_file_done(t);
+					c -= 1;
+				}
 			}
 			else {
 				if (t->checklist->td == TODO_COPY) {
@@ -361,6 +376,7 @@ int do_task(struct task* t, int c) {
 				}
 				else {
 					if (unlink(t->checklist->path)) return errno;
+					t->size_done += t->checklist->s.st_size;
 					task_file_done(t);
 					c -= 1;
 				}
