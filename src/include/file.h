@@ -82,10 +82,6 @@ int sort_file_list(struct file_record**, fnum_t);
 
 int link_copy(const char* const, const char* const);
 
-int file_move(const char*, const char*);
-int file_remove(const char*);
-int file_copy(const char*, const char*);
-
 int dir_make(const char*);
 
 #endif
