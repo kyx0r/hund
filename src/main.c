@@ -28,7 +28,7 @@
 #include "include/ui.h"
 #include "include/task.h"
 
-#define UNUSED_ARGUMENT(E) do { (void)(E); } while (0)
+#define UNUSED_ARGUMENT(E) (void)(E);
 
 static void failed(utf8* error, const utf8* f, int e) {
 	snprintf(error, MSG_BUFFER_SIZE, "%s failed: %s (%d)", f, strerror(e), e);
@@ -83,6 +83,9 @@ static void mode_help(struct ui* i, struct task* t) {
 }
 
 static void mode_chmod(struct ui* i, struct task* t) {
+	UNUSED_ARGUMENT(i);
+	UNUSED_ARGUMENT(t);
+
 	/*switch (get_cmd(i)) {
 	case CMD_RETURN:
 		chmod_close(i);
@@ -142,7 +145,7 @@ static void mode_find(struct ui* i, struct task* t) {
 		fnum_t s = 0;
 		fnum_t e = i->pv->num_files-1;
 		bool dofind = true;
-		if (r == 2) { // TODO -> file_view_helper()
+		if (r == 2) {
 			if (i->pv->selection < i->pv->num_files-1) {
 				s = i->pv->selection+1;
 				e = i->pv->num_files-1;
@@ -179,12 +182,15 @@ static void mode_prompt(struct ui* i, struct task* t) {
 }
 
 static void mode_wait(struct ui* i, struct task* t) {
+	UNUSED_ARGUMENT(i);
+	UNUSED_ARGUMENT(t);
 	/*switch (get_cmd(i)) {
 	default: break;
 	}*/
 }
 
-static void prepare_task(struct ui* i, struct task* t,
+/* Dedicated for long tasks such as COPY, REMOVE, MOVE */
+static void prepare_long_task(struct ui* i, struct task* t,
 		enum task_type tt, const utf8* const err) {
 	if (!i->pv->num_files) return;
 	utf8* src = file_view_path_to_selected(i->pv);
@@ -203,7 +209,7 @@ static void prepare_task(struct ui* i, struct task* t,
 			newname = calloc(NAME_MAX, sizeof(utf8));
 			strcpy(newname, fn);
 			i->m = MODE_WAIT; // TODO FIXME
-			// doing so will make prompt set mode to MODE_WAIT
+			// ^ doing so will make prompt set mode to MODE_WAIT
 			prompt_open(i, newname, newname+strlen(newname), NAME_MAX);
 		}
 	}
@@ -243,12 +249,11 @@ static void mode_manager(struct ui* i, struct task* t) {
 			free(path);
 		}
 		break;
-	/*case CMD_CD:
-		t->dst = calloc(PATH_MAX, sizeof(char));
-		t->t = TASK_CD;
-		t->s = TASK_STATE_GATHERING_DATA;
+	case CMD_CD:
+		task_new(t, TASK_CD, strcpy(malloc(PATH_MAX), i->pv->wd),
+				calloc(PATH_MAX, sizeof(char)), NULL);
 		prompt_open(i, t->dst, t->dst, PATH_MAX);
-		break;*/
+		break;
 	case CMD_ENTER_DIR:
 		err = file_view_enter_selected_dir(i->pv);
 		if (err && err != ENOTDIR) failed(i->error, "enter dir", err);
@@ -258,24 +263,19 @@ static void mode_manager(struct ui* i, struct task* t) {
 		if (err) failed(i->error, "up dir", err);
 		break;
 	case CMD_COPY:
-		prepare_task(i, t, TASK_COPY, "copy");
+		prepare_long_task(i, t, TASK_COPY, "copy");
 		break;
 	case CMD_MOVE:
-		prepare_task(i, t, TASK_MOVE, "move");
+		prepare_long_task(i, t, TASK_MOVE, "move");
 		break;
 	case CMD_REMOVE:
-		prepare_task(i, t, TASK_RM, "remove");
+		prepare_long_task(i, t, TASK_RM, "remove");
 		break;
-	/*case CMD_CREATE_DIR:
-		t->src = calloc(PATH_MAX, sizeof(char));
-		strcpy(t->src, pv->wd);
-		strcat(t->src, "/");
-		t->t = TASK_MKDIR;
-		t->s = TASK_STATE_GATHERING_DATA;
-		prompt_open(i, t->src+strlen(t->src),
-				t->src+strlen(t->src), NAME_MAX);
+	case CMD_CREATE_DIR:
+		task_new(t, TASK_MKDIR, strdup(i->pv->wd),
+				NULL, calloc(NAME_MAX, sizeof(char)));
+		prompt_open(i, t->newname, t->newname, PATH_MAX);
 		break;
-		*/
 	case CMD_FIND:
 		path = calloc(NAME_MAX, sizeof(char));
 		find_open(i, path, path, NAME_MAX);
@@ -294,41 +294,24 @@ static void mode_manager(struct ui* i, struct task* t) {
 		}
 		chmod_open(i, path, i->pv->file_list[i->pv->selection]->s.st_mode);
 		break;*/
-		/*
 	case CMD_RENAME:
-		{
-		size_t plen = strlen(pv->wd);
-		size_t fnlen = strlen(pv->file_list[pv->selection]->file_name);
-		t->src = file_view_path_to_selected(pv);
-		if (!t->src) {
-			failed(i->error, "rename", ENAMETOOLONG);
-			t->s = TASK_STATE_FINISHED;
-			break;
-		}
-		if (!utf8_validate(t->src)) {
-			failed(i->error, "rename", EILSEQ);
-			// TODO offer clearing entire name and giving it a new one
-			t->s = TASK_STATE_FINISHED;
-			break;
-		}
-		t->dst = calloc(PATH_MAX, sizeof(char));
-		strcpy(t->dst, t.src);
-		t.t = TASK_RENAME;
-		t.s = TASK_STATE_GATHERING_DATA;
-		prompt_open(&i, t.dst+plen+1, t.dst+plen+1+fnlen, NAME_MAX);
-		}
+		task_new(t, TASK_RENAME, file_view_path_to_selected(i->pv), strdup(i->pv->wd),
+				strcpy(calloc(NAME_MAX, sizeof(char)),
+					i->pv->file_list[i->pv->selection]->file_name));
+		prompt_open(i, t->newname, t->newname+strlen(t->newname), PATH_MAX);
 		break;
-		*/
 	case CMD_TOGGLE_HIDDEN:
 		file_view_toggle_hidden(i->pv);
 		break;
 	case CMD_REFRESH:
 		err = scan_dir(i->pv->wd, &i->pv->file_list, &i->pv->num_files);
 		if (err) {
-			delete_file_list(i->pv);
 			failed(i->error, "refresh", err);
 		}
-		else file_view_afterdel(i->pv);
+		else {
+			sort_file_list(i->pv->file_list, i->pv->num_files);
+			file_view_afterdel(i->pv);
+		}
 		break;
 	default:
 		break;
@@ -373,73 +356,45 @@ void task_state_data_gathered(struct ui* i, struct task* t) {
 		}
 		t.s = TASK_STATE_FINISHED;
 		break;*/
-	/*case TASK_MKDIR:
-		{
-		syslog(LOG_DEBUG, "task_mkdir %s", t.src);
-		err = dir_make(t.src);
-		if (err) {
-			i.error = failed("mkdir", err);
-		}
-		scan_dir(i.pv->wd, &i.pv->file_list, &i.pv->num_files);
-		int fno = current_dir_i(t.src);
-		file_index(i.pv, t.src+fno);
-		t.s = TASK_STATE_FINISHED;
-		}
-		break;*/
-	/*case TASK_CD:
+	case TASK_MKDIR:
 		{
 		utf8* path = malloc(PATH_MAX);
-		strcpy(path, i.pv->wd);
-		err = enter_dir(path, t.dst);
-		if (err) {
-			i.error = failed("cd", ENAMETOOLONG);
+		strcpy(path, t->src);
+		strcat(path, "/");
+		strcat(path, t->newname);
+		int err = dir_make(path);
+		if (err) failed(i->error, "mkdir", err);
+		t->s = TASK_STATE_FINISHED;
 		}
-		syslog(LOG_DEBUG, "task_cd %s", path);
-		if (!file_exists(path)) {
-			i.error = failed("cd", ENOENT);
-			t.s = TASK_STATE_FINISHED;
-			free(path);
-			break;
-		}
-		if (!is_dir(path)) {
-			i.error = failed("cd", EISDIR);
-			t.s = TASK_STATE_FINISHED;
-			free(path);
-			break;
-		}
-		err = enter_dir(i.pv->wd, path);
-		if (err) {
-			i.error = failed("cd", ENAMETOOLONG);
-			t.s = TASK_STATE_FINISHED;
-			free(path);
-			break;
-		}
-		scan_dir(i.pv->wd, &i.pv->file_list, &i.pv->num_files);
-		first_entry(i.pv);
-		free(path);
-		t.s = TASK_STATE_FINISHED;
-		}
-		break;*/
-	/*case TASK_RENAME:
+		break;
+	case TASK_CD:
 		{
-		syslog(LOG_DEBUG, "task_rename %s -> %s", t.src, t.dst);
-		if (file_exists(t.dst)) {
-			i.error = failed("rename", EEXIST);
-			t.s = TASK_STATE_FINISHED;
+		syslog(LOG_DEBUG, "%s %s", t->src, t->dst);
+		int err = enter_dir(t->src, t->dst);
+		int reason;
+		if ((reason = ENAMETOOLONG, err) ||
+			(reason = ENOENT, !file_exists(t->src)) ||
+			(reason = EISDIR, !is_dir(t->src))) {
+
+			failed(i->error, "cd", reason);
+			t->s = TASK_STATE_FINISHED;
 			break;
 		}
-		utf8* named = malloc(NAME_MAX);
-		current_dir(t.dst, named);
-		err = rename(t.src, t.dst);
-		if (err) {
-			i.error = failed("rename", err);
+		strcpy(i->pv->wd, t->src);
+		t->s = TASK_STATE_FINISHED;
 		}
-		scan_dir(i.pv->wd, &i.pv->file_list, &i.pv->num_files);
-		file_index(i.pv, named);
-		t.s = TASK_STATE_FINISHED;
-		free(named);
+		break;
+	case TASK_RENAME:
+		{
+		utf8* path = malloc(PATH_MAX);
+		strcpy(path, t->dst);
+		strcat(path, "/");
+		strcat(path, t->newname);
+		int err = rename(t->src, path);
+		if (err) failed(i->error, "rename", err);
+		t->s = TASK_STATE_FINISHED;
 		}
-		break;*/
+		break;
 	case TASK_COPY:
 	case TASK_RM:
 	case TASK_MOVE:
@@ -476,21 +431,39 @@ void task_state_finished(struct ui* i, struct task* t) {
 		wtimeout(stdscr, -1);
 	}
 	// TODO
-	scan_dir(i->pv->wd, &i->pv->file_list, &i->pv->num_files);
-	scan_dir(i->sv->wd, &i->sv->file_list, &i->sv->num_files);
+	int epv = scan_dir(i->pv->wd, &i->pv->file_list, &i->pv->num_files);
+	int esv = scan_dir(i->sv->wd, &i->sv->file_list, &i->sv->num_files);
+	if (epv || esv) {
+		failed(i->error, "task", epv | esv);
+	}
+	sort_file_list(i->pv->file_list, i->pv->num_files);
+	sort_file_list(i->sv->file_list, i->sv->num_files);
 	utf8* what = "?";
 	if (t->t == TASK_RM) {
 		what = "removed";
 		file_view_afterdel(i->pv);
+		snprintf(i->info, MSG_BUFFER_SIZE, "%s %s", what, t->src);
 	}
 	else if (t->t == TASK_COPY) {
 		what = "copied";
+		snprintf(i->info, MSG_BUFFER_SIZE, "%s %s", what, t->src);
 	}
 	else if (t->t == TASK_MOVE) {
 		what = "moved";
 		prev_entry(i->pv);
+		snprintf(i->info, MSG_BUFFER_SIZE, "%s %s", what, t->src);
 	}
-	snprintf(i->info, MSG_BUFFER_SIZE, "%s %s", what, t->src);
+	else if (t->t == TASK_CD) {
+		what = "opened";
+		first_entry(i->pv);
+	}
+	else if (t->t == TASK_MKDIR) {
+		what = "created";
+		file_highlight(i->pv, t->newname);
+	}
+	else if (t->t == TASK_RENAME) {
+		what = "renamed";
+	}
 	task_clean(t);
 	i->m = MODE_MANAGER;
 }
@@ -575,6 +548,7 @@ int main(int argc, char* argv[])  {
 					fvs[v].wd, strerror(r), r);
 			exit(EXIT_FAILURE);
 		}
+		sort_file_list(fvs[v].file_list, fvs[v].num_files);
 		first_entry(&fvs[v]);
 	}
 

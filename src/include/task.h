@@ -35,13 +35,13 @@
 
 enum task_type {
 	TASK_NONE = 0,
-	//TASK_MKDIR,
 	TASK_RM,
 	TASK_COPY,
 	TASK_MOVE,
-	//TASK_CD,
-	//TASK_RENAME,
-	//TASK_CHOWN,
+	TASK_RENAME,
+	TASK_CD,
+	TASK_MKDIR,
+	//TASK_CHMOD,
 	//TASK_CHGRP,
 };
 
@@ -58,6 +58,7 @@ enum task_state {
 enum todo {
 	TODO_REMOVE,
 	TODO_COPY,
+	//TODO_MOVE, // AKA copy first, then remove TODO will shorten the todo list
 };
 
 struct file_todo {
@@ -68,6 +69,10 @@ struct file_todo {
 	ssize_t progress;
 };
 
+/* AKA long task
+ * Requires long disk operations
+ * Displays state
+ */
 struct task {
 	enum task_state s;
 	enum task_type t;
