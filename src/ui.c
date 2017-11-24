@@ -256,16 +256,11 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	_printw_pathbar(s->wd, w, pw);
 
 	/* Entry list */
-	/* I'm drawing N entries before selection,
-	 * selection itself
-	 * and as many entries after selection as needed
-	 * to fill remaining space.
-	 */
 	fnum_t nhf = 0; // Number of Hidden Files
 	fnum_t nsl = 0; // Number of SymLinks
 	fnum_t hi = 0; // Highlighted file Index
 	bool sisl = false; // Selected Is SymLink
-	struct file_record *hfr = NULL;
+	struct file_record *hfr = NULL; // Highlighted File Record
 	for (fnum_t i = 0; i < s->num_files; ++i) {
 		if (hidden(s, i)) nhf += 1;
 		const bool sl = S_ISLNK(s->file_list[i]->s.st_mode);
@@ -277,6 +272,28 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 		}
 	}
 
+	/* I'm drawing N entries before selection,
+	 * selection itself
+	 * and as many entries after selection as needed
+	 * to fill remaining space. */
+
+	/* - Max Entries = how many entries I need to fill
+	 * all available space in file view
+	 * (selection excluded - it's always drawn)
+	 *
+	 * me = panel height - 1 for path bar, 1 for selection, 1 for info bar
+	 *
+	 * - Entries Over = how many entries are over selection
+	 * - Entries Under = how many entries are under selection
+	 *
+	 * - Begin Index = from which index should I start looking for
+	 * visible entries to catch all I need
+	 *
+	 * - Over Index = iterator; an index offset relative from selection,
+	 *   selection+oi = effective index
+	 * - Under Index = iterator; an index offset relative from selection,
+	 *   selection-ui = effective index
+	 */
 	fnum_t me = ph - 3; // Max Entries
 	// 3 = 1 path bar + 1 statusbar + 1 infobar
 	fnum_t eo = 0; // Entries Over
@@ -286,18 +303,14 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	fnum_t ui = 1; // Under Index
 	/* How many entries are under selection? */
 	while (s->num_files-nhf && s->selection+ui < s->num_files && eu <= me/2) {
-		if (visible(s, s->selection+ui)) {
-			eu += 1;
-		}
+		if (visible(s, s->selection+ui)) eu += 1;
 		ui += 1;
 	}
 	/* How many entries are over selection?
 	 * (If there are few entries under, then use up all remaining space)
 	 */
 	while (s->num_files-nhf && s->selection >= oi && eo + 1 + eu <= me) {
-		if (visible(s, s->selection-oi)) {
-			eo += 1;
-		}
+		if (visible(s, s->selection-oi)) eo += 1;
 		bi = s->selection-oi;
 		oi += 1;
 	}
@@ -321,7 +334,7 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	/* Infobar */
 	/* Padded on both sides with space */
 	wattron(w, COLOR_PAIR(2));
-	const size_t status_size = pw*4;
+	const size_t status_size = pw*4; // TODO
 	char* status = malloc(status_size);
 	static char* timefmt = "%Y-%m-%d %H:%M";
 	const size_t time_size = 4+1+2+1+2+1+2+1+2+1;
@@ -336,7 +349,7 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 		struct tm* tt = localtime(&lt);
 		strftime(time, time_size, timefmt, tt);
 		snprintf(status, status_size, "%u/%u %c%u %c%u hL%lu, %o %zuB",
-				hi+1, s->num_files-nhf,
+				hi+1, s->num_files-(sh ? 0 : nhf),
 				(sh ? 'H' : 'h'), nhf,
 				(sisl ? 'L' : 'l'), nsl,
 				hfr->l->st_nlink,
@@ -362,7 +375,7 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 static void ui_draw_help(struct ui* const i) {
 	WINDOW* hw = panel_window(i->help);
 	int hheight = i->scrh-1;
-	int lines = 3*2 + cmd_help_length - 1;
+	int lines = 3*2 + cmd_help_length - 1; // TODO
 	int dr = -i->helpy;
 	if (dr + lines < hheight) {
 		dr = hheight - lines;
@@ -391,7 +404,7 @@ static void ui_draw_help(struct ui* const i) {
 				if (i->kmap[k].c != c || i->kmap[k].m != m) continue;
 				int ks = 0;
 				last = k;
-				const int cp = 9;
+				const int cp = 9; // TODO
 				wattron(hw, COLOR_PAIR(cp));
 				wattron(hw, A_BOLD);
 				int ww = 0;
