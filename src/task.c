@@ -143,7 +143,7 @@ void task_file_done(struct task* t) {
 	struct file_todo* head = t->checklist;
 	t->checklist = head->next;
 	if ((head->td == TODO_REMOVE && t->t == TASK_RM) ||
-			(head->td == TODO_COPY &&
+		(head->td == TODO_COPY &&
 			 (t->t == TASK_MOVE || t->t == TASK_COPY))) {
 		if (S_ISDIR(head->s.st_mode)) {
 			t->dirs_done += 1;
@@ -157,7 +157,7 @@ void task_file_done(struct task* t) {
 }
 
 void task_clean(struct task* t) {
-	if (t->src)	free(t->src);
+	if (t->src) free(t->src);
 	if (t->dst) free(t->dst);
 	if (t->newname) free(t->newname);
 	t->src = NULL;
@@ -192,10 +192,15 @@ static inline int _close_inout(struct task* t) {
 static inline int _copy_some(struct task* t, utf8* npath, void* buf, int* c) {
 	if (t->out == -1 || t->in == -1) {
 		t->out = open(t->checklist->path, O_RDONLY);
-		// TODO fallocate?
 		if (t->out == -1) return errno;
 		t->in = open(npath, O_CREAT | O_WRONLY | t->checklist->s.st_mode);
 		if (t->in == -1) return errno;
+
+		struct stat outs;
+		fstat(t->out, &outs);
+		int e = posix_fallocate(t->in, 0, outs.st_size);
+		// TODO detect earlier if fallocate is supported
+		if (e != EOPNOTSUPP && e != ENOSYS) return errno;
 	}
 	ssize_t wb = -1, rb = -1;
 	while (*c > 0) {
@@ -291,12 +296,14 @@ bool substitute(char* str, char* subs, char* repl) {
  * When new_path is determined:
  *      copying = copy checklist -> new_path
  *		moving = copy checklist -> new_path + remove checklist
+ *
+ * TODO block doing anything to block devices, sockets and other non-regular files
  */
 utf8* build_new_path(struct task* t, utf8* cp) {
 	utf8* new_path = malloc(PATH_MAX);
 	strcpy(new_path, cp);
 	if (t->newname) { // name colission; using new name
-		utf8* _dst = malloc(PATH_MAX);
+		utf8* _dst = malloc(PATH_MAX); // TODO static
 		strcpy(_dst, t->dst);
 		strcat(_dst, "/");
 		strcat(_dst, t->newname);
@@ -325,61 +332,47 @@ int do_task(struct task* t, int c) {
 		}
 		bool isdir = S_ISDIR(t->checklist->s.st_mode);
 		bool islnk = (t->checklist->s.st_mode & S_IFMT) == S_IFLNK;
-		if (isdir) {
-			if (islnk) { // TODO TODO
-				if (t->checklist->td == TODO_COPY) {
-					syslog(LOG_DEBUG, "dir and link! %s", t->checklist->path);
-					task_file_done(t);
-					c -= 1;
-				}
-				else {
-					if (unlink(t->checklist->path)) return errno;
-					task_file_done(t);
-					c -= 1;
-				}
+		if (islnk) {
+			if (t->checklist->td == TODO_COPY) {
+				utf8* npath = build_new_path(t, t->checklist->path);
+				link_copy(t->src, t->checklist->path, npath);
+				task_file_done(t);
+				free(npath);
+				c -= 1;
 			}
 			else {
-				if (t->checklist->td == TODO_COPY) {
-					utf8* npath = build_new_path(t, t->checklist->path);
-					if (mkdir(npath, t->checklist->s.st_mode)) return errno;
-					task_file_done(t);
-					free(npath);
-					c -= 1;
-				}
-				else {
-					if (rmdir(t->checklist->path)) return errno;
-					task_file_done(t);
-					c -= 1;
-				}
+				if (unlink(t->checklist->path)) return errno;
+				task_file_done(t);
+				c -= 1;
 			}
 		}
-		else {
-			if (islnk) { // TODO TODO
-				if (t->checklist->td == TODO_COPY) {
-					syslog(LOG_DEBUG, "file and link! %s", t->checklist->path);
-					task_file_done(t);
-					c -= 1;
-				}
-				else {
-					if (unlink(t->checklist->path)) return errno;
-					task_file_done(t);
-					c -= 1;
-				}
+		else if (isdir) {
+			if (t->checklist->td == TODO_COPY) {
+				utf8* npath = build_new_path(t, t->checklist->path);
+				if (mkdir(npath, t->checklist->s.st_mode)) return errno;
+				task_file_done(t);
+				free(npath);
+				c -= 1;
 			}
 			else {
-				if (t->checklist->td == TODO_COPY) {
-					utf8* npath = build_new_path(t, t->checklist->path);
-					char buf[BUFSIZ];
-					int e = _copy_some(t, npath, buf, &c);
-					free(npath);
-					if (e) return e;
-				}
-				else {
-					if (unlink(t->checklist->path)) return errno;
-					t->size_done += t->checklist->s.st_size;
-					task_file_done(t);
-					c -= 1;
-				}
+				if (rmdir(t->checklist->path)) return errno;
+				task_file_done(t);
+				c -= 1;
+			}
+		}
+		else { // regular file
+			if (t->checklist->td == TODO_COPY) {
+				utf8* npath = build_new_path(t, t->checklist->path);
+				char buf[BUFSIZ];
+				int e = _copy_some(t, npath, buf, &c);
+				free(npath);
+				if (e) return e;
+			}
+			else {
+				if (unlink(t->checklist->path)) return errno;
+				t->size_done += t->checklist->s.st_size;
+				task_file_done(t);
+				c -= 1;
 			}
 		}
 	}

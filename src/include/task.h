@@ -21,12 +21,9 @@
 #define TASK_H
 
 // dirent.h and fnctl.h stuff
-#define _GNU_SOURCE
-
-#ifndef _XOPEN_SOURCE
-	#define _XOPEN_SOURCE // S_ISSOCK
+#ifndef _POSIX_C_SOURCE
+	#define _POSIX_C_SOURCE 200809L
 #endif
-//#define _XOPEN_SOURCE_EXTENDED
 
 #include <stdint.h>
 
@@ -43,6 +40,19 @@ enum task_type {
 	TASK_MKDIR,
 	//TASK_CHMOD,
 	//TASK_CHGRP,
+};
+
+#define NOUN 0
+#define ING 1
+#define PAST 2
+static const utf8* const task_strings[][3] = {
+	[TASK_NONE] = { NULL, NULL, NULL},
+	[TASK_RM] = { "remove", "removing", "removed" },
+	[TASK_COPY] = { "copy", "copying", "copied" },
+	[TASK_MOVE] = { "move", "moving", "moved" },
+	[TASK_RENAME] = { "rename", NULL, "renamed" },
+	[TASK_CD] = { "open", NULL, "opened" },
+	[TASK_MKDIR] = { "create directory", NULL, "created directory" }
 };
 
 enum task_state {
