@@ -19,7 +19,7 @@
 
 #include "include/path.h"
 
-void get_cwd(char b[PATH_MAX]) {
+void get_cwd(char* b) {
 	getcwd(b, PATH_MAX);
 }
 
@@ -35,7 +35,7 @@ struct passwd* get_pwd(void) {
  *
  * I couldn't find any standard function that would parse path and shorten it.
  */
-int enter_dir(char path[PATH_MAX], char dir[PATH_MAX]) {
+int enter_dir(char* const path, const char* dir) {
 	if (!path_is_relative(dir)) {
 		if (dir[0] == '~') {
 			struct passwd* pwd = get_pwd();
@@ -58,7 +58,8 @@ int enter_dir(char path[PATH_MAX], char dir[PATH_MAX]) {
 		path[plen-1] = 0;
 	}
 	char* save_ptr = NULL;
-	char* entry = strtok_r(dir, "/", &save_ptr);
+	char* dirdup = strdup(dir);
+	char* entry = strtok_r(dirdup, "/", &save_ptr);
 	while (entry) {
 		if (!strcmp(entry, ".")); // Do nothing; Skip the conditional block
 		else if (!strcmp(entry, "..")) {
@@ -96,7 +97,7 @@ int enter_dir(char path[PATH_MAX], char dir[PATH_MAX]) {
  * 0 if operation succesful
  * -1 if path == '/'
  */
-int up_dir(char path[PATH_MAX]) {
+int up_dir(char* path) {
 	if (!strcmp(path, "/")) return -1;
 	int i;
 	for (i = strlen(path); i > 0 && path[i] != '/'; i--) {
@@ -116,7 +117,7 @@ int up_dir(char path[PATH_MAX]) {
  * 0 if found home in path and changed
  * -1 if not found home in path; path unchanged
  */
-int prettify_path(char path[PATH_MAX], char home[PATH_MAX]) {
+int prettify_path(char* path, char* home) {
 	const int hlen = strlen(home);
 	const int plen = strlen(path);
 	if (!memcmp(path, home, hlen)) {
@@ -128,7 +129,7 @@ int prettify_path(char path[PATH_MAX], char home[PATH_MAX]) {
 }
 
 // Places current directory in dir[]
-void current_dir(const char path[PATH_MAX], char dir[NAME_MAX]) {
+void current_dir(const char* path, char* dir) {
 	const int plen = strlen(path);
 	int i = plen-1; // i will point last slash in path
 	while (path[i] != '/' && i >= 0) {
@@ -141,7 +142,7 @@ void current_dir(const char path[PATH_MAX], char dir[NAME_MAX]) {
 	memcpy(dir, path+i+1, strlen(path+i));
 }
 
-bool path_is_relative(char path[PATH_MAX]) {
+bool path_is_relative(const char* const path) {
 	return (path[0] != '/' && path[0] != '~') || (path[0] == '.' && path[1] == '/');
 }
 
@@ -151,7 +152,7 @@ bool path_is_relative(char path[PATH_MAX]) {
  * printf("~%s", path+prettify_path_i(path));
  * If cannot be prettified, returns 0
  */
-int prettify_path_i(const char path[PATH_MAX], const char home[PATH_MAX]) {
+int prettify_path_i(const char* path, const char* home) {
 	const int hlen = strlen(home);
 	if (!memcmp(path, home, hlen)) {
 		return hlen;
@@ -163,7 +164,7 @@ int prettify_path_i(const char path[PATH_MAX], const char home[PATH_MAX]) {
  * it just points to place in buffer,
  * where current dir's name starts
  */
-int current_dir_i(const char path[PATH_MAX]) {
+int current_dir_i(const char* path) {
 	const int plen = strlen(path);
 	int i = plen-1; // i will point last slash in path
 	while (path[i] != '/' && i >= 0) {

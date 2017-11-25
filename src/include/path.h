@@ -20,8 +20,9 @@
 #ifndef PATH_H
 #define PATH_H
 
-#ifndef _XOPEN_SOURCE
-	#define _XOPEN_SOURCE // strtok_r
+// strtok_r
+#ifndef _POSIX_C_SOURCE
+	#define _POSIX_C_SOURCE 200809L
 #endif
 
 #include <linux/limits.h>
@@ -32,16 +33,16 @@
 #include <pwd.h>
 #include <grp.h>
 
-void get_cwd(char[PATH_MAX]);
+void get_cwd(char*);
 struct passwd* get_pwd(void);
 
-int enter_dir(char [PATH_MAX], char [PATH_MAX]);
-int up_dir(char [PATH_MAX]);
-int prettify_path(char [PATH_MAX], char [PATH_MAX]);
-void current_dir(const char [PATH_MAX], char [NAME_MAX]);
-bool path_is_relative(char [PATH_MAX]);
+int enter_dir(char* const, const char*);
+int up_dir(char*);
+int prettify_path(char*, char*);
+void current_dir(const char*, char*);
+bool path_is_relative(const char* const);
 
-int prettify_path_i(const char [PATH_MAX], const char [PATH_MAX]); // TODO tests
-int current_dir_i(const char [PATH_MAX]);
+int prettify_path_i(const char*, const char*); // TODO tests
+int current_dir_i(const char*);
 
 #endif
