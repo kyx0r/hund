@@ -181,30 +181,8 @@ void file_highlight(struct file_view* fv, const utf8* const name) {
 	}
 }
 
-/* Initial Matching Bytes */
-size_t imb(const char* const a, const char* const b) {
-	size_t m = 0;
-	const char* aa = a;
-	const char* bb = b;
-	while (*aa && *bb && *aa == *bb) {
-		aa += 1;
-		bb += 1;
-		m += 1;
-	}
-	return m;
-}
-
-/* Checks if STRing contains SUBString */
-bool contains(const char* const str, const char* const subs) {
-	for (size_t j = 0; strlen(str+j) >= strlen(subs); ++j) {
-		if (strlen(subs) == imb(str+j, subs)) return true;
-	}
-	return false;
-}
-
 bool file_find(struct file_view* fv, const utf8* const name,
 		fnum_t start, fnum_t end) {
-	syslog(LOG_DEBUG, "%u %u", start, end);
 	if (start <= end) {
 		for (fnum_t i = start; i <= end; ++i) {
 			if (visible(fv, i) &&

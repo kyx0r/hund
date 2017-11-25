@@ -65,7 +65,7 @@ int scan_dir(const char* wd, struct file_record*** fl, fnum_t* nf) {
 	DIR* dir = opendir(wd);
 	if (!dir) return errno;
 	char fpath[PATH_MAX]; // Stack should be fine with them or FIXME?
-	char lpath[PATH_MAX];
+	char lpath[PATH_MAX]; // TODO maybe make them static? Hund is single-threaded...
 	struct dirent* de;
 	while ((de = readdir(dir)) != NULL) {
 		if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, "..")) continue;
@@ -124,9 +124,44 @@ int sort_file_list(struct file_record** fl, fnum_t nf) {
 	return 0;
 }
 
-/* Copies link from src to dst */
-int link_copy(const char* const src, const char* const dst) {
-	if (!src || !dst) return EINVAL;
+/* Initial Matching Bytes */
+size_t imb(const char* const a, const char* const b) {
+	size_t m = 0;
+	const char* aa = a;
+	const char* bb = b;
+	while (*aa && *bb && *aa == *bb) {
+		aa += 1;
+		bb += 1;
+		m += 1;
+	}
+	return m;
+}
+
+/* Checks if STRing contains SUBString */
+bool contains(const char* const str, const char* const subs) {
+	for (size_t j = 0; strlen(str+j) >= strlen(subs); ++j) {
+		if (strlen(subs) == imb(str+j, subs)) return true;
+	}
+	return false;
+}
+typedef const char* const ccharc;
+
+/* Copies link from src to dst, relative to wd
+ * all paths must be absolute.
+ * There are two instances, when symlink path is copied raw:
+ * - when it is absolute
+ * - when target is within copy operation
+ *
+ * TODO detect/handle invalid links
+ * TODO detect loops/recursion
+ * TODO lots of testing
+ * FIXME 4*PATH_MAX ~= 32786B - a lot
+ *
+ * Working Directory, New Directory - roots of the operation
+ * Source, Destination */
+int link_copy(const char* const wd,
+		const char* const src, const char* const dst) {
+	if (!wd || !src || !dst) return EINVAL;
 	struct stat src_s;
 	if (lstat(src, &src_s)) return errno;
 	if (!S_ISLNK(src_s.st_mode)) return EINVAL;
@@ -134,7 +169,32 @@ int link_copy(const char* const src, const char* const dst) {
 	const ssize_t ll = readlink(src, lpath, PATH_MAX);
 	if (ll == -1) return errno;
 	lpath[ll] = 0;
-	if (symlink(lpath, dst)) return errno;
+	if (!path_is_relative(lpath)) {
+		if (symlink(lpath, dst)) return errno;
+	}
+	else {
+		char target[PATH_MAX];
+		const size_t sl = current_dir_i(src)-1;
+		strncpy(target, src, sl); target[sl] = 0;
+		enter_dir(target, lpath);
+
+		if (contains(target, wd)) {
+			if (symlink(lpath, dst)) return errno;
+			return 0;
+		}
+
+		char _dst[PATH_MAX];
+		const size_t pl = current_dir_i(dst)-1;
+		strncpy(_dst, dst, pl); _dst[pl] = 0;
+
+		char newlpath[PATH_MAX] = { 0 };
+		while (!contains(target, _dst)) {
+			up_dir(_dst);
+			strcat(newlpath, "../");
+		}
+		strcat(newlpath, target+strlen(_dst)+1);
+		if (symlink(newlpath, dst)) return errno;
+	}
 	return 0;
 }
 

@@ -21,7 +21,10 @@
 #define FILE_H
 
 // dirent.h and fnctl.h stuff
-#define _GNU_SOURCE
+//#define _GNU_SOURCE
+#ifndef _POSIX_C_SOURCE
+	#define _POSIX_C_SOURCE 200809L
+#endif
 
 #ifndef _XOPEN_SOURCE
 	#define _XOPEN_SOURCE // S_ISSOCK
@@ -80,7 +83,9 @@ void file_list_clean(struct file_record***, fnum_t*);
 int scan_dir(const char*, struct file_record***, fnum_t*);
 int sort_file_list(struct file_record**, fnum_t);
 
-int link_copy(const char* const, const char* const);
+size_t imb(const char* const, const char* const);
+bool contains(const char* const, const char* const);
+int link_copy(const char* const, const char* const, const char* const);
 
 int dir_make(const char*);
 

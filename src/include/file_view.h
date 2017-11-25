@@ -43,8 +43,6 @@ void delete_file_list(struct file_view*);
 bool file_on_list(struct file_view*, const utf8* const);
 void file_highlight(struct file_view*, const utf8* const);
 
-size_t imb(const char* const, const char* const);
-bool contains(const char* const, const char* const);
 bool file_find(struct file_view*, const char* const, fnum_t, fnum_t);
 
 int file_view_enter_selected_dir(struct file_view*);
