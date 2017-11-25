@@ -302,6 +302,7 @@ static void mode_manager(struct ui* i, struct task* t) {
 			sort_file_list(i->pv->file_list, i->pv->num_files);
 			file_view_afterdel(i->pv);
 		}
+		i->scrh = i->scrw = 0;
 		break;
 	default:
 		break;
