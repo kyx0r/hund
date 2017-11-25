@@ -633,11 +633,12 @@ void chmod_close(struct ui* i) {
 	i->chmod = NULL;
 }
 
+/* If tb_top is NULL, then it is set to tb */
 void prompt_open(struct ui* i, utf8* tb, utf8* tb_top, size_t tb_size) {
 	i->prompt = malloc(sizeof(struct ui_prompt));
 	i->prompt->mb = i->m;
 	i->prompt->tb = tb;
-	i->prompt->tb_top = tb_top;
+	i->prompt->tb_top = (tb_top ? tb_top : tb);
 	i->prompt->tb_size = tb_size;
 	i->m = MODE_PROMPT;
 }
@@ -648,12 +649,13 @@ void prompt_close(struct ui* i) {
 	i->prompt = NULL;
 }
 
+/* If t_top is NULL, then it is set to t */
 void find_open(struct ui* i, utf8* t, utf8* t_top, size_t t_size) {
 	i->find = malloc(sizeof(struct ui_find));
 	i->find->mb = i->m;
 	i->find->sbfc = i->pv->selection;
 	i->find->t = t;
-	i->find->t_top = t_top;
+	i->find->t_top = (t_top ? t_top : t);
 	i->find->t_size = t_size;
 	i->m = MODE_FIND;
 }
