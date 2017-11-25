@@ -32,6 +32,7 @@
 #include <stdlib.h>
 #include <pwd.h>
 #include <grp.h>
+#include <errno.h>
 
 void get_cwd(char*);
 struct passwd* get_pwd(void);

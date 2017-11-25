@@ -29,9 +29,7 @@ struct passwd* get_pwd(void) {
 
 /* path[] must be absolute and not prettified
  * dir[] does not have to be single file, can be a path
- * Return values:
- * 0 if operation successful
- * -1 if PATH_MAX would be exceeded; path left unchanged
+ * Returns errno (ENAMETOOLONG if PATH_MAX would be exceeded)
  *
  * I couldn't find any standard function that would parse path and shorten it.
  */
@@ -84,11 +82,13 @@ int enter_dir(char* const path, const char* dir) {
 				strcat(path, entry);
 			}
 			else {
-				return -1;
+				free(dirdup);
+				return ENAMETOOLONG;
 			}
 		}
 		entry = strtok_r(NULL, "/", &save_ptr);
 	}
+	free(dirdup);
 	return 0;
 }
 
