@@ -33,6 +33,7 @@
 
 #define MSG_BUFFER_SIZE 256
 
+// TODO maybe confirmation of removal,move,copy...
 enum mode {
 	MODE_HELP = 0,
 	MODE_MANAGER,
@@ -82,6 +83,10 @@ enum command {
 	CMD_TOGGLE_OW,
 	CMD_TOGGLE_OX,
 	CMD_TOGGLE_SB,
+
+	CMD_TASK_QUIT,
+	CMD_TASK_PAUSE,
+	CMD_TASK_RESUME,
 
 	CMD_HELP_QUIT,
 	CMD_HELP_UP,
@@ -133,14 +138,16 @@ static const struct input2cmd default_mapping[] = {
 
 	{ .i={ UTF8("j"), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTRY_DOWN },
 	{ .i={ CTRL('N'), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTRY_DOWN },
+	{ .i={ SPEC(KEY_DOWN), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTRY_DOWN },
 
 	{ .i={ UTF8("k"), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTRY_UP },
 	{ .i={ CTRL('P'), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTRY_UP },
+	{ .i={ SPEC(KEY_UP), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTRY_UP },
 
 	{ .i={ UTF8("c"), UTF8("p"), ENDK }, .m=MODE_MANAGER, .c=CMD_COPY },
 
-	{ .i={ UTF8("r"), UTF8("m"), ENDK }, .m=MODE_MANAGER, .c=CMD_REMOVE },
-	{ .i={ CTRL('K'), ENDK }, .m=MODE_MANAGER, .c=CMD_REMOVE },
+	{ .i={ UTF8("r"), UTF8("e"), UTF8("m"), ENDK }, .m=MODE_MANAGER, .c=CMD_REMOVE },
+	//{ .i={ CTRL('K'), ENDK }, .m=MODE_MANAGER, .c=CMD_REMOVE },
 
 	{ .i={ UTF8("r"), UTF8("n"), ENDK }, .m=MODE_MANAGER, .c=CMD_RENAME },
 
@@ -155,16 +162,18 @@ static const struct input2cmd default_mapping[] = {
 
 	{ .i={ UTF8("u"), ENDK }, .m=MODE_MANAGER, .c=CMD_UP_DIR },
 	{ .i={ UTF8("d"), ENDK }, .m=MODE_MANAGER, .c=CMD_UP_DIR },
+	{ .i={ SPEC(KEY_BACKSPACE), ENDK }, .m=MODE_MANAGER, .c=CMD_UP_DIR },
 
 	{ .i={ UTF8("i"), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTER_DIR },
 	{ .i={ UTF8("e"), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTER_DIR },
+	{ .i={ CTRL('J'), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTER_DIR },
 
 	{ .i={ UTF8("o"), ENDK }, .m=MODE_MANAGER, .c=CMD_OPEN_FILE },
 
 	{ .i={ UTF8("/"), ENDK }, .m=MODE_MANAGER, .c=CMD_FIND },
 
 	{ .i={ UTF8("s"), ENDK }, .m=MODE_MANAGER, .c=CMD_TOGGLE_HIDDEN },
-	{ .i={ CTRL('h'), ENDK }, .m=MODE_MANAGER, .c=CMD_TOGGLE_HIDDEN },
+	{ .i={ CTRL('H'), ENDK }, .m=MODE_MANAGER, .c=CMD_TOGGLE_HIDDEN },
 
 	{ .i={ UTF8("?"), ENDK }, .m=MODE_MANAGER, .c=CMD_HELP },
 
@@ -190,14 +199,22 @@ static const struct input2cmd default_mapping[] = {
 	{ .i={ UTF8("o"), UTF8("w"), ENDK }, .m=MODE_CHMOD, .c=CMD_TOGGLE_OW },
 	{ .i={ UTF8("o"), UTF8("x"), ENDK }, .m=MODE_CHMOD, .c=CMD_TOGGLE_OX },
 
+	/* MODE WAIT */
+	{ .i={ UTF8("q"), UTF8("q"), ENDK }, .m=MODE_WAIT, .c=CMD_TASK_QUIT },
+	{ .i={ UTF8("p"), UTF8("p"), ENDK }, .m=MODE_WAIT, .c=CMD_TASK_PAUSE },
+	{ .i={ UTF8("r"), UTF8("r"), ENDK }, .m=MODE_WAIT, .c=CMD_TASK_RESUME },
+
+
 	/* MODE HELP */
 	{ .i={ UTF8("q"), ENDK }, .m=MODE_HELP, .c=CMD_HELP_QUIT },
 
 	{ .i={ UTF8("j"), ENDK }, .m=MODE_HELP, .c=CMD_HELP_DOWN },
 	{ .i={ CTRL('N'), ENDK }, .m=MODE_HELP, .c=CMD_HELP_DOWN },
+	{ .i={ SPEC(KEY_DOWN), ENDK }, .m=MODE_HELP, .c=CMD_HELP_DOWN },
 
 	{ .i={ UTF8("k"), ENDK }, .m=MODE_HELP, .c=CMD_HELP_UP },
 	{ .i={ CTRL('P'), ENDK }, .m=MODE_HELP, .c=CMD_HELP_UP },
+	{ .i={ SPEC(KEY_UP), ENDK }, .m=MODE_HELP, .c=CMD_HELP_UP },
 };
 
 static const size_t default_mapping_length = (sizeof(default_mapping)/sizeof(struct input2cmd));
@@ -245,6 +262,10 @@ static const struct cmd2help cmd_help[] = {
 	{ .c = CMD_TOGGLE_OR, .hint = "toggle other read", .help = "Toggle other read." },
 	{ .c = CMD_TOGGLE_OW, .hint = "toggle other write", .help = "Toggle other write." },
 	{ .c = CMD_TOGGLE_OX, .hint = "toggle other execute", .help = "Toggle other execute." },
+
+	{ .c = CMD_TASK_QUIT, .hint = "abort", .help = "Abort task." },
+	{ .c = CMD_TASK_PAUSE, .hint = "pause", .help = "Pause task." },
+	{ .c = CMD_TASK_RESUME, .hint = "resume", .help = "Resume task." },
 
 	{ .c = CMD_HELP_UP, .hint = "up", .help = "Scroll up." },
 	{ .c = CMD_HELP_DOWN, .hint = "down", .help = "Scroll down." },

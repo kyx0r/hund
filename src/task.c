@@ -24,6 +24,7 @@ void task_new(struct task* t, enum task_type tp,
 	*t = (struct task) {
 		.s = TASK_STATE_GATHERING_DATA,
 		.t = tp,
+		.running = true,
 		.src = src, // Full path of source file/dir
 		.dst = dst, // Contains working directory of the other panel
 		.newname = newname, // Used for conflicts

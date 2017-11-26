@@ -86,6 +86,7 @@ struct file_todo {
 struct task {
 	enum task_state s;
 	enum task_type t;
+	bool running;
 	utf8 *src, *dst, *newname;
 	struct file_todo* checklist;
 	int in, out;

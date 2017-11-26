@@ -168,11 +168,18 @@ static void mode_prompt(struct ui* i, struct task* t) {
 }
 
 static void mode_wait(struct ui* i, struct task* t) {
-	UNUSED_ARGUMENT(i);
-	UNUSED_ARGUMENT(t);
-	/*switch (get_cmd(i)) {
+	switch (get_cmd(i)) {
+	case CMD_TASK_QUIT:
+		t->s = TASK_STATE_FINISHED;
+		break;
+	case CMD_TASK_PAUSE:
+		t->running = false;
+		break;
+	case CMD_TASK_RESUME:
+		t->running = true;
+		break;
 	default: break;
-	}*/
+	}
 }
 
 /* Dedicated for long tasks such as COPY, REMOVE, MOVE */
@@ -395,14 +402,16 @@ static void task_state_data_gathered(struct ui* i, struct task* t) {
  */
 static void task_state_executing(struct ui* i, struct task* t) {
 	wtimeout(stdscr, 5);
-	int e = do_task(t, 1024);
-	if (e) {
+	int e = 0;
+	if (t->running ) e = do_task(t, 1024);
+	if (e && t->running) {
 		failed(i->error, task_strings[t->t][NOUN], e);
 		t->s = TASK_STATE_FINISHED;
 	}
 	else {
 		snprintf(i->info, MSG_BUFFER_SIZE,
-			"%s %d/%df, %d/%dd, %lu/%luB",
+			"%s %s %d/%df, %d/%dd, %lu/%luB",
+			(t->running ? ">>" : "||"),
 			task_strings[t->t][ING],
 			t->files_done, t->files_total,
 			t->dirs_done, t->dirs_total,

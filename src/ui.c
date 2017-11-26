@@ -375,7 +375,7 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 static void ui_draw_help(struct ui* const i) {
 	WINDOW* hw = panel_window(i->help);
 	int hheight = i->scrh-1;
-	int lines = 3*2 + cmd_help_length - 1; // TODO
+	int lines = 4*2 + cmd_help_length - 1; // TODO
 	int dr = -i->helpy;
 	if (dr + lines < hheight) {
 		dr = hheight - lines;
@@ -392,6 +392,9 @@ static void ui_draw_help(struct ui* const i) {
 			break;
 		case MODE_MANAGER:
 			mvwprintw(hw, dr, 0, "FILE VIEW%*c", i->scrw-7, ' ');
+			break;
+		case MODE_WAIT:
+			mvwprintw(hw, dr, 0, "WAIT%*c", i->scrw-7, ' ');
 			break;
 		default: continue;
 		}
