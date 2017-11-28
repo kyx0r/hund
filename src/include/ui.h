@@ -299,10 +299,9 @@ struct ui_find {
 };
 
 struct ui_chmod {
-	PANEL* p; // TODO dont want it here
+	PANEL* p;
 	mode_t m; // permissions of chmodded file
 	utf8* path; // path of chmodded file
-	utf8* tmp; // Used to hold buffer used by prompt
 	uid_t o; // owner uid
 	gid_t g; // group gid
 	/* These are only to limit syscalls.
@@ -313,7 +312,7 @@ struct ui_chmod {
 	utf8 owner[LOGIN_NAME_MAX];
 	utf8 group[LOGIN_NAME_MAX];
 	enum mode mb; // Mode Before find mode
-	int wh, ww; // Window Width, Window Height // TODO dont want it here
+	int wh, ww; // Window Width, Window Height
 };
 
 struct ui_prompt {
@@ -357,7 +356,7 @@ void ui_end(struct ui* const);
 void ui_draw(struct ui* const);
 void ui_update_geometry(struct ui* const);
 
-int chmod_open(struct ui*, utf8*, mode_t);
+int chmod_open(struct ui*, utf8*);
 void chmod_close(struct ui*);
 
 void prompt_open(struct ui*, utf8*, utf8*, size_t);

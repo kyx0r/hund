@@ -17,12 +17,17 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define _GNU_SOURCE
+#ifndef _DEFAULT_SOURCE
+	#define _DEFAULT_SOURCE
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <getopt.h>
 #include <string.h>
+#include <limits.h>
+#include <sys/stat.h>
 #include <syslog.h>
 
 #include "include/ui.h"
@@ -30,9 +35,14 @@
 
 #define UNUSED_ARGUMENT(E) (void)(E);
 
-static void failed(utf8* error_buf, const utf8* f, int reason) {
-	snprintf(error_buf, MSG_BUFFER_SIZE, "%s failed: %s (%d)",
-			f, strerror(reason), reason);
+static void failed(utf8* error_buf, const utf8* f, int reason, utf8* custom) {
+	if (custom) {
+		snprintf(error_buf, MSG_BUFFER_SIZE, "%s failed: %s", f, custom);
+	}
+	else {
+		snprintf(error_buf, MSG_BUFFER_SIZE, "%s failed: %s (%d)",
+				f, strerror(reason), reason);
+	}
 }
 
 static int open_file(const utf8* const path) {
@@ -69,37 +79,29 @@ static void mode_help(struct ui* i, struct task* t) {
 }
 
 static void mode_chmod(struct ui* i, struct task* t) {
-	UNUSED_ARGUMENT(i);
-	UNUSED_ARGUMENT(t);
-
-	/*switch (get_cmd(i)) {
+	switch (get_cmd(i)) {
 	case CMD_RETURN:
 		chmod_close(i);
 		break;
 	case CMD_CHANGE:
-		syslog(LOG_DEBUG, "chmod %s: %o, %d:%d",
-				i->chmod->path, i->chmod->m, i->chmod->o, i->chmod->g);
 		if (chmod(i->chmod->path, i->chmod->m)) {
-			failed(i->error, "chmod", errno);
+			failed(i->error, "chmod", errno, NULL);
 		}
 		if (lchown(i->chmod->path, i->chmod->o, i->chmod->g)) {
-			// TODO o and g must be valid
-			failed(i->error, "chmod", errno);
+			failed(i->error, "chmod", errno, NULL);
 		}
 		scan_dir(i->pv->wd, &i->pv->file_list, &i->pv->num_files);
 		chmod_close(i);
 		break;
 	case CMD_CHOWN:
-		i->chmod->tmp = calloc(LOGIN_NAME_MAX, sizeof(char));
-		t->t = TASK_CHOWN;
-		t->s = TASK_STATE_GATHERING_DATA;
-		prompt_open(i, i->chmod->tmp, i->chmod->tmp, LOGIN_NAME_MAX);
+		task_new(t, TASK_CHOWN, NULL, NULL,
+				calloc(LOGIN_NAME_MAX, sizeof(char)));
+		prompt_open(i, t->newname, NULL, LOGIN_NAME_MAX);
 		break;
 	case CMD_CHGRP:
-		i->chmod->tmp = calloc(LOGIN_NAME_MAX, sizeof(char));
-		t->t = TASK_CHGRP;
-		t->s = TASK_STATE_GATHERING_DATA;
-		prompt_open(i, i->chmod->tmp, i->chmod->tmp, LOGIN_NAME_MAX);
+		task_new(t, TASK_CHGRP, NULL, NULL,
+				calloc(LOGIN_NAME_MAX, sizeof(char)));
+		prompt_open(i, t->newname, NULL, LOGIN_NAME_MAX);
 		break;
 	case CMD_TOGGLE_UIOX: i->chmod->m ^= S_ISUID; break;
 	case CMD_TOGGLE_GIOX: i->chmod->m ^= S_ISGID; break;
@@ -114,7 +116,7 @@ static void mode_chmod(struct ui* i, struct task* t) {
 	case CMD_TOGGLE_OW: i->chmod->m ^= S_IWOTH; break;
 	case CMD_TOGGLE_OX: i->chmod->m ^= S_IXOTH; break;
 	default: break;
-	}*/
+	}
 }
 
 static void mode_find(struct ui* i, struct task* t) {
@@ -191,7 +193,7 @@ static void prepare_long_task(struct ui* i, struct task* t,
 	utf8* dst = NULL;
 	utf8* newname = NULL;
 	if (!src) {
-		failed(i->error, err, ENAMETOOLONG);
+		failed(i->error, err, ENAMETOOLONG, NULL);
 		free(src);
 		return;
 	}
@@ -250,11 +252,11 @@ static void mode_manager(struct ui* i, struct task* t) {
 		break;
 	case CMD_ENTER_DIR:
 		err = file_view_enter_selected_dir(i->pv);
-		if (err && err != ENOTDIR) failed(i->error, "enter dir", err);
+		if (err && err != ENOTDIR) failed(i->error, "enter dir", err, NULL);
 		break;
 	case CMD_UP_DIR:
 		err = file_view_up_dir(i->pv);
-		if (err) failed(i->error, "up dir", err);
+		if (err) failed(i->error, "up dir", err, NULL);
 		break;
 	case CMD_COPY:
 		prepare_long_task(i, t, TASK_COPY,
@@ -282,14 +284,14 @@ static void mode_manager(struct ui* i, struct task* t) {
 	case CMD_ENTRY_LAST:
 		last_entry(i->pv);
 		break;
-	/*case CMD_CHMOD:
+	case CMD_CHMOD:
 		path = file_view_path_to_selected(i->pv);
 		if (!path) {
-			failed(i->error, "chmod", ENAMETOOLONG);
+			failed(i->error, "chmod", ENAMETOOLONG, NULL);
 			break;
 		}
-		chmod_open(i, path, i->pv->file_list[i->pv->selection]->s.st_mode);
-		break;*/
+		chmod_open(i, path);
+		break;
 	case CMD_RENAME:
 		task_new(t, TASK_RENAME, file_view_path_to_selected(i->pv),
 				strcpy(malloc(PATH_MAX), i->pv->wd),
@@ -303,7 +305,7 @@ static void mode_manager(struct ui* i, struct task* t) {
 	case CMD_REFRESH:
 		err = scan_dir(i->pv->wd, &i->pv->file_list, &i->pv->num_files);
 		if (err) {
-			failed(i->error, "refresh", err);
+			failed(i->error, "refresh", err, NULL);
 		}
 		else {
 			sort_file_list(i->pv->file_list, i->pv->num_files);
@@ -329,37 +331,37 @@ typedef void (*task_state_handler) (struct ui*, struct task*);
 static void task_state_data_gathered(struct ui* i, struct task* t) {
 	int err = 0, reason = 0;
 	switch (t->t) {
-	/*case TASK_CHOWN:
+	case TASK_CHOWN:
 		{
-		syslog(LOG_DEBUG, "chown %s", i.chmod->tmp);
-		struct passwd* pwd = getpwnam(i.chmod->tmp);
-		if (errno) {
-			i.error = failed("chown", errno);
-		}
+		errno = 0;
+		struct passwd* pwd = getpwnam(t->newname);
+		if (!pwd) failed(i->error, "chown", errno,
+				"Such user does not exist");
 		else {
-			i.chmod->o = pwd->pw_uid;
-			strcpy(i.chmod->owner, pwd->pw_name);
+			i->chmod->o = pwd->pw_uid;
+			strcpy(i->chmod->owner, pwd->pw_name);
 		}
-		t.s = TASK_STATE_FINISHED;
+		t->s = TASK_STATE_FINISHED;
 		}
 		break;
 	case TASK_CHGRP:
-		syslog(LOG_DEBUG, "chgrp %s", i.chmod->tmp);
-		struct group* grp = getgrnam(i.chmod->tmp);
-		if (errno) {
-			i.error = failed("chgrp", errno);
-		}
+		{
+		errno = 0;
+		struct group* grp = getgrnam(t->newname);
+		if (!grp) failed(i->error, "chgrp", errno,
+				"Such group does not exist");
 		else {
-			i.chmod->g = grp->gr_gid;
-			strcpy(i.chmod->group, grp->gr_name);
+			i->chmod->g = grp->gr_gid;
+			strcpy(i->chmod->group, grp->gr_name);
 		}
-		t.s = TASK_STATE_FINISHED;
-		break;*/
+		t->s = TASK_STATE_FINISHED;
+		}
+		break;
 	case TASK_MKDIR:
 		strcat(t->src, "/");
 		strcat(t->src, t->newname);
 		err = dir_make(t->src);
-		if (err) failed(i->error, task_strings[TASK_MKDIR][ING], err);
+		if (err) failed(i->error, task_strings[TASK_MKDIR][ING], err, NULL);
 		t->s = TASK_STATE_FINISHED;
 		break;
 	case TASK_CD:
@@ -368,7 +370,7 @@ static void task_state_data_gathered(struct ui* i, struct task* t) {
 			(reason = ENOENT, !file_exists(t->src)) ||
 			(reason = EISDIR, !is_dir(t->src))) {
 
-			failed(i->error, task_strings[TASK_CD][ING], reason);
+			failed(i->error, task_strings[TASK_CD][ING], reason, NULL);
 			t->s = TASK_STATE_FINISHED;
 			break;
 		}
@@ -379,7 +381,7 @@ static void task_state_data_gathered(struct ui* i, struct task* t) {
 		strcat(t->dst, "/");
 		strcat(t->dst, t->newname);
 		err = rename(t->src, t->dst);
-		if (err) failed(i->error, task_strings[TASK_RENAME][ING], err);
+		if (err) failed(i->error, task_strings[TASK_RENAME][ING], err, NULL);
 		t->s = TASK_STATE_FINISHED;
 		break;
 	case TASK_COPY:
@@ -387,7 +389,7 @@ static void task_state_data_gathered(struct ui* i, struct task* t) {
 	case TASK_MOVE:
 		err = task_build_file_list(t);
 		if (err) {
-			failed(i->error, "build file list", err);
+			failed(i->error, "build file list", err, NULL);
 			task_clean(t); //TODO
 			break;
 		}
@@ -405,7 +407,7 @@ static void task_state_executing(struct ui* i, struct task* t) {
 	int e = 0;
 	if (t->running ) e = do_task(t, 1024);
 	if (e && t->running) {
-		failed(i->error, task_strings[t->t][NOUN], e);
+		failed(i->error, task_strings[t->t][NOUN], e, NULL);
 		t->s = TASK_STATE_FINISHED;
 	}
 	else {
@@ -421,6 +423,10 @@ static void task_state_executing(struct ui* i, struct task* t) {
 
 /* Display message and clean task */
 static void task_state_finished(struct ui* i, struct task* t) {
+	if (t->t == TASK_CHOWN || t->t == TASK_CHGRP) {
+		task_clean(t);
+		return;
+	}
 	if (t->t == TASK_RM || t->t == TASK_MOVE || t->t == TASK_COPY) {
 		wtimeout(stdscr, -1);
 	}
@@ -428,7 +434,7 @@ static void task_state_finished(struct ui* i, struct task* t) {
 	int epv = scan_dir(i->pv->wd, &i->pv->file_list, &i->pv->num_files);
 	int esv = scan_dir(i->sv->wd, &i->sv->file_list, &i->sv->num_files);
 	if (epv || esv) {
-		failed(i->error, task_strings[t->t][NOUN], epv | esv);
+		failed(i->error, task_strings[t->t][NOUN], epv | esv, NULL);
 	}
 	sort_file_list(i->pv->file_list, i->pv->num_files);
 	sort_file_list(i->sv->file_list, i->sv->num_files);

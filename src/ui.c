@@ -598,9 +598,9 @@ void ui_update_geometry(struct ui* const i) {
 	}
 }
 
-int chmod_open(struct ui* i, utf8* path, mode_t m) {
+int chmod_open(struct ui* i, utf8* path) {
 	struct stat s;
-	if (lstat(path, &s)) return errno;
+	if (stat(path, &s)) return errno;
 	errno = 0;
 	struct passwd* pwd = getpwuid(s.st_uid);
 	if (!pwd) return errno;
@@ -612,8 +612,7 @@ int chmod_open(struct ui* i, utf8* path, mode_t m) {
 	i->chmod->g = s.st_gid;
 	i->chmod->mb = i->m;
 	i->chmod->path = path;
-	i->chmod->m = m;
-	i->chmod->tmp = NULL;
+	i->chmod->m = s.st_mode;
 	WINDOW* cw = newwin(1, 1, 0, 0);
 	i->chmod->p = new_panel(cw);
 	i->m = MODE_CHMOD;
@@ -630,7 +629,6 @@ void chmod_close(struct ui* i) {
 	WINDOW* cw = panel_window(i->chmod->p);
 	del_panel(i->chmod->p);
 	delwin(cw);
-	if (i->chmod->tmp) free(i->chmod->tmp);
 	free(i->chmod->path);
 	free(i->chmod);
 	i->chmod = NULL;
