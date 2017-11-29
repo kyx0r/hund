@@ -20,18 +20,11 @@
 #ifndef FILE_H
 #define FILE_H
 
-// dirent.h and fnctl.h stuff
-//#define _GNU_SOURCE
-#ifndef _POSIX_C_SOURCE
-	#define _POSIX_C_SOURCE 200809L
+#ifndef _DEFAULT_SOURCE
+	#define _DEFAULT_SOURCE
 #endif
 
-#ifndef _XOPEN_SOURCE
-	#define _XOPEN_SOURCE // S_ISSOCK
-#endif
-//#define _XOPEN_SOURCE_EXTENDED
-
-#include <linux/limits.h>
+#include <limits.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -40,8 +33,6 @@
 #include <fcntl.h>
 #include <dirent.h>
 #include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <errno.h>
 #include <syslog.h>
 
@@ -83,8 +74,6 @@ void file_list_clean(struct file_record***, fnum_t*);
 int scan_dir(const char*, struct file_record***, fnum_t*);
 int sort_file_list(struct file_record**, fnum_t);
 
-size_t imb(const char* const, const char* const);
-bool contains(const char* const, const char* const);
 int link_copy(const char* const, const char* const, const char* const);
 
 int dir_make(const char*);

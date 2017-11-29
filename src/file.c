@@ -58,14 +58,15 @@ void file_list_clean(struct file_record*** fl, fnum_t* nf) {
  * On stat/lstat errors: zeroes failed fields
  *
  * TODO check if fstatat could help
+ * TODO do error checking (if l-stat points anything and if paths exist at all)
  */
-int scan_dir(const char* wd, struct file_record*** fl, fnum_t* nf) {
+int scan_dir(const char* const wd, struct file_record*** fl, fnum_t* nf) {
 	file_list_clean(fl, nf);
 	int r = 0;
 	DIR* dir = opendir(wd);
 	if (!dir) return errno;
-	char fpath[PATH_MAX]; // Stack should be fine with them or FIXME?
-	char lpath[PATH_MAX]; // TODO maybe make them static? Hund is single-threaded...
+	static char fpath[PATH_MAX+1];
+	static char lpath[PATH_MAX+1];
 	struct dirent* de;
 	while ((de = readdir(dir)) != NULL) {
 		if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, "..")) continue;
@@ -84,14 +85,12 @@ int scan_dir(const char* wd, struct file_record*** fl, fnum_t* nf) {
 			file_list_clean(fl, nf);
 			break;
 		}
-		nfr->file_name = strdup(de->d_name); // TODO
+		nfr->file_name = strndup(de->d_name, NAME_MAX);
 		nfr->link_path = NULL;
-		strcpy(fpath, wd);
-		strcat(fpath, "/");
-		strcat(fpath, de->d_name);
-		if (lstat(fpath, &nfr->s)) memset(&nfr->s, 0, sizeof(struct stat));
+		if (append_dir(strncpy(fpath, wd, PATH_MAX), de->d_name));
+		else if (lstat(fpath, &nfr->s)) memset(&nfr->s, 0, sizeof(struct stat));
 		else if (S_ISLNK(nfr->s.st_mode)) {
-			nfr->l = malloc(sizeof(struct stat)); // TODO
+			nfr->l = malloc(sizeof(struct stat));
 			if (!nfr->l);
 			else if(stat(fpath, nfr->l)) {
 				free(nfr->l);
@@ -124,28 +123,6 @@ int sort_file_list(struct file_record** fl, fnum_t nf) {
 	return 0;
 }
 
-/* Initial Matching Bytes */
-size_t imb(const char* const a, const char* const b) {
-	size_t m = 0;
-	const char* aa = a;
-	const char* bb = b;
-	while (*aa && *bb && *aa == *bb) {
-		aa += 1;
-		bb += 1;
-		m += 1;
-	}
-	return m;
-}
-
-/* Checks if STRing contains SUBString */
-bool contains(const char* const str, const char* const subs) {
-	for (size_t j = 0; strlen(str+j) >= strlen(subs); ++j) {
-		if (strlen(subs) == imb(str+j, subs)) return true;
-	}
-	return false;
-}
-typedef const char* const ccharc;
-
 /* Copies link from src to dst, relative to wd
  * all paths must be absolute.
  * There are two instances, when symlink path is copied raw:
@@ -165,7 +142,7 @@ int link_copy(const char* const wd,
 	struct stat src_s;
 	if (lstat(src, &src_s)) return errno;
 	if (!S_ISLNK(src_s.st_mode)) return EINVAL;
-	char lpath[PATH_MAX];
+	char lpath[PATH_MAX+1];
 	const ssize_t ll = readlink(src, lpath, PATH_MAX);
 	if (ll == -1) return errno;
 	lpath[ll] = 0;
@@ -173,7 +150,7 @@ int link_copy(const char* const wd,
 		if (symlink(lpath, dst)) return errno;
 	}
 	else {
-		char target[PATH_MAX];
+		char target[PATH_MAX+1];
 		const size_t sl = current_dir_i(src)-1;
 		strncpy(target, src, sl); target[sl] = 0;
 		enter_dir(target, lpath);
@@ -183,11 +160,11 @@ int link_copy(const char* const wd,
 			return 0;
 		}
 
-		char _dst[PATH_MAX];
+		char _dst[PATH_MAX+1];
 		const size_t pl = current_dir_i(dst)-1;
 		strncpy(_dst, dst, pl); _dst[pl] = 0;
 
-		char newlpath[PATH_MAX] = { 0 };
+		char newlpath[PATH_MAX+1] = { 0 };
 		while (!contains(target, _dst)) {
 			up_dir(_dst);
 			strcat(newlpath, "../");

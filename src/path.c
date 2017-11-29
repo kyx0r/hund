@@ -27,25 +27,43 @@ struct passwd* get_pwd(void) {
 	return getpwuid(geteuid());
 }
 
+/* Appends dir to path.
+ * Expects path to be PATH_MAX+1 long
+ * and dir to be NAME_MAX long.
+ *
+ * returns ENAMETOOLONG if buffer would overflow and leaves path unchanged
+ * returns 0 if succesful
+ */
+int append_dir(char* const path, const char* const dir) {
+	const size_t pl = strnlen(path, PATH_MAX);
+	const size_t dl = strnlen(dir, NAME_MAX);
+	if (pl+2+dl > PATH_MAX) return ENAMETOOLONG;
+	strncat(path, "/", 2);
+	strncat(path, dir, dl+1); // null-terminator
+	return 0;
+}
+
 /* path[] must be absolute and not prettified
  * dir[] does not have to be single file, can be a path
  * Returns errno (ENAMETOOLONG if PATH_MAX would be exceeded)
  *
+ * TODO leave path unchanged if wouldn't fit
+ *
  * I couldn't find any standard function that would parse path and shorten it.
  */
-int enter_dir(char* const path, const char* dir) {
+int enter_dir(char* const path, const char* const dir) {
 	if (!path_is_relative(dir)) {
 		if (dir[0] == '~') {
 			struct passwd* pwd = get_pwd();
-			strcpy(path, pwd->pw_dir);
-			strcat(path, dir+1);
+			strncpy(path, pwd->pw_dir, PATH_MAX);
+			strncat(path, dir+1, PATH_MAX-strnlen(pwd->pw_dir, PATH_MAX));
 		}
 		else {
-			strcpy(path, dir);
+			strncpy(path, dir, PATH_MAX);
 		}
 		return 0;
 	}
-	const size_t plen = strlen(path);
+	const size_t plen = strnlen(path, PATH_MAX);
 	/* path[] may contain '/' at the end
 	 * enter_dir appends entries with '/' PREpended;
 	 * path[] = '/a/b/c/' -> '/a/b/c'
@@ -56,12 +74,12 @@ int enter_dir(char* const path, const char* dir) {
 		path[plen-1] = 0;
 	}
 	char* save_ptr = NULL;
-	char* dirdup = strdup(dir);
+	char* dirdup = strndup(dir, PATH_MAX);
 	char* entry = strtok_r(dirdup, "/", &save_ptr);
 	while (entry) {
-		if (!strcmp(entry, ".")); // Do nothing; Skip the conditional block
-		else if (!strcmp(entry, "..")) {
-			char* p = path + strlen(path);
+		if (!strncmp(entry, ".", 2));
+		else if (!strncmp(entry, "..", 3)) {
+			char* p = path + strnlen(path, PATH_MAX);
 			// At this point path never ends with /
 			// p points null pointer
 			// Go back till nearest /
@@ -74,16 +92,17 @@ int enter_dir(char* const path, const char* dir) {
 		}
 		else {
 			// Check if PATH_MAX is respected
-			if ((strlen(path) + strlen(entry)) < PATH_MAX) {
-				if (path[0] == '/' && strlen(path) > 1) {
-					// dont prepend / in root directory
-					strcat(path, "/");
-				}
-				strcat(path, entry);
-			}
-			else {
+			//printf("%d %d\n", strnlen(path, PATH_MAX), strnlen(entry, PATH_MAX));
+			if ((strnlen(path, PATH_MAX) + strnlen(entry, PATH_MAX) + 1) > PATH_MAX) {
 				free(dirdup);
 				return ENAMETOOLONG;
+			}
+			else {
+				if (path[0] == '/' && strnlen(path, PATH_MAX) > 1) {
+					// dont prepend / in root directory
+					strncat(path, "/", 2);
+				}
+				strncat(path, entry, strnlen(entry, NAME_MAX)); // TODO
 			}
 		}
 		entry = strtok_r(NULL, "/", &save_ptr);
@@ -97,10 +116,10 @@ int enter_dir(char* const path, const char* dir) {
  * 0 if operation succesful
  * -1 if path == '/'
  */
-int up_dir(char* path) {
-	if (!strcmp(path, "/")) return -1;
+int up_dir(char* const path) {
+	if (!strncmp(path, "/", 2)) return -1;
 	int i;
-	for (i = strlen(path); i > 0 && path[i] != '/'; i--) {
+	for (i = strnlen(path, PATH_MAX); i > 0 && path[i] != '/'; i--) {
 		path[i] = 0;
 	}
 	// At this point i points that last '/'
@@ -118,8 +137,8 @@ int up_dir(char* path) {
  * -1 if not found home in path; path unchanged
  */
 int prettify_path(char* path, char* home) {
-	const int hlen = strlen(home);
-	const int plen = strlen(path);
+	const int hlen = strnlen(home, PATH_MAX);
+	const int plen = strnlen(path, PATH_MAX);
 	if (!memcmp(path, home, hlen)) {
 		path[0] = '~';
 		memmove(path+1, path+hlen, plen-hlen+1);
@@ -129,8 +148,8 @@ int prettify_path(char* path, char* home) {
 }
 
 // Places current directory in dir[]
-void current_dir(const char* path, char* dir) {
-	const int plen = strlen(path);
+void current_dir(const char* const path, char* const dir) {
+	const int plen = strnlen(path, PATH_MAX);
 	int i = plen-1; // i will point last slash in path
 	while (path[i] != '/' && i >= 0) {
 		i -= 1;
@@ -152,8 +171,8 @@ bool path_is_relative(const char* const path) {
  * printf("~%s", path+prettify_path_i(path));
  * If cannot be prettified, returns 0
  */
-int prettify_path_i(const char* path, const char* home) {
-	const int hlen = strlen(home);
+int prettify_path_i(const char* const path, const char* const home) {
+	const size_t hlen = strnlen(home, PATH_MAX);
 	if (!memcmp(path, home, hlen)) {
 		return hlen;
 	}
@@ -171,4 +190,36 @@ int current_dir_i(const char* path) {
 		i -= 1;
 	}
 	return i+1; // i will point last slash in path
+}
+
+/* Finds SUBString at the begining of STRing and changes it ti REPLacement */
+bool substitute(char* const str,
+		const char* const subs, const char* const repl) {
+	const size_t subs_l = strnlen(subs, PATH_MAX);
+	const size_t str_l = strnlen(str, PATH_MAX);
+	if (subs_l > str_l) return false;
+	if (memcmp(str, subs, subs_l)) return false;
+	const size_t repl_l = strnlen(repl, PATH_MAX);
+	memmove(str+repl_l, str+subs_l, str_l-subs_l+1);
+	memcpy(str, repl, repl_l);
+	return true;
+}
+
+/* Initial Matching Bytes */
+size_t imb(const char* a, const char* b) {
+	size_t m = 0;
+	while (*a && *b && *a == *b) {
+		a += 1;
+		b += 1;
+		m += 1;
+	}
+	return m;
+}
+
+/* Checks if STRing contains SUBString */
+bool contains(const char* const str, const char* const subs) {
+	for (size_t j = 0; strnlen(str+j, PATH_MAX) >= strnlen(subs, PATH_MAX); ++j) {
+		if (strnlen(subs, PATH_MAX) == imb(str+j, subs)) return true;
+	}
+	return false;
 }

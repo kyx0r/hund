@@ -20,12 +20,11 @@
 #ifndef PATH_H
 #define PATH_H
 
-// strtok_r
-#ifndef _POSIX_C_SOURCE
-	#define _POSIX_C_SOURCE 200809L
+#ifndef _DEFAULT_SOURCE
+	#define _DEFAULT_SOURCE
 #endif
 
-#include <linux/limits.h>
+#include <limits.h>
 #include <string.h>
 #include <stdbool.h>
 #include <unistd.h>
@@ -37,13 +36,18 @@
 void get_cwd(char*);
 struct passwd* get_pwd(void);
 
-int enter_dir(char* const, const char*);
-int up_dir(char*);
+int append_dir(char* const, const char* const);
+int enter_dir(char* const, const char* const);
+int up_dir(char* const);
 int prettify_path(char*, char*);
-void current_dir(const char*, char*);
+void current_dir(const char* const, char* const);
 bool path_is_relative(const char* const);
 
-int prettify_path_i(const char*, const char*); // TODO tests
+int prettify_path_i(const char* const, const char* const);
 int current_dir_i(const char*);
+
+bool substitute(char* const, const char* const, const char* const);
+size_t imb(const char*, const char*);
+bool contains(const char* const, const char* const);
 
 #endif

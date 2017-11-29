@@ -98,10 +98,10 @@ static int _build_file_list(struct task* t, utf8* path, enum task_type tt) {
 			if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, "..")) {
 				continue;
 			}
-			utf8* fpath = malloc(strlen(path)+1+strlen(de->d_name)+1);
-			strcpy(fpath, path);
-			strcat(fpath, "/");
-			strcat(fpath, de->d_name);
+			utf8* fpath = malloc(PATH_MAX+1);
+			strncpy(fpath, path, PATH_MAX);
+			strncat(fpath, "/", 2);
+			strncat(fpath, de->d_name, NAME_MAX);
 			struct stat ss;
 			if (lstat(fpath, &ss)) {
 				free(fpath);
@@ -224,18 +224,6 @@ static inline int _copy_some(struct task* t, utf8* npath, void* buf, int* c) {
 	return 0;
 }
 
-/* Finds SUBString at the begining of STRing and changes it ti REPLacement */
-bool substitute(char* str, char* subs, char* repl) {
-	const size_t subs_l = strlen(subs);
-	const size_t str_l = strlen(str);
-	if (subs_l > str_l) return false;
-	if (memcmp(str, subs, subs_l)) return false;
-	const size_t repl_l = strlen(repl);
-	memmove(str+repl_l, str+subs_l, str_l-subs_l+1);
-	memcpy(str, repl, repl_l);
-	return true;
-}
-
 /* How does hund determine paths of files when performing operations?
  * (see build_file_list() too)
  *
@@ -301,13 +289,13 @@ bool substitute(char* str, char* subs, char* repl) {
  * TODO block doing anything to block devices, sockets and other non-regular files
  */
 utf8* build_new_path(struct task* t, utf8* cp) {
-	utf8* new_path = malloc(PATH_MAX);
-	strcpy(new_path, cp);
+	utf8* new_path = malloc(PATH_MAX+1);
+	strncpy(new_path, cp, PATH_MAX);
 	if (t->newname) { // name colission; using new name
-		utf8* _dst = malloc(PATH_MAX); // TODO static
-		strcpy(_dst, t->dst);
-		strcat(_dst, "/");
-		strcat(_dst, t->newname);
+		utf8* _dst = malloc(PATH_MAX+1); // TODO static?
+		strncpy(_dst, t->dst, PATH_MAX);
+		strncat(_dst, "/", 2);
+		strncat(_dst, t->newname, NAME_MAX);
 		substitute(new_path, t->src, _dst);
 		free(_dst);
 	}

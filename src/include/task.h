@@ -20,9 +20,8 @@
 #ifndef TASK_H
 #define TASK_H
 
-// dirent.h and fnctl.h stuff
-#ifndef _POSIX_C_SOURCE
-	#define _POSIX_C_SOURCE 200809L
+#ifndef _DEFAULT_SOURCE
+	#define _DEFAULT_SOURCE
 #endif
 
 #include <stdint.h>
@@ -38,8 +37,8 @@ enum task_type {
 	TASK_RENAME,
 	TASK_CD,
 	TASK_MKDIR,
-	//TASK_CHMOD,
-	//TASK_CHGRP,
+	TASK_CHOWN,
+	TASK_CHGRP,
 };
 
 #define NOUN 0
@@ -101,7 +100,6 @@ int task_build_file_list(struct task*);
 void task_check_file(struct task*);
 void task_clean(struct task*);
 
-bool substitute(char*, char*, char*);
 utf8* build_new_path(struct task*, utf8*);
 
 int do_task(struct task*, int);
