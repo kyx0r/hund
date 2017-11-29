@@ -53,14 +53,14 @@ static void _push_file_todo(struct task* t,
 	t->checklist = ft;
 	// TODO symlinks
 	if (S_ISDIR(s.st_mode)) {
-		if ((t->t == TASK_RM && td == TODO_REMOVE) ||
-				(td == TODO_COPY && (t->t == TASK_COPY || t->t == TASK_MOVE))) {
+		if ((td == TODO_REMOVE && t->t == TASK_RM) ||
+			(td == TODO_COPY && (t->t == TASK_COPY || t->t == TASK_MOVE))) {
 			t->dirs_total += 1;
 		}
 	}
 	else {
-		if ((t->t == TASK_RM && td == TODO_REMOVE) ||
-				(td == TODO_COPY && (t->t == TASK_COPY || t->t == TASK_MOVE))) {
+		if ((td == TODO_REMOVE && t->t == TASK_RM) ||
+			(td == TODO_COPY && (t->t == TASK_COPY || t->t == TASK_MOVE))) {
 			t->files_total += 1;
 			t->size_total += s.st_size;
 		}
@@ -100,8 +100,7 @@ static int _build_file_list(struct task* t, utf8* path, enum task_type tt) {
 			}
 			utf8* fpath = malloc(PATH_MAX+1);
 			strncpy(fpath, path, PATH_MAX);
-			strncat(fpath, "/", 2);
-			strncat(fpath, de->d_name, NAME_MAX);
+			append_dir(fpath, de->d_name); // TODO handle error
 			struct stat ss;
 			if (lstat(fpath, &ss)) {
 				free(fpath);
@@ -133,8 +132,7 @@ static int _build_file_list(struct task* t, utf8* path, enum task_type tt) {
 }
 
 int task_build_file_list(struct task* t) {
-	utf8* path = malloc(strlen(t->src)+1);
-	strcpy(path, t->src);
+	utf8* path = strndup(t->src, PATH_MAX);
 	int r = _build_file_list(t, path, t->t);
 	return r;
 }
@@ -292,12 +290,10 @@ utf8* build_new_path(struct task* t, utf8* cp) {
 	utf8* new_path = malloc(PATH_MAX+1);
 	strncpy(new_path, cp, PATH_MAX);
 	if (t->newname) { // name colission; using new name
-		utf8* _dst = malloc(PATH_MAX+1); // TODO static?
+		static char _dst[PATH_MAX+1];
 		strncpy(_dst, t->dst, PATH_MAX);
-		strncat(_dst, "/", 2);
-		strncat(_dst, t->newname, NAME_MAX);
+		if (append_dir(_dst, t->newname)) return NULL;
 		substitute(new_path, t->src, _dst);
-		free(_dst);
 	}
 	else { // name stays the same
 		const size_t repll = current_dir_i(t->src)-1;

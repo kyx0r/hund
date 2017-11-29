@@ -93,7 +93,8 @@ int enter_dir(char* const path, const char* const dir) {
 		else {
 			// Check if PATH_MAX is respected
 			//printf("%d %d\n", strnlen(path, PATH_MAX), strnlen(entry, PATH_MAX));
-			if ((strnlen(path, PATH_MAX) + strnlen(entry, PATH_MAX) + 1) > PATH_MAX) {
+			if ((strnlen(path, PATH_MAX) +
+						strnlen(entry, PATH_MAX) + 1) > PATH_MAX) {
 				free(dirdup);
 				return ENAMETOOLONG;
 			}
@@ -162,7 +163,8 @@ void current_dir(const char* const path, char* const dir) {
 }
 
 bool path_is_relative(const char* const path) {
-	return (path[0] != '/' && path[0] != '~') || (path[0] == '.' && path[1] == '/');
+	return (path[0] != '/' && path[0] != '~') ||
+		(path[0] == '.' && path[1] == '/');
 }
 
 /* Same as current_dir_i()
@@ -218,8 +220,9 @@ size_t imb(const char* a, const char* b) {
 
 /* Checks if STRing contains SUBString */
 bool contains(const char* const str, const char* const subs) {
-	for (size_t j = 0; strnlen(str+j, PATH_MAX) >= strnlen(subs, PATH_MAX); ++j) {
-		if (strnlen(subs, PATH_MAX) == imb(str+j, subs)) return true;
+	const size_t sl = strnlen(subs, PATH_MAX);
+	for (size_t j = 0; strnlen(str+j, PATH_MAX) >= sl; ++j) {
+		if (sl == imb(str+j, subs)) return true;
 	}
 	return false;
 }

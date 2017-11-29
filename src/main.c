@@ -48,7 +48,7 @@ static void failed(utf8* error_buf, const utf8* f, int reason, utf8* custom) {
 static int open_file(const utf8* const path) {
 	if (is_dir(path)) return EISDIR;
 	static const utf8* prog = "less";
-	utf8* cmd = malloc(strlen(path)+strlen(prog)+2+1+1);
+	utf8* cmd = malloc(strnlen(path, PATH_MAX)+strlen(prog)+2+1+1);
 	snprintf(cmd, PATH_MAX, "%s '%s'", prog, path); // TODO recognize format
 	ui_system(cmd);
 	free(cmd);
@@ -95,12 +95,12 @@ static void mode_chmod(struct ui* i, struct task* t) {
 		break;
 	case CMD_CHOWN:
 		task_new(t, TASK_CHOWN, NULL, NULL,
-				calloc(LOGIN_NAME_MAX, sizeof(char)));
+				calloc(LOGIN_NAME_MAX+1, sizeof(char)));
 		prompt_open(i, t->newname, NULL, LOGIN_NAME_MAX);
 		break;
 	case CMD_CHGRP:
 		task_new(t, TASK_CHGRP, NULL, NULL,
-				calloc(LOGIN_NAME_MAX, sizeof(char)));
+				calloc(LOGIN_NAME_MAX+1, sizeof(char)));
 		prompt_open(i, t->newname, NULL, LOGIN_NAME_MAX);
 		break;
 	case CMD_TOGGLE_UIOX: i->chmod->m ^= S_ISUID; break;
@@ -199,14 +199,15 @@ static void prepare_long_task(struct ui* i, struct task* t,
 	}
 	const utf8* const fn = i->pv->file_list[i->pv->selection]->file_name;
 	if (tt == TASK_MOVE || tt == TASK_COPY) {
-		dst = malloc(PATH_MAX);
-		strcpy(dst, i->sv->wd);
+		dst = malloc(PATH_MAX+1);
+		strncpy(dst, i->sv->wd, PATH_MAX);
 		if (file_on_list(i->sv, fn)) {
-			newname = calloc(NAME_MAX, sizeof(utf8));
-			strcpy(newname, fn);
+			newname = calloc(NAME_MAX+1, sizeof(char));
+			strncpy(newname, fn, NAME_MAX);
 			i->m = MODE_WAIT; // TODO FIXME
 			// ^ doing so will make prompt set mode to MODE_WAIT
-			prompt_open(i, newname, newname+strlen(newname), NAME_MAX);
+			prompt_open(i, newname,
+					newname+strnlen(newname, NAME_MAX), NAME_MAX);
 		}
 	}
 	task_new(t, tt, src, dst, newname);
@@ -246,8 +247,9 @@ static void mode_manager(struct ui* i, struct task* t) {
 		}
 		break;
 	case CMD_CD:
-		task_new(t, TASK_CD, strcpy(malloc(PATH_MAX), i->pv->wd),
-				calloc(PATH_MAX, sizeof(char)), NULL);
+		task_new(t, TASK_CD,
+				strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX),
+				calloc(PATH_MAX+1, sizeof(char)), NULL);
 		prompt_open(i, t->dst, NULL, PATH_MAX);
 		break;
 	case CMD_ENTER_DIR:
@@ -271,12 +273,13 @@ static void mode_manager(struct ui* i, struct task* t) {
 				task_strings[TASK_RM][NOUN]);
 		break;
 	case CMD_CREATE_DIR:
-		task_new(t, TASK_MKDIR, strcpy(malloc(PATH_MAX), i->pv->wd),
-				NULL, calloc(NAME_MAX, sizeof(char)));
+		task_new(t, TASK_MKDIR,
+				strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX),
+				NULL, calloc(NAME_MAX+1, sizeof(char)));
 		prompt_open(i, t->newname, NULL, PATH_MAX);
 		break;
 	case CMD_FIND:
-		find_open(i, calloc(NAME_MAX, sizeof(char)), NULL, NAME_MAX);
+		find_open(i, calloc(NAME_MAX+1, sizeof(char)), NULL, NAME_MAX);
 		break;
 	case CMD_ENTRY_FIRST:
 		first_entry(i->pv);
@@ -294,10 +297,11 @@ static void mode_manager(struct ui* i, struct task* t) {
 		break;
 	case CMD_RENAME:
 		task_new(t, TASK_RENAME, file_view_path_to_selected(i->pv),
-				strcpy(malloc(PATH_MAX), i->pv->wd),
-				strcpy(malloc(NAME_MAX),
-					i->pv->file_list[i->pv->selection]->file_name));
-		prompt_open(i, t->newname, t->newname+strlen(t->newname), PATH_MAX);
+				strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX),
+				strncpy(malloc(NAME_MAX+1),
+					i->pv->file_list[i->pv->selection]->file_name, NAME_MAX));
+		prompt_open(i, t->newname,
+				t->newname+strnlen(t->newname, NAME_MAX), NAME_MAX);
 		break;
 	case CMD_TOGGLE_HIDDEN:
 		file_view_toggle_hidden(i->pv);
@@ -339,7 +343,7 @@ static void task_state_data_gathered(struct ui* i, struct task* t) {
 				"Such user does not exist");
 		else {
 			i->chmod->o = pwd->pw_uid;
-			strcpy(i->chmod->owner, pwd->pw_name);
+			strncpy(i->chmod->owner, pwd->pw_name, LOGIN_NAME_MAX);
 		}
 		t->s = TASK_STATE_FINISHED;
 		}
@@ -352,14 +356,17 @@ static void task_state_data_gathered(struct ui* i, struct task* t) {
 				"Such group does not exist");
 		else {
 			i->chmod->g = grp->gr_gid;
-			strcpy(i->chmod->group, grp->gr_name);
+			strncpy(i->chmod->group, grp->gr_name, LOGIN_NAME_MAX);
 		}
 		t->s = TASK_STATE_FINISHED;
 		}
 		break;
 	case TASK_MKDIR:
-		strcat(t->src, "/");
-		strcat(t->src, t->newname);
+		err = append_dir(t->src, t->newname);
+		if (err) {
+			failed(i->error, task_strings[TASK_MKDIR][ING], err, NULL);
+			break;
+		}
 		err = dir_make(t->src);
 		if (err) failed(i->error, task_strings[TASK_MKDIR][ING], err, NULL);
 		t->s = TASK_STATE_FINISHED;
@@ -374,12 +381,15 @@ static void task_state_data_gathered(struct ui* i, struct task* t) {
 			t->s = TASK_STATE_FINISHED;
 			break;
 		}
-		strcpy(i->pv->wd, t->src);
+		strncpy(i->pv->wd, t->src, PATH_MAX);
 		t->s = TASK_STATE_FINISHED;
 		break;
 	case TASK_RENAME:
-		strcat(t->dst, "/");
-		strcat(t->dst, t->newname);
+		err = append_dir(t->dst, t->newname);
+		if (err) {
+			failed(i->error, task_strings[TASK_RENAME][ING], err, NULL);
+			break;
+		}
 		err = rename(t->src, t->dst);
 		if (err) failed(i->error, task_strings[TASK_RENAME][ING], err, NULL);
 		t->s = TASK_STATE_FINISHED;
@@ -525,13 +535,12 @@ int main(int argc, char* argv[])  {
 
 	for (int v = 0; v < 2; ++v) {
 		get_cwd(fvs[v].wd);
-		if (init_wd[v]) { // Apply user-passed paths
-			utf8* e = strdup(init_wd[v]);
+		if (init_wd[v]) { // Apply argument-passed paths
+			utf8* e = strndup(init_wd[v], PATH_MAX);
 			int r = enter_dir(fvs[v].wd, e);
 			if (r) {
 				ui_end(&i);
-				fprintf(stderr, "path too long: it's %lu, limit is %d\n",
-						strlen(fvs[v].wd), PATH_MAX);
+				fprintf(stderr, "path too long: limit is %d\n", PATH_MAX);
 				exit(EXIT_FAILURE);
 			}
 			free(e);
@@ -571,11 +580,13 @@ int main(int argc, char* argv[])  {
 		ui_update_geometry(&i);
 		ui_draw(&i);
 
-		// Do what mode suggests
+		// Execute mode handler
 		mhs[i.m](&i, &t);
 
-		/* Cycle through all states to finish short/one-cycle long tasks quickly. */
-		for (enum task_state ts = TASK_STATE_CLEAN; ts < TASK_STATE_NUM; ++ts) {
+		/* Cycle through all states to finish
+		 * short/one-cycle long tasks quickly. */
+		for (enum task_state ts = TASK_STATE_CLEAN;
+				ts < TASK_STATE_NUM; ++ts) {
 			if (ts == t.s && shs[ts]) shs[ts](&i, &t);
 		}
 	}

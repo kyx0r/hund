@@ -228,7 +228,7 @@ int file_view_enter_selected_dir(struct file_view* fv) {
 }
 
 int file_view_up_dir(struct file_view* fv) {
-	utf8* prevdir = malloc(NAME_MAX);
+	utf8* prevdir = malloc(NAME_MAX+1);
 	current_dir(fv->wd, prevdir);
 	up_dir(fv->wd);
 	int err = scan_dir(fv->wd, &fv->file_list, &fv->num_files);
@@ -266,7 +266,7 @@ void file_view_toggle_hidden(struct file_view* fv) {
 
 utf8* file_view_path_to_selected(struct file_view* fv) {
 	if (!fv->num_files) return NULL;
-	utf8* p = malloc(PATH_MAX);
+	utf8* p = malloc(PATH_MAX+1);
 	strcpy(p, fv->wd);
 	if (enter_dir(p, fv->file_list[fv->selection]->file_name)) {
 		free(p);

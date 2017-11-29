@@ -62,7 +62,7 @@ struct ui ui_init(struct file_view* pv, struct file_view* sv) {
 	initscr();
 	if (has_colors() == FALSE) {
 		endwin();
-		printf("no colors :(\n");
+		printf("no colors :(\n"); // TODO
 		exit(1);
 	}
 	start_color();
@@ -114,6 +114,7 @@ struct ui ui_init(struct file_view* pv, struct file_view* sv) {
 	i.kml = default_mapping_length;
 	i.mks = calloc(default_mapping_length, sizeof(int));
 	i.kmap = malloc(default_mapping_length*sizeof(struct input2cmd));
+	// TODO
 	for (size_t k = 0; k < default_mapping_length; ++k) {
 		i.kmap[k].m = default_mapping[k].m;
 		i.kmap[k].c = default_mapping[k].c;
@@ -122,7 +123,7 @@ struct ui ui_init(struct file_view* pv, struct file_view* sv) {
 			switch (i.kmap[k].i[il].t) {
 			case END: break;
 			case UTF8:
-				strcpy(i.kmap[k].i[il].utf, default_mapping[k].i[il].utf);
+				strncpy(i.kmap[k].i[il].utf, default_mapping[k].i[il].utf, 5);
 				break;
 			case SPECIAL:
 				i.kmap[k].i[il].c = default_mapping[k].i[il].c;
@@ -171,9 +172,9 @@ void ui_end(struct ui* const i) {
 
 static void _printw_pathbar(const char* const path,
 		WINDOW* const w, fnum_t width) {
-	struct passwd* pwd = get_pwd();
+	const struct passwd* const pwd = get_pwd();
 	const int pi = prettify_path_i(path, pwd->pw_dir);
-	size_t path_width = utf8_width(path+pi) + (pi ? 1 : 0);
+	const size_t path_width = utf8_width(path+pi) + (pi ? 1 : 0);
 	wattron(w, COLOR_PAIR(2));
 	if (path_width <= width-2) {
 		mvwprintw(w, 0, 0, "%s%s%*c ",
@@ -181,23 +182,22 @@ static void _printw_pathbar(const char* const path,
 				path+pi, width-utf8_width(path+pi), ' ');
 	}
 	else {
-		size_t sg = path_width - (width-2) - (pi?1:0);
+		const size_t sg = path_width - (width-2) - (pi?1:0);
 		mvwprintw(w, 0, 0, " %s ",
 				path+pi+utf8_slice_length(path+pi, sg));
 	}
 	wattroff(w, COLOR_PAIR(2));
 }
 
-#define min(A,B) ((A)<(B) ? (A) : (B))
 static void _printw_entry(WINDOW* const w, const fnum_t dr,
 		const struct file_record* const cfr,
-		fnum_t width, bool highlight) {
+		const fnum_t width, const bool highlight) {
 	// TODO is is utf-8 at all? validate
 	const int type = mode2type(cfr->s.st_mode, cfr->l->st_mode);
 	const char type_symbol = type_symbol_mapping[type][0];
 	int color_pair_enabled = type_symbol_mapping[type][1];
 	const size_t bufl = width*4;
-	char *buf = malloc(bufl);
+	char* const buf = malloc(bufl);
 	memset(buf, ' ', bufl);
 	buf[bufl-1] = 0;
 	buf[strlen(buf)] = ' ';
@@ -212,20 +212,24 @@ static void _printw_entry(WINDOW* const w, const fnum_t dr,
 	space -= 1;
 	begin += 1;
 
-	utf8 *fn = cfr->file_name;
-	utf8 *lp = cfr->link_path;
+	const utf8* const fn = cfr->file_name;
+	const utf8* const lp = cfr->link_path;
 
-	const size_t printfn = min(space, utf8_width(fn));
+	const size_t fnw = utf8_width(fn);
+	const size_t printfn = (space > fnw ? fnw : space);
 	mvwprintw(w, dr, begin, "%.*s", utf8_slice_length(fn, printfn), fn);
 	space -= printfn;
 	begin += printfn;
 
 	if (!highlight) {
+		// TODO what if cfr->l == NULL?
 		if (S_ISDIR(cfr->l->st_mode)) wattron(w, COLOR_PAIR(1));
 		else wattron(w, COLOR_PAIR(9));
 	}
 	if ((cfr->s.st_mode & S_IFMT) == S_IFLNK) {
-		const size_t printlp = min(space, 4+utf8_width(lp));
+		const size_t lpw = utf8_width(lp);
+		const size_t printlp = (space > 4+lpw ? 4+lpw : space);
+		// TODO what if link path is corrupt?
 		mvwprintw(w, dr, begin, " -> %.*s",
 				utf8_slice_length(lp, printlp), lp);
 		space -= printlp;
@@ -236,18 +240,16 @@ static void _printw_entry(WINDOW* const w, const fnum_t dr,
 		else wattroff(w, COLOR_PAIR(9));
 	}
 	mvwprintw(w, dr, begin, "%*c", space, ' ');
-
 	wattroff(w, COLOR_PAIR(color_pair_enabled));
 	free(buf);
 }
-#undef min
 
 static void ui_draw_panel(struct ui* const i, const int v) {
 	// TODO make readable
 	const struct file_view* const s = i->fvs[v];
 	const bool sh = s->show_hidden;
 	WINDOW* const w = panel_window(i->fvp[v]);
-	int _ph, _pw;
+	int _ph = 0, _pw = 0;
 	getmaxyx(w, _ph, _pw);
 	if (_ph < 0 || _ph < 0) return; // these may be -1
 	const fnum_t ph = _ph, pw = _pw;
@@ -260,7 +262,7 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	fnum_t nsl = 0; // Number of SymLinks
 	fnum_t hi = 0; // Highlighted file Index
 	bool sisl = false; // Selected Is SymLink
-	struct file_record *hfr = NULL; // Highlighted File Record
+	const struct file_record *hfr = NULL; // Highlighted File Record
 	for (fnum_t i = 0; i < s->num_files; ++i) {
 		if (hidden(s, i)) nhf += 1;
 		const bool sl = S_ISLNK(s->file_list[i]->s.st_mode);
@@ -336,17 +338,17 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	wattron(w, COLOR_PAIR(2));
 	const size_t status_size = pw*4; // TODO
 	char* status = malloc(status_size);
-	static char* timefmt = "%Y-%m-%d %H:%M";
+	static const char* const timefmt = "%Y-%m-%d %H:%M";
 	const size_t time_size = 4+1+2+1+2+1+2+1+2+1;
 	char time[time_size];
-	static char* empty = "(empty)";
+	memset(time, 0, time_size);
 	if (!s->num_files) {
-		snprintf(status, status_size, empty);
+		snprintf(status, status_size, "(empty)");
 	}
 	else if (s->num_files - nhf) {
 		const off_t fsize = (s->selection < s->num_files ? hfr->l->st_size : 0);
 		const time_t lt = hfr->l->st_mtim.tv_sec;
-		struct tm* tt = localtime(&lt);
+		const struct tm* const tt = localtime(&lt);
 		strftime(time, time_size, timefmt, tt);
 		snprintf(status, status_size, "%u/%u %c%u %c%u hL%lu, %o %zuB",
 				hi+1, s->num_files-(sh ? 0 : nhf),
@@ -506,18 +508,21 @@ static void ui_draw_chmod(struct ui* const i) {
 }
 
 void ui_draw(struct ui* const i) {
-	if (i->m == MODE_HELP) {
+	switch (i->m) {
+	case MODE_HELP:
 		ui_draw_help(i);
-	}
-	else {
-		if (i->chmod) {
-			ui_draw_chmod(i);
+		break;
+	case MODE_CHMOD:
+		ui_draw_chmod(i);
+		break;
+	case MODE_MANAGER:
+		for (int v = 0; v < 2; ++v) {
+			ui_draw_panel(i, v);
 		}
-		else {
-			for (int v = 0; v < 2; ++v) {
-				ui_draw_panel(i, v);
-			}
-		}
+		break;
+	default:
+	case MODE_PROMPT:
+		break;
 	}
 
 	WINDOW* sw = panel_window(i->status);
