@@ -134,8 +134,10 @@ void first_entry(struct file_view* fv) {
 }
 
 void last_entry(struct file_view* fv) {
-	if (!fv->num_files) return;
-	if (fv->show_hidden) {
+	if (!fv->num_files) {
+		fv->selection = 0;
+	}
+	else if (fv->show_hidden) {
 		fv->selection = fv->num_files-1;
 	}
 	else {
@@ -259,7 +261,7 @@ void file_view_afterdel(struct file_view* fv) {
 
 void file_view_toggle_hidden(struct file_view* fv) {
 	fv->show_hidden = !fv->show_hidden;
-	if (!visible(fv, fv->selection)) {
+	if (!fv->num_files || !visible(fv, fv->selection)) {
 		first_entry(fv);
 	}
 }
@@ -267,7 +269,7 @@ void file_view_toggle_hidden(struct file_view* fv) {
 utf8* file_view_path_to_selected(struct file_view* fv) {
 	if (!fv->num_files) return NULL;
 	utf8* p = malloc(PATH_MAX+1);
-	strcpy(p, fv->wd);
+	strncpy(p, fv->wd, PATH_MAX);
 	if (enter_dir(p, fv->file_list[fv->selection]->file_name)) {
 		free(p);
 		return NULL;
