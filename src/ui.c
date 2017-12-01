@@ -32,7 +32,7 @@ static const struct cmd2help* get_help_data(const enum command c) {
 	return NULL;
 }
 
-static int mode2type(mode_t m, mode_t n) {
+static int mode2type(const mode_t m, const mode_t n) {
 	// TODO find a better way
 	// See sys_stat.h manpage for more info
 	switch (m & S_IFMT) {
@@ -56,14 +56,15 @@ static int mode2type(mode_t m, mode_t n) {
 	}
 }
 
-struct ui ui_init(struct file_view* pv, struct file_view* sv) {
+struct ui ui_init(struct file_view* const pv,
+		struct file_view* const sv) {
 	struct ui i;
 	setlocale(LC_ALL, "");
 	initscr();
 	if (has_colors() == FALSE) {
 		endwin();
 		printf("no colors :(\n"); // TODO
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 	start_color();
 	noecho();
@@ -235,6 +236,28 @@ static void _printw_entry(WINDOW* const w, const fnum_t dr,
 	free(buf);
 }
 
+/* I'm drawing N entries before selection,
+ * selection itself
+ * and as many entries after selection as needed
+ * to fill remaining space. */
+
+/* - Max Entries = how many entries I need to fill
+ * all available space in file view
+ * (selection excluded - it's always drawn)
+ *
+ * me = panel height - 1 for path bar, 1 for selection, 1 for info bar
+ *
+ * - Entries Over = how many entries are over selection
+ * - Entries Under = how many entries are under selection
+ *
+ * - Begin Index = from which index should I start looking for
+ * visible entries to catch all I need
+ *
+ * - Over Index = iterator; an index offset relative from selection,
+ *   selection+oi = effective index
+ * - Under Index = iterator; an index offset relative from selection,
+ *   selection-ui = effective index
+ */
 static void ui_draw_panel(struct ui* const i, const int v) {
 	// TODO make readable
 	const struct file_view* const s = i->fvs[v];
@@ -265,28 +288,6 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 		}
 	}
 
-	/* I'm drawing N entries before selection,
-	 * selection itself
-	 * and as many entries after selection as needed
-	 * to fill remaining space. */
-
-	/* - Max Entries = how many entries I need to fill
-	 * all available space in file view
-	 * (selection excluded - it's always drawn)
-	 *
-	 * me = panel height - 1 for path bar, 1 for selection, 1 for info bar
-	 *
-	 * - Entries Over = how many entries are over selection
-	 * - Entries Under = how many entries are under selection
-	 *
-	 * - Begin Index = from which index should I start looking for
-	 * visible entries to catch all I need
-	 *
-	 * - Over Index = iterator; an index offset relative from selection,
-	 *   selection+oi = effective index
-	 * - Under Index = iterator; an index offset relative from selection,
-	 *   selection-ui = effective index
-	 */
 	fnum_t me = ph - 3; // Max Entries
 	// 3 = 1 path bar + 1 statusbar + 1 infobar
 	fnum_t eo = 0; // Entries Over
@@ -328,7 +329,7 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	/* Padded on both sides with space */
 	wattron(w, COLOR_PAIR(2));
 	const size_t status_size = pw*4; // TODO
-	char* status = malloc(status_size);
+	char* const status = malloc(status_size);
 	static const char* const timefmt = "%Y-%m-%d %H:%M";
 	const size_t time_size = 4+1+2+1+2+1+2+1+2+1;
 	char time[time_size]; // TODO
@@ -717,7 +718,7 @@ struct input get_input(WINDOW* const w) {
  * If there are a few, do nothing, wait longer.
  * If there is only one, send it.
  */
-enum command get_cmd(struct ui* i) {
+enum command get_cmd(struct ui* const i) {
 	memset(i->mks, 0, i->kml*sizeof(int));
 	static struct input il[INPUT_LIST_LENGTH];
 	static int ili = 0;
@@ -816,7 +817,8 @@ enum command get_cmd(struct ui* i) {
  * Additionally:
  * returns 2 on ^N and -2 on ^P
  */
-int fill_textbox(utf8* buf, utf8** buftop, size_t bsize, int coff, WINDOW* w) {
+int fill_textbox(utf8* const buf, utf8** const buftop, const size_t bsize,
+		const int coff, WINDOW* const w) {
 	curs_set(2);
 	wmove(w, 0, utf8_width(buf)-utf8_width(*buftop)+coff);
 	wrefresh(w);

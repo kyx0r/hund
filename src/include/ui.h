@@ -353,7 +353,8 @@ struct ui {
 	int* mks; // Matching Key Sequence
 };
 
-struct ui ui_init(struct file_view*, struct file_view*);
+struct ui ui_init(struct file_view* const,
+		struct file_view* const);
 void ui_end(struct ui* const);
 void ui_draw(struct ui* const);
 void ui_update_geometry(struct ui* const);
@@ -370,7 +371,9 @@ void find_close(struct ui*, bool);
 void help_open(struct ui*);
 void help_close(struct ui*);
 
-enum command get_cmd(struct ui*);
-int fill_textbox(utf8*, utf8**, size_t, int, WINDOW*);
+struct input get_input(WINDOW* const);
+enum command get_cmd(struct ui* const);
+int fill_textbox(utf8* const, utf8** const,
+		const size_t, const int, WINDOW* const);
 
 #endif
