@@ -68,6 +68,7 @@ struct file_record {
 
 bool is_lnk(const char*);
 bool is_dir(const char*);
+bool same_fs(const char* const, const char* const);
 
 bool file_exists(const char*);
 void file_list_clean(struct file_record***, fnum_t*);

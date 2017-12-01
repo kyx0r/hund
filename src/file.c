@@ -34,6 +34,16 @@ bool is_dir(const char* path) {
 	return (!r && S_ISDIR(s.st_mode));
 }
 
+/* Checks of two files are on the same filesystem.
+ * If they are, moving files (and even whole directories)
+ * can be done with just rename() function.
+ */
+bool same_fs(const char* const a, const char* const b) {
+	struct stat sa, sb;
+	if (stat(a, &sa) || stat(b, &sb)) return errno;
+	return sa.st_dev == sb.st_dev;
+}
+
 bool file_exists(const char* path) {
 	return !access(path, F_OK);
 }
