@@ -141,15 +141,6 @@ struct ui ui_init(struct file_view* pv, struct file_view* sv) {
 	return i;
 }
 
-void ui_system(const char* const cmd) {
-	def_prog_mode();
-	endwin();
-	system(cmd);
-	reset_prog_mode();
-	//refresh();
-	//doupdate();
-}
-
 /* Delete panel first, THEN it's window.
  * If you resize the terminal window at least once and then quit (q)
  * then the program will hang in infinite loop
@@ -340,35 +331,33 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	char* status = malloc(status_size);
 	static const char* const timefmt = "%Y-%m-%d %H:%M";
 	const size_t time_size = 4+1+2+1+2+1+2+1+2+1;
-	char time[time_size];
+	char time[time_size]; // TODO
 	memset(time, 0, time_size);
-	if (!s->num_files) {
-		snprintf(status, status_size, "(empty)");
-	}
-	else if (s->num_files - nhf) {
-		const off_t fsize = (s->selection < s->num_files ? hfr->l->st_size : 0);
+
+	off_t fsize = 0;
+	if (hfr) {
+		fsize = (s->selection < s->num_files ? hfr->l->st_size : 0);
 		const time_t lt = hfr->l->st_mtim.tv_sec;
 		const struct tm* const tt = localtime(&lt);
 		strftime(time, time_size, timefmt, tt);
-		snprintf(status, status_size, "%u/%u %c%u %c%u hL%lu, %o %zuB",
-				hi+1, s->num_files-(sh ? 0 : nhf),
-				(sh ? 'H' : 'h'), nhf,
-				(sisl ? 'L' : 'l'), nsl,
-				hfr->l->st_nlink,
-				hfr->l->st_mode & 0xfff, fsize);
-		/* BTW chmod man page says chmod
-		 * cannot change symlink permissions.
-		 * ...but that is not and issue since
-		 * symlinks permissions are never used.
-		 */
 	}
-	else {
-		snprintf(status, status_size,
-				"h%u %c%u", nhf,
-				(sisl ? 'L' : 'l'), nsl);
-	}
+	snprintf(status, status_size,
+			"%u/%u %c%u %c%u hL%lu, %o %zuB",
+			(s->num_files ? hi+1 : 0),
+			s->num_files-(sh ? 0 : nhf),
+			(sh ? 'H' : 'h'), nhf,
+			(sisl ? 'L' : 'l'), nsl,
+			(hfr ? hfr->l->st_nlink : 0),
+			(hfr ? (hfr->l->st_mode & 0xfff) : 0),
+			fsize);
+	/* BTW chmod man page says chmod
+	 * cannot change symlink permissions.
+	 * ...but that is not and issue since
+	 * symlinks permissions are never used.
+	 */
+
 	mvwprintw(w, dr, 0, " %s%*c%s ", status,
-			pw-utf8_width(status)-strlen(time)-2, ' ', time);
+			pw-utf8_width(status)-strnlen(time, time_size)-2, ' ', time);
 	wattroff(w, COLOR_PAIR(2));
 	free(status);
 	wrefresh(w);

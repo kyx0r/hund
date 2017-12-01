@@ -33,8 +33,6 @@
 #include "include/ui.h"
 #include "include/task.h"
 
-#define UNUSED_ARGUMENT(E) (void)(E);
-
 static void failed(utf8* error_buf, const utf8* f, int reason, utf8* custom) {
 	if (custom) {
 		snprintf(error_buf, MSG_BUFFER_SIZE, "%s failed: %s", f, custom);
@@ -45,12 +43,31 @@ static void failed(utf8* error_buf, const utf8* f, int reason, utf8* custom) {
 	}
 }
 
-static int open_file(const utf8* const path) {
+/*#define MIME_BUF_SIZE 256
+int get_mime(const char* const path, char* buf) {
 	if (is_dir(path)) return EISDIR;
-	static const utf8* prog = "less";
-	utf8* cmd = malloc(strnlen(path, PATH_MAX)+strlen(prog)+2+1+1);
-	snprintf(cmd, PATH_MAX, "%s '%s'", prog, path); // TODO recognize format
-	ui_system(cmd);
+	char* cmd = malloc(PATH_MAX);
+	snprintf(cmd, PATH_MAX, "file -b -i %s", path);
+	FILE* fp = popen(cmd, "r");
+	if (!fp) return -1;
+	if (!fgets(buf, MIME_BUF_SIZE, fp)) {
+		pclose(fp);
+		return -1;
+	}
+	pclose(fp);
+	return 0;
+}*/
+
+static int spawn(const char* const prog, const char* const arg) {
+	utf8* cmd = malloc(PATH_MAX); // TODO how long can cmdline be?
+	snprintf(cmd, PATH_MAX, "%s %s", prog, arg);
+
+	def_prog_mode();
+	endwin();
+
+	system(cmd);
+
+	reset_prog_mode();
 	free(cmd);
 	return 0;
 }
@@ -61,7 +78,7 @@ static int open_file(const utf8* const path) {
 typedef void (*mode_handler)(struct ui*, struct task*);
 
 static void mode_help(struct ui* i, struct task* t) {
-	UNUSED_ARGUMENT(t);
+	(void)(t);
 	switch (get_cmd(i)) {
 	case CMD_HELP_QUIT:
 		help_close(i);
@@ -120,7 +137,7 @@ static void mode_chmod(struct ui* i, struct task* t) {
 }
 
 static void mode_find(struct ui* i, struct task* t) {
-	UNUSED_ARGUMENT(t);
+	(void)(t);
 	int r = fill_textbox(i->find->t, &i->find->t_top,
 			i->find->t_size, 1, panel_window(i->status));
 	if (r == -1) {
@@ -239,10 +256,29 @@ static void mode_manager(struct ui* i, struct task* t) {
 	case CMD_ENTRY_UP:
 		prev_entry(i->pv);
 		break;
+	case CMD_EDIT_FILE:
+		path = file_view_path_to_selected(i->pv);
+		if (path) {
+			if (is_dir(path)) failed(i->error, "edit", EISDIR, NULL);
+			spawn("vi", path);
+			free(path);
+		}
+		break;
 	case CMD_OPEN_FILE:
 		path = file_view_path_to_selected(i->pv);
 		if (path) {
-			open_file(path);
+			if (is_dir(path)) failed(i->error, "open", EISDIR, NULL);
+			/*char mime[MIME_BUF_SIZE];
+			get_mime(path, mime);
+			syslog(LOG_DEBUG, "%s", mime);
+			up_dir(mime); // TODO slash is slash lol FIXME
+			char* prog = "less";
+			if (contains(mime, "text")) prog = "less";
+			else if (contains(mime, "video")) prog = "mpv";
+			else if (contains(mime, "image")) prog = "feh";
+			else prog = NULL;
+			if (prog) spawn(prog, path);*/
+			spawn("less", path);
 			free(path);
 		}
 		break;
@@ -394,13 +430,23 @@ static void task_state_data_gathered(struct ui* i, struct task* t) {
 		if (err) failed(i->error, task_strings[TASK_RENAME][ING], err, NULL);
 		t->s = TASK_STATE_FINISHED;
 		break;
+	case TASK_MOVE:
+		err = rename_if_same_fs(t);
+		if (!err) {
+			t->s = TASK_STATE_FINISHED;
+			break;
+		}
+		if (err) {
+			failed(i->error, "move via rename()", err, NULL);
+			task_clean(t);
+			break;
+		}
 	case TASK_COPY:
 	case TASK_RM:
-	case TASK_MOVE:
 		err = task_build_file_list(t);
 		if (err) {
 			failed(i->error, "build file list", err, NULL);
-			task_clean(t); //TODO
+			task_clean(t);
 			break;
 		}
 		t->s = TASK_STATE_EXECUTING;
@@ -477,15 +523,13 @@ int main(int argc, char* argv[])  {
 	static const char* help = \
 	"Usage: hund [OPTION] [left panel] [right panel]\n"
 	"Options:\n"
-	"  -c, --chdir=PATH\t\tchange initial directory\n"
-	"  -v, --verbose\t\tbe verbose\n"
-	"  -h, --help\t\tdisplay this help message\n"
+	"  -c, --chdir=PATH      change initial directory\n"
+	"  -h, --help            display this help message\n"
 	"Type `?` while in hund for keybindings\n";
 
-	static const char sopt[] = "vhc:";
+	static const char sopt[] = "hc:";
 	static const struct option lopt[] = {
 		{"chdir", required_argument, 0, 'c'},
-		{"verbose", no_argument, 0, 'v'},
 		{"help", no_argument, 0, 'h'},
 		{0, 0, 0, 0}
     };
@@ -496,9 +540,6 @@ int main(int argc, char* argv[])  {
 		case 'c':
 			chdir(optarg);
 			break;
-		case 'v':
-			printf("woof!");
-			exit(EXIT_SUCCESS);
 		case 'h':
 			printf(help);
 			exit(EXIT_SUCCESS);

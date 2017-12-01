@@ -364,3 +364,26 @@ int do_task(struct task* t, int c) {
 	if (!t->checklist) t->s = TASK_STATE_FINISHED;
 	return 0;
 }
+
+/* If files are on the same filesystem, then the quickest
+ * way to move files or whole directories is to rename() them.
+ *
+ * Returns 0 if was same fs and operation was succesful
+ * Returns -1 if wasn't the same fs
+ * Returns errno code if something went wrong
+ */
+int rename_if_same_fs(const struct task* const t) {
+	if (same_fs(t->src, t->dst)) {
+		char* ndst = malloc(PATH_MAX);
+		strncpy(ndst, t->dst, PATH_MAX);
+		append_dir(ndst, t->src+current_dir_i(t->src));
+		if (rename(t->src, ndst)) {
+			int e = errno;
+			free(ndst);
+			return e;
+		}
+		free(ndst);
+		return 0;
+	}
+	return -1;
+}

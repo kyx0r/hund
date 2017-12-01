@@ -104,4 +104,5 @@ utf8* build_new_path(struct task*, utf8*);
 
 int do_task(struct task*, int);
 
+int rename_if_same_fs(const struct task* const);
 #endif

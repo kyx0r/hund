@@ -20,7 +20,10 @@
 #ifndef UI_H
 #define UI_H
 
-#define _GNU_SOURCE
+#ifndef _DEFAULT_SOURCE
+	#define _DEFAULT_SOURCE
+#endif
+
 #include <ncurses.h>
 #include <panel.h>
 #include <linux/limits.h>
@@ -63,6 +66,7 @@ enum command {
 	CMD_TOGGLE_HIDDEN,
 	CMD_CD,
 	CMD_OPEN_FILE,
+	CMD_EDIT_FILE,
 	CMD_HELP,
 	CMD_FIND,
 	CMD_CHMOD,
@@ -147,7 +151,6 @@ static const struct input2cmd default_mapping[] = {
 	{ .i={ UTF8("c"), UTF8("p"), ENDK }, .m=MODE_MANAGER, .c=CMD_COPY },
 
 	{ .i={ UTF8("r"), UTF8("e"), UTF8("m"), ENDK }, .m=MODE_MANAGER, .c=CMD_REMOVE },
-	//{ .i={ CTRL('K'), ENDK }, .m=MODE_MANAGER, .c=CMD_REMOVE },
 
 	{ .i={ UTF8("r"), UTF8("n"), ENDK }, .m=MODE_MANAGER, .c=CMD_RENAME },
 
@@ -161,14 +164,13 @@ static const struct input2cmd default_mapping[] = {
 	{ .i={ UTF8("m"), UTF8("k"), ENDK }, .m=MODE_MANAGER, .c=CMD_CREATE_DIR },
 
 	{ .i={ UTF8("u"), ENDK }, .m=MODE_MANAGER, .c=CMD_UP_DIR },
-	{ .i={ UTF8("d"), ENDK }, .m=MODE_MANAGER, .c=CMD_UP_DIR },
 	{ .i={ SPEC(KEY_BACKSPACE), ENDK }, .m=MODE_MANAGER, .c=CMD_UP_DIR },
 
 	{ .i={ UTF8("i"), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTER_DIR },
-	{ .i={ UTF8("e"), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTER_DIR },
 	{ .i={ CTRL('J'), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTER_DIR },
 
 	{ .i={ UTF8("o"), ENDK }, .m=MODE_MANAGER, .c=CMD_OPEN_FILE },
+	{ .i={ UTF8("e"), UTF8("d"), ENDK }, .m=MODE_MANAGER, .c=CMD_EDIT_FILE },
 
 	{ .i={ UTF8("/"), ENDK }, .m=MODE_MANAGER, .c=CMD_FIND },
 
@@ -243,6 +245,7 @@ static const struct cmd2help cmd_help[] = {
 	{ .c = CMD_TOGGLE_HIDDEN, .hint = "hide", .help = "Switch between hiding/showing hidden files." },
 	{ .c = CMD_CD, .hint = "change dir", .help = "Jump to some directory. Prompts for path." },
 	{ .c = CMD_OPEN_FILE, .hint = "open", .help = "Open selected file in less." },
+	{ .c = CMD_EDIT_FILE, .hint = "edit", .help = "Open selected file in vi." },
 	{ .c = CMD_FIND, .hint = "find", .help = "Search for files in current directory. Case sensitive." },
 
 	{ .c = CMD_CHMOD, .hint = "chmod", .help = "Change permissions of selected file." },
@@ -351,7 +354,6 @@ struct ui {
 };
 
 struct ui ui_init(struct file_view*, struct file_view*);
-void ui_system(const char* const);
 void ui_end(struct ui* const);
 void ui_draw(struct ui* const);
 void ui_update_geometry(struct ui* const);
