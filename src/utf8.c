@@ -20,7 +20,7 @@
 #include "include/utf8.h"
 
 /* CodePoint To Bytes */
-void utf8_cp2b(utf8* const b, codepoint_t cp) {
+void utf8_cp2b(utf8* const b, const codepoint_t cp) {
 	if (cp < (codepoint_t) 0x80) {
 		b[0] = 0x7f & cp;
 	}
@@ -40,7 +40,7 @@ void utf8_cp2b(utf8* const b, codepoint_t cp) {
 		b[3] = 0x80 | (cp & 0x00003f);
 	}
 	else {
-
+		b[0] = 0x00;
 	}
 }
 
@@ -71,9 +71,6 @@ codepoint_t utf8_b2cp(const utf8* const b) {
 		cp <<= 6;
 		cp |= (b[3] & 0x3f);
 	}
-	else {
-
-	}
 	return cp;
 }
 
@@ -81,28 +78,29 @@ codepoint_t utf8_b2cp(const utf8* const b) {
  * how long the current glyph is (in bytes)
  * returns 0 if initial byte is invalid
  */
+
+/* It's simple, really
+ * I'm looking at top 5 bits (32 possibilities) of initial byte
+ * 00001xxx -> 1 byte
+ * 00010xxx -> 1 byte
+ * 00011xxx -> 1 byte
+ * 16 x 1 byte
+ * 01111xxx -> 1 byte
+ * 10000xxx -> invalid
+ * 8 x invalid
+ * 10111xxx -> invalid
+ * 11000xxx -> 2 bytes
+ * 4 x 2 bytes
+ * 11011xxx -> 2 bytes
+ * 11100xxx -> 3 bytes
+ * 2 x 3 bytes
+ * 11101xxx -> 3 bytes
+ * 11110xxx -> 4 bytes
+ * 1 x 4 bytes
+ * 11111xxx -> invalid (see impementation)
+ */
 size_t utf8_g2nb(const utf8* const g) {
 	if (!*g) return 0;
-	/* It's simple, really
-	 * I'm looking at top 5 bits (32 possibilities) of initial byte
-	 * 00001xxx -> 1 byte
-	 * 00010xxx -> 1 byte
-	 * 00011xxx -> 1 byte
-	 * 16 x 1 byte
-	 * 01111xxx -> 1 byte
-	 * 10000xxx -> invalid
-	 * 8 x invalid
-	 * 10111xxx -> invalid
-	 * 11000xxx -> 2 bytes
-	 * 4 x 2 bytes
-	 * 11011xxx -> 2 bytes
-	 * 11100xxx -> 3 bytes
-	 * 2 x 3 bytes
-	 * 11101xxx -> 3 bytes
-	 * 11110xxx -> 4 bytes
-	 * 1 x 4 bytes
-	 * 11111xxx -> invalid (see impementation)
-	 */
 	// Top 5 bits To Length
 	static const char t2l[32] = {
 		1, 1, 1, 1, 1, 1, 1, 1, //00000xxx - 00111xxx
@@ -115,7 +113,7 @@ size_t utf8_g2nb(const utf8* const g) {
 }
 
 /* CodePoint To Number of Bytes */
-size_t utf8_cp2nb(codepoint_t cp) {
+size_t utf8_cp2nb(const codepoint_t cp) {
 	if (cp < (codepoint_t) 0x80) return 1;
 	if (cp < (codepoint_t) 0x0800) return 2;
 	if (cp < (codepoint_t) 0x010000) return 3;
@@ -159,7 +157,7 @@ bool utf8_validate(const utf8* const b) {
 	const size_t bl = strlen(b);
 	size_t i = 0;
 	while (i < bl) {
-		size_t s = utf8_g2nb(b+i);
+		const size_t s = utf8_g2nb(b+i);
 		if (!s) break;
 		/* Now check if bytes following the
 		 * inital byte are like 10xxxxxx
@@ -176,7 +174,7 @@ bool utf8_validate(const utf8* const b) {
 	return i == bl;
 }
 
-void utf8_insert(utf8* const a, utf8* const b, size_t pos) {
+void utf8_insert(utf8* const a, const utf8* const b, const size_t pos) {
 	const size_t bl = strlen(b);
 	utf8* t = a;
 	size_t i = 0;
@@ -188,11 +186,11 @@ void utf8_insert(utf8* const a, utf8* const b, size_t pos) {
 }
 
 /* Remove glyph at index */
-void utf8_remove(utf8* const a, size_t j) {
+void utf8_remove(utf8* const a, const size_t j) {
 	utf8* t = a;
 	for (size_t i = 0; i < j; ++i) {
 		t += utf8_g2nb(t);
 	}
-	size_t rl = utf8_g2nb(t); // Removed glyph Length
+	const size_t rl = utf8_g2nb(t); // Removed glyph Length
 	memmove(t, t+rl, strlen(t));
 }

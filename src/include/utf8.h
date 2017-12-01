@@ -26,16 +26,16 @@
 typedef char utf8;
 typedef unsigned int codepoint_t;
 
-void utf8_cp2b(utf8* const, codepoint_t);
+void utf8_cp2b(utf8* const, const codepoint_t);
 codepoint_t utf8_b2cp(const utf8* const);
 size_t utf8_g2nb(const utf8* const);
-size_t utf8_cp2nb(codepoint_t);
+size_t utf8_cp2nb(const codepoint_t);
 size_t utf8_width(const utf8* const);
-size_t utf8_slice_length(const utf8* const, size_t);
+size_t utf8_slice_length(const utf8* const, const size_t);
 size_t utf8_ng_till(const utf8* const, const utf8* const);
 bool utf8_validate(const utf8* const);
 
-void utf8_insert(utf8* const, utf8* const, size_t);
-void utf8_remove(utf8* const, size_t);
+void utf8_insert(utf8* const, const utf8* const, const size_t);
+void utf8_remove(utf8* const, const size_t);
 
 #endif
