@@ -215,6 +215,7 @@ int file_view_enter_selected_dir(struct file_view* fv) {
 	utf8* fn = fv->file_list[fv->selection]->file_name;
 	const struct stat* rst = &fv->file_list[fv->selection]->s;
 	const struct stat* lst = fv->file_list[fv->selection]->l;
+	if (!lst) return ENOENT;
 	if (S_ISDIR(rst->st_mode) || S_ISDIR(lst->st_mode)) {
 		if (enter_dir(fv->wd, fn)) return ENAMETOOLONG;
 	}
