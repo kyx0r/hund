@@ -69,14 +69,28 @@ struct file_record {
 bool is_lnk(const char*);
 bool is_dir(const char*);
 bool same_fs(const char* const, const char* const);
+bool executable(const mode_t, const mode_t);
 
 bool file_exists(const char*);
 void file_list_clean(struct file_record***, fnum_t*);
 int scan_dir(const char*, struct file_record***, fnum_t*);
-int sort_file_list(struct file_record**, fnum_t);
+
+typedef int (*sorting_foo)(const void*, const void*);
+int cmp_name_asc(const void*, const void*);
+int cmp_name_desc(const void*, const void*);
+int cmp_size_asc(const void*, const void*);
+int cmp_size_desc(const void*, const void*);
+int cmp_date_asc(const void*, const void*);
+int cmp_date_desc(const void*, const void*);
+
+int sort_file_list(int (*)(const void*, const void*),
+		struct file_record**, fnum_t);
 
 int link_copy(const char* const, const char* const, const char* const);
 
 int dir_make(const char*);
+
+#define SIZE_BUF_SIZE (3+1+2+1+1)
+void pretty_size(off_t, char* buf);
 
 #endif

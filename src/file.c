@@ -40,8 +40,13 @@ bool is_dir(const char* path) {
  */
 bool same_fs(const char* const a, const char* const b) {
 	struct stat sa, sb;
-	if (stat(a, &sa) || stat(b, &sb)) return errno;
+	if (stat(a, &sa)) return errno;
+	if (stat(b, &sb)) return errno;
 	return sa.st_dev == sb.st_dev;
+}
+
+bool executable(const mode_t m, const mode_t n) {
+	return (m & 0111) != 0 || (n & 0111) != 0;
 }
 
 bool file_exists(const char* path) {
@@ -122,14 +127,45 @@ int scan_dir(const char* const wd, struct file_record*** fl, fnum_t* nf) {
 	return r;
 }
 
-static int _fcmp(const void* p1, const void* p2) {
+int cmp_name_asc(const void* p1, const void* p2) {
 	const struct file_record* const fr1 = *((struct file_record**) p1);
 	const struct file_record* const fr2 = *((struct file_record**) p2);
 	return strcmp(fr1->file_name, fr2->file_name);
 }
 
-int sort_file_list(struct file_record** fl, fnum_t nf) {
-	qsort(fl, nf, sizeof(struct file_record*), _fcmp);
+int cmp_name_desc(const void* p1, const void* p2) {
+	const struct file_record* const fr1 = *((struct file_record**) p1);
+	const struct file_record* const fr2 = *((struct file_record**) p2);
+	return strcmp(fr2->file_name, fr1->file_name);
+}
+
+int cmp_size_asc(const void* p1, const void* p2) {
+	const struct file_record* const fr1 = *((struct file_record**) p1);
+	const struct file_record* const fr2 = *((struct file_record**) p2);
+	return fr1->s.st_size > fr2->s.st_size;
+}
+
+int cmp_size_desc(const void* p1, const void* p2) {
+	const struct file_record* const fr1 = *((struct file_record**) p1);
+	const struct file_record* const fr2 = *((struct file_record**) p2);
+	return fr1->s.st_size < fr2->s.st_size;
+}
+
+int cmp_date_asc(const void* p1, const void* p2) {
+	const struct file_record* const fr1 = *((struct file_record**) p1);
+	const struct file_record* const fr2 = *((struct file_record**) p2);
+	return fr1->s.st_mtim.tv_sec > fr2->s.st_mtim.tv_sec;
+}
+
+int cmp_date_desc(const void* p1, const void* p2) {
+	const struct file_record* const fr1 = *((struct file_record**) p1);
+	const struct file_record* const fr2 = *((struct file_record**) p2);
+	return fr1->s.st_mtim.tv_sec < fr2->s.st_mtim.tv_sec;
+}
+
+int sort_file_list(int (*cmp)(const void*, const void*),
+		struct file_record** fl, fnum_t nf) {
+	qsort(fl, nf, sizeof(struct file_record*), cmp);
 	return 0;
 }
 
@@ -190,4 +226,19 @@ int dir_make(const char* path) {
 		return errno;
 	}
 	return 0;
+}
+
+void pretty_size(off_t s, char* const buf) {
+	static const char units[] = { 'B', 'K', 'M', 'G', 'T', 'P', 'E', 'Z' };
+	const char* unit = units;
+	unsigned rest = 0;
+	while (s > 1024) {
+		rest = s % 1024;
+		s /= 1024;
+		unit += 1;
+	}
+	if (rest > 100) rest /= 10;
+	if (!(rest % 10)) rest /= 10;
+	if (rest) snprintf(buf, SIZE_BUF_SIZE, "%u.%u%c", (unsigned)s, rest, *unit);
+	else snprintf(buf, SIZE_BUF_SIZE, "%u%c", (unsigned)s, *unit);
 }
