@@ -558,7 +558,7 @@ int main(int argc, char* argv[])  {
 	"Options:\n"
 	"  -c, --chdir=PATH      change initial directory\n"
 	"  -h, --help            display this help message\n"
-	"Type `?` while in hund for keybindings\n";
+	"Type `?` while in hund for more help\n";
 
 	static const char sopt[] = "hc:";
 	static const struct option lopt[] = {
@@ -651,6 +651,7 @@ int main(int argc, char* argv[])  {
 		[TASK_STATE_FINISHED] = task_state_finished,
 	};
 
+	snprintf(i.info, MSG_BUFFER_SIZE, "Type ? for help and license notice.");
 	while (i.run || t.checklist) { // TODO task state
 		ui_update_geometry(&i);
 		ui_draw(&i);

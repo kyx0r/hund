@@ -407,17 +407,25 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 static void ui_draw_help(struct ui* const i) {
 	WINDOW* hw = panel_window(i->help);
 	int hheight = i->scrh-1;
-	int lines = 4*2 + cmd_help_length - 1; // TODO
+	int lines = 4*2 + cmd_help_length - 1 + 5; // TODO
 	int dr = -i->helpy;
 	if (dr + lines < hheight) {
 		dr = hheight - lines;
 		i->helpy = -dr;
 	}
+	wattron(hw, A_BOLD);
+	mvwprintw(hw, dr++, 0, "Hund  Copyright (C) 2017  Michał Czarnecki%*c", i->scrw-4, ' ');
+	mvwprintw(hw, dr++, 0, "Hund comes with ABSOLUTELY NO WARRANTY.%*c", i->scrw-4, ' ');
+	mvwprintw(hw, dr++, 0, "This is free software, and you are welcome to%*c", i->scrw-4, ' ');
+	mvwprintw(hw, dr++, 0, "redistribute it under terms of GNU General Public License.%*c", i->scrw-4, ' ');
+    dr += 1;
+
+	wattroff(hw, A_BOLD);
 	for (size_t m = 0; m < MODE_NUM; ++m) {
 		wattron(hw, A_BOLD);
 		switch (m) {
 		case MODE_HELP:
-			mvwprintw(hw, dr, 0, "HELP SCREEN%*c", i->scrw-4, ' ');
+			mvwprintw(hw, dr, 0, "HELP%*c", i->scrw-4, ' ');
 			break;
 		case MODE_CHMOD:
 			mvwprintw(hw, dr, 0, "CHMOD%*c", i->scrw-5, ' ');
