@@ -24,7 +24,7 @@
 	#define _DEFAULT_SOURCE
 #endif
 
-#include <ncurses.h>
+#include <ncurses.h> // TODO
 #include <panel.h>
 #include <linux/limits.h>
 #include <locale.h>
@@ -104,6 +104,67 @@ enum command {
 	CMD_HELP_DOWN,
 
 	CMD_NUM,
+};
+
+enum theme_element {
+	THEME_OTHER = 0,
+	THEME_PATHBAR,
+	THEME_STATUSBAR,
+	THEME_ERROR,
+	THEME_INFO,
+	THEME_HINT_KEY,
+	THEME_HINT_DESC,
+	THEME_ENTRY_BLK_UNS, // unselected
+	THEME_ENTRY_BLK_SEL, // selected
+	THEME_ENTRY_CHR_UNS,
+	THEME_ENTRY_CHR_SEL,
+	THEME_ENTRY_FIFO_UNS,
+	THEME_ENTRY_FIFO_SEL,
+	THEME_ENTRY_REG_UNS,
+	THEME_ENTRY_REG_SEL,
+	THEME_ENTRY_REG_EXE_UNS,
+	THEME_ENTRY_REG_EXE_SEL,
+	THEME_ENTRY_DIR_UNS,
+	THEME_ENTRY_DIR_SEL,
+	THEME_ENTRY_SOCK_UNS,
+	THEME_ENTRY_SOCK_SEL,
+	THEME_ENTRY_LNK_DIR_UNS,
+	THEME_ENTRY_LNK_DIR_SEL,
+	THEME_ENTRY_LNK_OTH_UNS,
+	THEME_ENTRY_LNK_OTH_SEL,
+	THEME_ENTRY_LNK_PATH,
+	THEME_ENTRY_LNK_PATH_INV,
+	THEME_ELEM_NUM
+};
+
+static const int theme_scheme[THEME_ELEM_NUM][3] = {
+	[THEME_OTHER] = { 0, COLOR_WHITE, COLOR_BLACK },
+	[THEME_PATHBAR] = { 0, COLOR_BLACK, COLOR_WHITE },
+	[THEME_STATUSBAR] = { 0, COLOR_BLACK, COLOR_WHITE },
+	[THEME_ERROR] = { 0, COLOR_BLACK, COLOR_RED },
+	[THEME_INFO] = { 0, COLOR_BLACK, COLOR_CYAN },
+	[THEME_HINT_KEY] = { 0, COLOR_WHITE, COLOR_BLACK },
+	[THEME_HINT_DESC] = { 0, COLOR_BLACK, COLOR_WHITE },
+	[THEME_ENTRY_BLK_UNS] = { '+', COLOR_RED, COLOR_BLACK },
+	[THEME_ENTRY_BLK_SEL] = { '+', COLOR_BLACK, COLOR_RED },
+	[THEME_ENTRY_CHR_UNS] = { '-', COLOR_YELLOW, COLOR_BLACK },
+	[THEME_ENTRY_CHR_SEL] = { '-', COLOR_BLACK, COLOR_YELLOW },
+	[THEME_ENTRY_FIFO_UNS] = { '|', COLOR_GREEN, COLOR_BLACK },
+	[THEME_ENTRY_FIFO_SEL] = { '|', COLOR_BLACK, COLOR_GREEN },
+	[THEME_ENTRY_REG_UNS] = { ' ', COLOR_WHITE, COLOR_BLACK },
+	[THEME_ENTRY_REG_SEL] = { ' ', COLOR_BLACK, COLOR_WHITE },
+	[THEME_ENTRY_REG_EXE_UNS] = { '*', COLOR_MAGENTA, COLOR_BLACK },
+	[THEME_ENTRY_REG_EXE_SEL] = { '*', COLOR_BLACK, COLOR_MAGENTA },
+	[THEME_ENTRY_DIR_UNS] = { '/', COLOR_CYAN, COLOR_BLACK },
+	[THEME_ENTRY_DIR_SEL] = { '/', COLOR_BLACK, COLOR_CYAN },
+	[THEME_ENTRY_SOCK_UNS] = { '=', COLOR_GREEN, COLOR_BLACK },
+	[THEME_ENTRY_SOCK_SEL] = { '=', COLOR_BLACK, COLOR_GREEN },
+	[THEME_ENTRY_LNK_DIR_UNS] = { '~', COLOR_CYAN, COLOR_BLACK },
+	[THEME_ENTRY_LNK_DIR_SEL] = { '~', COLOR_BLACK, COLOR_CYAN },
+	[THEME_ENTRY_LNK_OTH_UNS] = { '@', COLOR_WHITE, COLOR_BLACK },
+	[THEME_ENTRY_LNK_OTH_SEL] = { '@', COLOR_BLACK, COLOR_WHITE },
+	[THEME_ENTRY_LNK_PATH] = { 0, COLOR_WHITE, COLOR_BLACK },
+	[THEME_ENTRY_LNK_PATH_INV] = { 0, COLOR_RED, COLOR_BLACK },
 };
 
 enum input_type {
@@ -243,7 +304,7 @@ struct cmd2help {
 static const struct cmd2help cmd_help[] = {
 	{ .c = CMD_QUIT, .hint = "quit", .help = "Quit hund." },
 	{ .c = CMD_HELP, .hint = "help", .help = "Display help screen." },
-	{ .c = CMD_COPY, .hint = "copy", .help = "Copy selected file to the other directory. Prompts for name for new file." },
+	{ .c = CMD_COPY, .hint = "copy", .help = "Copy selected file to the other directory. May prompt for name if colliding." },
 	{ .c = CMD_MOVE, .hint = "move", .help = "Move selected file to the other directory." },
 	{ .c = CMD_REMOVE, .hint = "remove", .help = "Remove selected file." },
 	{ .c = CMD_SWITCH_PANEL, .hint = "switch", .help = "Switch active panel." },

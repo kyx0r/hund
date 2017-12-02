@@ -652,7 +652,7 @@ int main(int argc, char* argv[])  {
 	};
 
 	snprintf(i.info, MSG_BUFFER_SIZE, "Type ? for help and license notice.");
-	while (i.run || t.checklist) { // TODO task state
+	while (i.run || t.checklist) {
 		ui_update_geometry(&i);
 		ui_draw(&i);
 

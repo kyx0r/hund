@@ -32,51 +32,27 @@ static const struct cmd2help* get_help_data(const enum command c) {
 	return NULL;
 }
 
-static char mode2symbol(const mode_t m, const mode_t n) {
+static enum theme_element mode2theme(const mode_t m, const mode_t n) {
 	switch (m & S_IFMT) {
-	case S_IFBLK: return '+';
-	case S_IFCHR: return '-';
-	case S_IFIFO: return '|';
+	case S_IFBLK: return THEME_ENTRY_BLK_UNS;
+	case S_IFCHR: return THEME_ENTRY_CHR_UNS;
+	case S_IFIFO: return THEME_ENTRY_FIFO_UNS;
 	case S_IFREG:
-		if (executable(m, 0)) return '*';
-		else return ' ';
-	case S_IFDIR: return '/';
-	case S_IFSOCK: return '=';
+		if (executable(m, 0)) return THEME_ENTRY_REG_EXE_UNS;
+		return THEME_ENTRY_REG_UNS;
+	case S_IFDIR: return THEME_ENTRY_DIR_UNS;
+	case S_IFSOCK: return THEME_ENTRY_SOCK_UNS;
 	case S_IFLNK:
 		switch (n & S_IFMT) {
 		case S_IFBLK:
 		case S_IFCHR:
 		case S_IFIFO:
 		case S_IFREG:
-		case S_IFSOCK: return '@';
-		case S_IFDIR: return '~';
-		default: return '?';
+		case S_IFSOCK:
+		default: return THEME_ENTRY_LNK_OTH_UNS;
+		case S_IFDIR: return THEME_ENTRY_LNK_DIR_UNS;
 		}
-	default: return '?';
-	}
-}
-
-static int mode2type(const mode_t m, const mode_t n) {
-	// TODO find a better way
-	// See sys_stat.h manpage for more info
-	switch (m & S_IFMT) {
-	case S_IFBLK: return 0;
-	case S_IFCHR: return 1;
-	case S_IFIFO: return 2;
-	case S_IFREG: return 3;
-	case S_IFDIR: return 4;
-	case S_IFSOCK: return 5;
-	case S_IFLNK:
-		switch (n & S_IFMT) {
-		case S_IFBLK:
-		case S_IFCHR:
-		case S_IFIFO:
-		case S_IFREG:
-		case S_IFSOCK: return 7;
-		case S_IFDIR: return 6;
-		default: return 8;
-		}
-	default: return 8;
+	default: return THEME_ENTRY_REG_UNS;
 	}
 }
 
@@ -106,26 +82,9 @@ struct ui ui_init(struct file_view* const pv,
 	//init_color(COLOR_YELLOW, 1000, 1000, 0);
 	//init_color(COLOR_CYAN, 0, 1000, 1000);
 
-	init_pair(1, COLOR_WHITE, COLOR_BLACK);
-	init_pair(2, COLOR_BLACK, COLOR_WHITE);
-
-	init_pair(3, COLOR_RED, COLOR_BLACK);
-	init_pair(4, COLOR_BLACK, COLOR_RED);
-
-	init_pair(5, COLOR_GREEN, COLOR_BLACK);
-	init_pair(6, COLOR_BLACK, COLOR_GREEN);
-
-	init_pair(7, COLOR_BLUE, COLOR_BLACK);
-	init_pair(8, COLOR_BLACK, COLOR_BLUE);
-
-	init_pair(9, COLOR_CYAN, COLOR_BLACK);
-	init_pair(10, COLOR_BLACK, COLOR_CYAN);
-
-	init_pair(11, COLOR_MAGENTA, COLOR_BLACK);
-	init_pair(12, COLOR_BLACK, COLOR_MAGENTA);
-
-	init_pair(13, COLOR_YELLOW, COLOR_BLACK);
-	init_pair(14, COLOR_BLACK, COLOR_YELLOW);
+	for (int i = THEME_OTHER+1; i < THEME_ELEM_NUM; ++i) {
+		init_pair(i, theme_scheme[i][1], theme_scheme[i][2]);
+	}
 
 	i.fvs[0] = i.pv = pv;
 	i.fvs[1] = i.sv = sv;
@@ -197,7 +156,7 @@ static void _printw_pathbar(const char* const path,
 	const struct passwd* const pwd = get_pwd();
 	const int pi = prettify_path_i(path, pwd->pw_dir);
 	const size_t path_width = utf8_width(path+pi) + (pi ? 1 : 0);
-	wattron(w, COLOR_PAIR(2));
+	wattron(w, COLOR_PAIR(THEME_PATHBAR));
 	if (path_width <= width-2) {
 		mvwprintw(w, 0, 0, "%s%s%*c ",
 				(pi ? " ~" : " "),
@@ -208,42 +167,32 @@ static void _printw_pathbar(const char* const path,
 		mvwprintw(w, 0, 0, " %s ",
 				path+pi+utf8_slice_length(path+pi, sg));
 	}
-	wattroff(w, COLOR_PAIR(2));
+	wattroff(w, COLOR_PAIR(THEME_PATHBAR));
 }
 
 static void _printw_entry(WINDOW* const w, const fnum_t dr,
 		const struct file_record* const cfr,
 		const fnum_t width, const bool highlight) {
-	// TODO what if cfr->l == NULL?
-	const int type = mode2type(cfr->s.st_mode, cfr->l->st_mode);
-	const char type_symbol = mode2symbol(cfr->s.st_mode, cfr->l->st_mode);
-	int color_pair_enabled = type_symbol_mapping[type][1];
+	static const char* corrupted = "(error)";
+	const enum theme_element te = mode2theme(cfr->s.st_mode,
+			(cfr->l ? cfr->l->st_mode : 0)) + (highlight ? 1 : 0);
 	const size_t bufl = width*4;
 	char* const buf = malloc(bufl);
 	memset(buf, ' ', bufl);
 	buf[bufl-1] = 0;
 	buf[strlen(buf)] = ' ';
 
-	const bool ie = executable(cfr->s.st_mode, cfr->s.st_mode);
-	const bool isfile = (cfr->s.st_mode & S_IFMT) == S_IFREG;
-	if (ie && isfile) {
-		color_pair_enabled = 11;
-	}
-	if (highlight) {
-		color_pair_enabled += 1;
-	}
-
-	wattron(w, COLOR_PAIR(color_pair_enabled));
+	wattron(w, COLOR_PAIR(te));
 	fnum_t space = width;
 	fnum_t begin = 0;
-	mvwprintw(w, dr, begin, "%c", type_symbol);
+	mvwprintw(w, dr, begin, "%c", theme_scheme[te][0]);
 	space -= 1;
 	begin += 1;
 
 	char invname[NAME_MAX+1];
 	const bool valid = utf8_validate(cfr->file_name);
 	const utf8* const fn = (valid ? cfr->file_name : invname);
-	const utf8* const lp = cfr->link_path;
+	const utf8* const lp = (cfr->l ? cfr->link_path : corrupted);
 	if (!valid) cut_non_ascii(cfr->file_name, invname, NAME_MAX);
 
 	const size_t fnw = utf8_width(fn);
@@ -253,8 +202,8 @@ static void _printw_entry(WINDOW* const w, const fnum_t dr,
 	begin += printfn;
 
 	if (!highlight) {
-		if (S_ISDIR(cfr->l->st_mode)) wattron(w, COLOR_PAIR(1));
-		else wattron(w, COLOR_PAIR(9));
+		if (cfr->l) wattron(w, COLOR_PAIR(THEME_ENTRY_LNK_PATH));
+		else wattron(w, COLOR_PAIR(THEME_ENTRY_LNK_PATH_INV));
 	}
 	if ((cfr->s.st_mode & S_IFMT) == S_IFLNK) {
 		const size_t lpw = utf8_width(lp);
@@ -266,11 +215,11 @@ static void _printw_entry(WINDOW* const w, const fnum_t dr,
 		begin += printlp;
 	}
 	if (!highlight) {
-		if (S_ISDIR(cfr->l->st_mode)) wattroff(w, COLOR_PAIR(1));
-		else wattroff(w, COLOR_PAIR(9));
+		if (cfr->l) wattroff(w, COLOR_PAIR(THEME_ENTRY_LNK_PATH));
+		else wattron(w, COLOR_PAIR(THEME_ENTRY_LNK_PATH_INV));
 	}
 	mvwprintw(w, dr, begin, "%*c", space, ' ');
-	wattroff(w, COLOR_PAIR(color_pair_enabled));
+	wattroff(w, COLOR_PAIR(te));
 	free(buf);
 }
 
@@ -363,9 +312,9 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 		mvwprintw(w, dr, 0, "%*c", pw, ' ');
 	}
 
-	/* Infobar */
+	/* Statusbar */
 	/* Padded on both sides with space */
-	wattron(w, COLOR_PAIR(2));
+	wattron(w, COLOR_PAIR(THEME_STATUSBAR));
 	const size_t status_size = pw*4; // TODO
 	char* const status = malloc(status_size);
 	static const char* const timefmt = "%Y-%m-%d %H:%M";
@@ -374,7 +323,7 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	memset(time, 0, time_size);
 
 	off_t fsize = 0;
-	if (hfr) {
+	if (hfr && hfr->l) {
 		fsize = (s->selection < s->num_files ? hfr->l->st_size : 0);
 		const time_t lt = hfr->l->st_mtim.tv_sec;
 		const struct tm* const tt = localtime(&lt);
@@ -388,8 +337,8 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 			s->num_files-(sh ? 0 : nhf),
 			(sh ? 'H' : 'h'), nhf,
 			(sisl ? 'L' : 'l'), nsl,
-			(hfr ? hfr->l->st_nlink : 0),
-			(hfr ? (hfr->l->st_mode & 0xfff) : 0),
+			(hfr && hfr->l ? hfr->l->st_nlink : 0),
+			(hfr && hfr->l ? (hfr->l->st_mode & 0xfff) : 0),
 			sbuf);
 	/* BTW chmod man page says chmod
 	 * cannot change symlink permissions.
@@ -399,7 +348,7 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 
 	mvwprintw(w, dr, 0, " %s%*c%s ", status,
 			pw-utf8_width(status)-strnlen(time, time_size)-2, ' ', time);
-	wattroff(w, COLOR_PAIR(2));
+	wattroff(w, COLOR_PAIR(THEME_STATUSBAR));
 	free(status);
 	wrefresh(w);
 }
@@ -431,10 +380,10 @@ static void ui_draw_help(struct ui* const i) {
 			mvwprintw(hw, dr, 0, "CHMOD%*c", i->scrw-5, ' ');
 			break;
 		case MODE_MANAGER:
-			mvwprintw(hw, dr, 0, "FILE VIEW%*c", i->scrw-7, ' ');
+			mvwprintw(hw, dr, 0, "FILE VIEW%*c", i->scrw-9, ' ');
 			break;
 		case MODE_WAIT:
-			mvwprintw(hw, dr, 0, "WAIT%*c", i->scrw-7, ' ');
+			mvwprintw(hw, dr, 0, "WAIT%*c", i->scrw-4, ' ');
 			break;
 		default: continue;
 		}
@@ -447,8 +396,7 @@ static void ui_draw_help(struct ui* const i) {
 				if (i->kmap[k].c != c || i->kmap[k].m != m) continue;
 				int ks = 0;
 				last = k;
-				const int cp = 9; // TODO
-				wattron(hw, COLOR_PAIR(cp));
+				wattron(hw, COLOR_PAIR(THEME_HINT_KEY));
 				wattron(hw, A_BOLD);
 				int ww = 0;
 				while (i->kmap[k].i[ks].t != END) {
@@ -473,7 +421,7 @@ static void ui_draw_help(struct ui* const i) {
 					}
 					ks += 1;
 				}
-				wattroff(hw, COLOR_PAIR(cp));
+				wattroff(hw, COLOR_PAIR(THEME_HINT_KEY));
 				wattroff(hw, A_BOLD);
 				const int tab = INPUT_LIST_LENGTH+2;
 				mvwprintw(hw, dr, w, "%*c", tab-ww, ' ');
@@ -502,6 +450,7 @@ static void ui_draw_hintbar(struct ui* const i, WINDOW* const sw) {
 		wprintw(sw, " ");
 		const struct input* const ins = i->kmap[x].i;
 		int c = 0;
+		wattron(sw, COLOR_PAIR(THEME_HINT_KEY));
 		while (ins[c].t != END && c < INPUT_LIST_LENGTH) {
 			switch (ins[c].t) {
 			case END: break;
@@ -519,10 +468,11 @@ static void ui_draw_hintbar(struct ui* const i, WINDOW* const sw) {
 			}
 			c += 1;
 		}
-		wattron(sw, COLOR_PAIR(2));
+		wattroff(sw, COLOR_PAIR(THEME_HINT_KEY));
+		wattron(sw, COLOR_PAIR(THEME_HINT_DESC));
 		const struct cmd2help* ch = get_help_data(i->kmap[x].c);
 		wprintw(sw, "%s", (ch ? ch->hint : "(no hint)"));
-		wattroff(sw, COLOR_PAIR(2));
+		wattroff(sw, COLOR_PAIR(THEME_HINT_DESC));
 	}
 }
 
@@ -566,17 +516,17 @@ void ui_draw(struct ui* const i) {
 
 	WINDOW* sw = panel_window(i->status);
 	if (i->error[0]) {
-		wattron(sw, COLOR_PAIR(4));
+		wattron(sw, COLOR_PAIR(THEME_ERROR));
 		mvwprintw(sw, 0, 0, "%s", i->error);
-		wattroff(sw, COLOR_PAIR(4));
+		wattroff(sw, COLOR_PAIR(THEME_ERROR));
 		mvwprintw(sw, 0, strlen(i->error), "%*c",
 				i->scrw-utf8_width(i->error), ' ');
 		i->error[0] = 0;
 	}
 	else if (i->info[0]) {
-		wattron(sw, COLOR_PAIR(10));
+		wattron(sw, COLOR_PAIR(THEME_INFO));
 		mvwprintw(sw, 0, 0, "%s", i->info);
-		wattroff(sw, COLOR_PAIR(10));
+		wattroff(sw, COLOR_PAIR(THEME_INFO));
 		mvwprintw(sw, 0, strlen(i->info), "%*c",
 				i->scrw-utf8_width(i->info), ' ');
 		i->info[0] = 0;

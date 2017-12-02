@@ -71,9 +71,6 @@ void file_list_clean(struct file_record*** fl, fnum_t* nf) {
  *
  * On ENOMEM: cleans everything
  * On stat/lstat errors: zeroes failed fields
- *
- * TODO check if fstatat could help
- * TODO do error checking (if l-stat points anything and if paths exist at all)
  */
 int scan_dir(const char* const wd, struct file_record*** fl, fnum_t* nf) {
 	file_list_clean(fl, nf);
