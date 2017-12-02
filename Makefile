@@ -1,6 +1,6 @@
 CC = gcc
 LD = gcc
-CFLAGS = --std=c11 -g -Wall -Wextra -pedantic
+CFLAGS = --std=c11 -g -Wall -Wextra -pedantic -Wimplicit-fallthrough=0
 LIBS = -Wl,--start-group -ltinfo -lpanel -lncurses -Wl,--end-group
 # "-ltinfo" and "-Wl,--start/end-group" are here because
 # at some point - most likely after system update (arch ftw)
@@ -46,9 +46,12 @@ $(OBJDIR)/test.o : test/test.c | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $^ -o $@
 
 test : $(OBJDIR)/test.o $(addprefix $(OBJDIR)/, $(subst main.o,,$(OBJ)))
-	$(CC) $(LIBS) -o $(TESTEXENAME) $^ && ./$(TESTEXENAME) && make $(EXENAME) #&& ./$(TESTSCRIPTNAME)
+	$(CC) $(LIBS) -o $(TESTEXENAME) $^ && ./$(TESTEXENAME) && make $(EXENAME)
 
-.PHONY : clean test
+testex :
+	./$(TESTSCRIPTNAME)
+
+.PHONY : clean test testex
 clean :
 	rm -r testdir &> /dev/null || true
 	rm -r $(OBJDIR) &> /dev/null || true
