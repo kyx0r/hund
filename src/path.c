@@ -45,9 +45,7 @@ int append_dir(char* const path, const char* const dir) {
 
 /* path[] must be absolute and not prettified
  * dir[] does not have to be single file, can be a path
- * Returns errno (ENAMETOOLONG if PATH_MAX would be exceeded)
- *
- * TODO leave path unchanged if wouldn't fit
+ * Returns ENAMETOOLONG if PATH_MAX would be exceeded; leaves path unchanged
  *
  * I couldn't find any standard function that would parse path and shorten it.
  */
@@ -76,14 +74,16 @@ int enter_dir(char* const path, const char* const dir) {
 	char* save_ptr = NULL;
 	char* dirdup = strndup(dir, PATH_MAX);
 	char* entry = strtok_r(dirdup, "/", &save_ptr);
+	char newpath[PATH_MAX+1];
+	strncpy(newpath, path, PATH_MAX);
 	while (entry) {
 		if (!strncmp(entry, ".", 2));
 		else if (!strncmp(entry, "..", 3)) {
-			char* p = path + strnlen(path, PATH_MAX);
+			char* p = newpath + strnlen(newpath, PATH_MAX);
 			// At this point path never ends with /
 			// p points null pointer
 			// Go back till nearest /
-			while (*p != '/' && p != path) {
+			while (*p != '/' && p != newpath) {
 				*p = 0;
 				p -= 1;
 			}
@@ -92,23 +92,24 @@ int enter_dir(char* const path, const char* const dir) {
 		}
 		else {
 			// Check if PATH_MAX is respected
-			//printf("%d %d\n", strnlen(path, PATH_MAX), strnlen(entry, PATH_MAX));
-			if ((strnlen(path, PATH_MAX) +
-						strnlen(entry, PATH_MAX) + 1) > PATH_MAX) {
+			const size_t plen = strnlen(newpath, PATH_MAX);
+			if ((plen + strnlen(entry, PATH_MAX) + 1) > PATH_MAX) {
 				free(dirdup);
 				return ENAMETOOLONG;
 			}
 			else {
-				if (path[0] == '/' && strnlen(path, PATH_MAX) > 1) {
+				const size_t elen = strnlen(entry, NAME_MAX);
+				if (newpath[0] == '/' && plen > 1) {
 					// dont prepend / in root directory
-					strncat(path, "/", 2);
+					strncat(newpath, "/", 2);
 				}
-				strncat(path, entry, strnlen(entry, NAME_MAX)); // TODO
+				strncat(newpath, entry, elen);
 			}
 		}
 		entry = strtok_r(NULL, "/", &save_ptr);
 	}
 	free(dirdup);
+	strncpy(path, newpath, PATH_MAX);
 	return 0;
 }
 
