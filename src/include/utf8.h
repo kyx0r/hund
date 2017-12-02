@@ -38,4 +38,5 @@ bool utf8_validate(const utf8* const);
 void utf8_insert(utf8* const, const utf8* const, const size_t);
 void utf8_remove(utf8* const, const size_t);
 
+void cut_non_ascii(const utf8*, utf8*, size_t);
 #endif

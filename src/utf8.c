@@ -39,9 +39,6 @@ void utf8_cp2b(utf8* const b, const codepoint_t cp) {
 		b[2] = 0x80 | ((cp >> 6) & 0x00003f);
 		b[3] = 0x80 | (cp & 0x00003f);
 	}
-	else {
-		b[0] = 0x00;
-	}
 }
 
 /* Bytes To CodePoint */
@@ -193,4 +190,17 @@ void utf8_remove(utf8* const a, const size_t j) {
 	}
 	const size_t rl = utf8_g2nb(t); // Removed glyph Length
 	memmove(t, t+rl, strlen(t));
+}
+
+/* Copies only ASCII characters to buf */
+void cut_non_ascii(const utf8* str, utf8* buf, size_t n) {
+	while (*str && n) {
+		if (utf8_g2nb(str) == 1) {
+			*buf = *str;
+			buf += 1;
+		}
+		str += 1;
+		n -= 1;
+	}
+	*buf = 0; // null-terminator
 }
