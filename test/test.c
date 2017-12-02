@@ -1,3 +1,7 @@
+#ifndef _DEFAULT_SOURCE
+	#define _DEFAULT_SOURCE
+#endif
+
 #include "test.h"
 #include "../src/include/path.h"
 #include "../src/include/file_view.h"
@@ -30,14 +34,17 @@ int main() {
 	r = enter_dir(path2, "..");
 	TEST(r == 0 && strcmp(path2, "/usr") == 0, "up_dir used");
 
-	char path3[PATH_MAX*2] = "/";
-	memset(path3+1, 0, sizeof(path3) - 1);
-	memset(path3+1, 'a', PATH_MAX-3);
+	char path3[PATH_MAX+1];
+	memset(path3, 0, sizeof(path3));
+	path3[0] = '/';
+	memset(path3+1, 'a', PATH_MAX-3); // 1 to leave null-terminator, 1 for /, 1 for b
 	r = enter_dir(path3, "b");
 	TEST(r == 0 && strlen(path3) == PATH_MAX, "path filled");
 
 	r = enter_dir(path3, "end");
-	TEST(r == -1 && strlen(path3) == PATH_MAX, "respect PATH_MAX; leave path unchanged");
+	TEST(r && strlen(path3) == PATH_MAX, "respect PATH_MAX; leave path unchanged");
+	r = append_dir(path3, "end");
+	TEST(r && strlen(path3) == PATH_MAX, "respect PATH_MAX; leave path unchanged");
 
 	char path4[PATH_MAX] = "/bin";
 	char cd[NAME_MAX];
@@ -69,6 +76,10 @@ int main() {
 	enter_dir(path6, "~");
 	struct passwd* pwd = get_pwd();
 	TEST(strcmp(path6, pwd->pw_dir) == 0, "");
+
+	char path7[PATH_MAX+1] = "/home/user/images/memes";
+	int e = append_dir(path7, "lol");
+	TEST(e == 0 && !strcmp(path7, "/home/user/images/memes/lol"), "");
 
 	END_SECTION("path");
 
@@ -159,6 +170,10 @@ int main() {
 	TEST(!strcmp(inserted, "ąńkaa"), "");
 	TEST(utf8_ng_till(inserted, inserted+5) == 3, "");
 
+	char inv[NAME_MAX];
+	cut_non_ascii("łąćwożrźks", inv, NAME_MAX);
+	TEST(!strcmp(inv, "works"), "");
+
 
 	END_SECTION("utf8");
 
@@ -176,7 +191,6 @@ int main() {
 	TEST(contains("qłąkąz", "łąką"), "");
 	TEST(!contains("qqloz", "lol"), "");
 	TEST(!contains("qqlooolz", "looool"), "");
-
 
 	END_SECTION("file");
 

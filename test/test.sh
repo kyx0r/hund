@@ -14,7 +14,7 @@ if [ ! -d "testdir/lol" ]; then
 fi
 
 # remove directory 'lol' and exit
-echo -e "rmqq" | ./$exe testdir
+echo -e "remqq" | ./$exe testdir
 if [ -d "testdir/lol" ]; then
 	echo "Command rm failed"
 	rmdir testdir/lol
