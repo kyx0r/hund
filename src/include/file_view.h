@@ -28,6 +28,7 @@ struct file_view {
 	struct file_record** file_list;
 	fnum_t num_files;
 	fnum_t selection;
+	sorting_foo sorting;
 	bool show_hidden;
 };
 

@@ -28,6 +28,8 @@
 #include <string.h>
 #include <limits.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
+#include <signal.h>
 #include <syslog.h>
 
 #include "include/ui.h"
@@ -58,23 +60,24 @@ int get_mime(const char* const path, char* buf) {
 	return 0;
 }*/
 
-static int spawn(const char* const prog, const char* const arg) {
-	utf8* cmd = malloc(PATH_MAX); // TODO how long can cmdline be?
-	snprintf(cmd, PATH_MAX, "%s %s", prog, arg);
-
+static int spawn(const char* const prog, char* const arg) {
+	// TODO how to pass more arguments?
 	def_prog_mode();
 	endwin();
-
-	system(cmd);
-
+	int ret = 0;
+	int status;
+	pid_t pid = fork();
+	if (pid == 0) {
+		// TODO what about std{in,out,err}?
+		if (execlp(prog, prog, arg, NULL)) ret = errno;
+	}
+	else {
+		while (waitpid(pid, &status, 0) == -1);
+	}
 	reset_prog_mode();
-	free(cmd);
-	return 0;
+	return ret;
 }
 
-/* Mode handlers are functions that take care of
- * preparing tasks in response to user input.
- */
 typedef void (*mode_handler)(struct ui*, struct task*);
 
 static void mode_help(struct ui* i, struct task* t) {
@@ -348,9 +351,35 @@ static void mode_manager(struct ui* i, struct task* t) {
 			failed(i->error, "refresh", err, NULL);
 		}
 		else {
-			sort_file_list(i->pv->file_list, i->pv->num_files);
+			sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
 			file_view_afterdel(i->pv);
 		}
+		i->scrh = i->scrw = 0;
+		break;
+	// TODO sort after each of these
+	case CMD_SORT_BY_NAME_ASC:
+		i->pv->sorting = cmp_name_asc;
+		sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
+		i->scrh = i->scrw = 0;
+		break;
+	case CMD_SORT_BY_NAME_DESC: i->pv->sorting = cmp_name_desc;
+		sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
+		i->scrh = i->scrw = 0;
+		break;
+	case CMD_SORT_BY_DATE_ASC: i->pv->sorting = cmp_date_asc;
+		sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
+		i->scrh = i->scrw = 0;
+		break;
+	case CMD_SORT_BY_DATE_DESC: i->pv->sorting = cmp_date_desc;
+		sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
+		i->scrh = i->scrw = 0;
+		break;
+	case CMD_SORT_BY_SIZE_ASC: i->pv->sorting = cmp_size_asc;
+		sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
+		i->scrh = i->scrw = 0;
+		break;
+	case CMD_SORT_BY_SIZE_DESC: i->pv->sorting = cmp_size_desc;
+		sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
 		i->scrh = i->scrw = 0;
 		break;
 	default:
@@ -467,13 +496,17 @@ static void task_state_executing(struct ui* i, struct task* t) {
 		t->s = TASK_STATE_FINISHED;
 	}
 	else {
+		char sdone[SIZE_BUF_SIZE];
+		char stota[SIZE_BUF_SIZE];
+		pretty_size(t->size_done, sdone);
+		pretty_size(t->size_total, stota);
 		snprintf(i->info, MSG_BUFFER_SIZE,
-			"%s %s %d/%df, %d/%dd, %lu/%luB",
+			"%s %s %d/%df, %d/%dd, %s / %s",
 			(t->running ? ">>" : "||"),
 			task_strings[t->t][ING],
 			t->files_done, t->files_total,
 			t->dirs_done, t->dirs_total,
-			t->size_done, t->size_total);
+			sdone, stota);
 	}
 }
 
@@ -492,8 +525,8 @@ static void task_state_finished(struct ui* i, struct task* t) {
 	if (epv || esv) {
 		failed(i->error, task_strings[t->t][NOUN], epv | esv, NULL);
 	}
-	sort_file_list(i->pv->file_list, i->pv->num_files);
-	sort_file_list(i->sv->file_list, i->sv->num_files);
+	sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
+	sort_file_list(i->sv->sorting, i->sv->file_list, i->sv->num_files);
 	if (t->t == TASK_RM) {
 		file_view_afterdel(i->pv);
 		snprintf(i->info, MSG_BUFFER_SIZE, "%s %s",
@@ -571,6 +604,7 @@ int main(int argc, char* argv[])  {
 
 	struct file_view fvs[2];
 	memset(fvs, 0, sizeof(fvs));
+	fvs[0].sorting = fvs[1].sorting = cmp_name_asc;
 
 	struct ui i = ui_init(&fvs[0], &fvs[1]);
 
@@ -593,7 +627,7 @@ int main(int argc, char* argv[])  {
 					fvs[v].wd, strerror(r), r);
 			exit(EXIT_FAILURE);
 		}
-		sort_file_list(fvs[v].file_list, fvs[v].num_files);
+		sort_file_list(fvs[v].sorting, fvs[v].file_list, fvs[v].num_files);
 		first_entry(&fvs[v]);
 	}
 

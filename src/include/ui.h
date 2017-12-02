@@ -71,6 +71,13 @@ enum command {
 	CMD_FIND,
 	CMD_CHMOD,
 
+	CMD_SORT_BY_NAME_ASC,
+	CMD_SORT_BY_NAME_DESC,
+	CMD_SORT_BY_DATE_ASC,
+	CMD_SORT_BY_DATE_DESC,
+	CMD_SORT_BY_SIZE_ASC,
+	CMD_SORT_BY_SIZE_DESC,
+
 	CMD_RETURN,
 	CMD_CHANGE,
 	CMD_CHOWN,
@@ -174,7 +181,7 @@ static const struct input2cmd default_mapping[] = {
 
 	{ .i={ UTF8("/"), ENDK }, .m=MODE_MANAGER, .c=CMD_FIND },
 
-	{ .i={ UTF8("s"), ENDK }, .m=MODE_MANAGER, .c=CMD_TOGGLE_HIDDEN },
+	{ .i={ UTF8("x"), ENDK }, .m=MODE_MANAGER, .c=CMD_TOGGLE_HIDDEN },
 	{ .i={ CTRL('H'), ENDK }, .m=MODE_MANAGER, .c=CMD_TOGGLE_HIDDEN },
 
 	{ .i={ UTF8("?"), ENDK }, .m=MODE_MANAGER, .c=CMD_HELP },
@@ -182,6 +189,13 @@ static const struct input2cmd default_mapping[] = {
 	{ .i={ UTF8("c"), UTF8("d"), ENDK }, .m=MODE_MANAGER, .c=CMD_CD },
 
 	{ .i={ UTF8("c"), UTF8("h"), ENDK }, .m=MODE_MANAGER, .c=CMD_CHMOD },
+
+	{ .i={ UTF8("s"), UTF8("n"), UTF8("a"), ENDK }, .m=MODE_MANAGER, .c=CMD_SORT_BY_NAME_ASC },
+	{ .i={ UTF8("s"), UTF8("n"), UTF8("d"), ENDK }, .m=MODE_MANAGER, .c=CMD_SORT_BY_NAME_DESC },
+	{ .i={ UTF8("s"), UTF8("d"), UTF8("a"), ENDK }, .m=MODE_MANAGER, .c=CMD_SORT_BY_DATE_ASC },
+	{ .i={ UTF8("s"), UTF8("d"), UTF8("d"), ENDK }, .m=MODE_MANAGER, .c=CMD_SORT_BY_DATE_DESC },
+	{ .i={ UTF8("s"), UTF8("s"), UTF8("a"), ENDK }, .m=MODE_MANAGER, .c=CMD_SORT_BY_SIZE_ASC },
+	{ .i={ UTF8("s"), UTF8("s"), UTF8("d"), ENDK }, .m=MODE_MANAGER, .c=CMD_SORT_BY_SIZE_DESC },
 
 	/* MODE CHMOD */
 	{ .i={ UTF8("q"), UTF8("q"), ENDK }, .m=MODE_CHMOD, .c=CMD_RETURN },
@@ -252,6 +266,13 @@ static const struct cmd2help cmd_help[] = {
 	{ .c = CMD_RETURN, .hint = "return", .help = "Abort changes and return." },
 	{ .c = CMD_CHOWN, .hint = "change owner", .help = "Change owner of file. Prompts for login." },
 	{ .c = CMD_CHGRP, .hint = "change group", .help = "Change group of file. Prompts for group name." },
+	{ .c = CMD_SORT_BY_NAME_ASC, .hint = "name asc", .help = "Sort by name ascending." },
+	{ .c = CMD_SORT_BY_NAME_DESC, .hint = "name desc", .help = "Sort by name descending." },
+	{ .c = CMD_SORT_BY_DATE_ASC, .hint = "date asc", .help = "Sort by date ascending." },
+	{ .c = CMD_SORT_BY_DATE_DESC, .hint = "date desc", .help = "Sort by date descending." },
+	{ .c = CMD_SORT_BY_SIZE_ASC, .hint = "size asc", .help = "Sort by size ascending." },
+	{ .c = CMD_SORT_BY_SIZE_DESC, .hint = "size desc", .help = "Sort by size descending." },
+
 	{ .c = CMD_CHANGE, .hint = "change ", .help = "Apply changes and return." },
 	{ .c = CMD_TOGGLE_UIOX, .hint = "toggle setuid", .help = "Toggle set user ID on execution." },
 	{ .c = CMD_TOGGLE_GIOX, .hint = "toggle setgid", .help = "Toggle set group ID on execution." },
@@ -334,7 +355,7 @@ struct ui {
 	enum mode m;
 
 	PANEL* fvp[2];
-	struct file_view* fvs[2];
+	struct file_view* fvs[2]; // TODO FIXME
 	struct file_view* pv;
 	struct file_view* sv;
 

@@ -32,6 +32,30 @@ static const struct cmd2help* get_help_data(const enum command c) {
 	return NULL;
 }
 
+static char mode2symbol(const mode_t m, const mode_t n) {
+	switch (m & S_IFMT) {
+	case S_IFBLK: return '+';
+	case S_IFCHR: return '-';
+	case S_IFIFO: return '|';
+	case S_IFREG:
+		if (executable(m, 0)) return '*';
+		else return ' ';
+	case S_IFDIR: return '/';
+	case S_IFSOCK: return '=';
+	case S_IFLNK:
+		switch (n & S_IFMT) {
+		case S_IFBLK:
+		case S_IFCHR:
+		case S_IFIFO:
+		case S_IFREG:
+		case S_IFSOCK: return '@';
+		case S_IFDIR: return '~';
+		default: return '?';
+		}
+	default: return '?';
+	}
+}
+
 static int mode2type(const mode_t m, const mode_t n) {
 	// TODO find a better way
 	// See sys_stat.h manpage for more info
@@ -75,6 +99,12 @@ struct ui ui_init(struct file_view* const pv,
 	keypad(stdscr, TRUE);
 	//timeout(DEFAULT_GETCH_TIMEOUT);
 	curs_set(0);
+
+	// TODO
+	//init_color(COLOR_WHITE, 1000, 1000, 1000);
+	//init_color(COLOR_MAGENTA, 1000, 0, 1000);
+	//init_color(COLOR_YELLOW, 1000, 1000, 0);
+	//init_color(COLOR_CYAN, 0, 1000, 1000);
 
 	init_pair(1, COLOR_WHITE, COLOR_BLACK);
 	init_pair(2, COLOR_BLACK, COLOR_WHITE);
@@ -184,9 +214,9 @@ static void _printw_pathbar(const char* const path,
 static void _printw_entry(WINDOW* const w, const fnum_t dr,
 		const struct file_record* const cfr,
 		const fnum_t width, const bool highlight) {
-	// TODO is is utf-8 at all? validate
+	// TODO what if cfr->l == NULL?
 	const int type = mode2type(cfr->s.st_mode, cfr->l->st_mode);
-	const char type_symbol = type_symbol_mapping[type][0];
+	const char type_symbol = mode2symbol(cfr->s.st_mode, cfr->l->st_mode);
 	int color_pair_enabled = type_symbol_mapping[type][1];
 	const size_t bufl = width*4;
 	char* const buf = malloc(bufl);
@@ -194,9 +224,15 @@ static void _printw_entry(WINDOW* const w, const fnum_t dr,
 	buf[bufl-1] = 0;
 	buf[strlen(buf)] = ' ';
 
+	const bool ie = executable(cfr->s.st_mode, cfr->s.st_mode);
+	const bool isfile = (cfr->s.st_mode & S_IFMT) == S_IFREG;
+	if (ie && isfile) {
+		color_pair_enabled = 11;
+	}
 	if (highlight) {
 		color_pair_enabled += 1;
 	}
+
 	wattron(w, COLOR_PAIR(color_pair_enabled));
 	fnum_t space = width;
 	fnum_t begin = 0;
@@ -204,8 +240,11 @@ static void _printw_entry(WINDOW* const w, const fnum_t dr,
 	space -= 1;
 	begin += 1;
 
-	const utf8* const fn = cfr->file_name;
+	char invname[NAME_MAX+1];
+	const bool valid = utf8_validate(cfr->file_name);
+	const utf8* const fn = (valid ? cfr->file_name : invname);
 	const utf8* const lp = cfr->link_path;
+	if (!valid) cut_non_ascii(cfr->file_name, invname, NAME_MAX);
 
 	const size_t fnw = utf8_width(fn);
 	const size_t printfn = (space > fnw ? fnw : space);
@@ -214,14 +253,13 @@ static void _printw_entry(WINDOW* const w, const fnum_t dr,
 	begin += printfn;
 
 	if (!highlight) {
-		// TODO what if cfr->l == NULL?
 		if (S_ISDIR(cfr->l->st_mode)) wattron(w, COLOR_PAIR(1));
 		else wattron(w, COLOR_PAIR(9));
 	}
 	if ((cfr->s.st_mode & S_IFMT) == S_IFLNK) {
 		const size_t lpw = utf8_width(lp);
 		const size_t printlp = (space > 4+lpw ? 4+lpw : space);
-		// TODO what if link path is corrupt?
+		// TODO what if link path is corrupted?
 		mvwprintw(w, dr, begin, " -> %.*s",
 				utf8_slice_length(lp, printlp), lp);
 		space -= printlp;
@@ -342,15 +380,17 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 		const struct tm* const tt = localtime(&lt);
 		strftime(time, time_size, timefmt, tt);
 	}
+	char sbuf[SIZE_BUF_SIZE];
+	pretty_size(fsize, sbuf);
 	snprintf(status, status_size,
-			"%u/%u %c%u %c%u hL%lu, %o %zuB",
+			"%u/%u %c%u %c%u hL%lu, %o %s",
 			(s->num_files ? hi+1 : 0),
 			s->num_files-(sh ? 0 : nhf),
 			(sh ? 'H' : 'h'), nhf,
 			(sisl ? 'L' : 'l'), nsl,
 			(hfr ? hfr->l->st_nlink : 0),
 			(hfr ? (hfr->l->st_mode & 0xfff) : 0),
-			fsize);
+			sbuf);
 	/* BTW chmod man page says chmod
 	 * cannot change symlink permissions.
 	 * ...but that is not and issue since
@@ -512,6 +552,7 @@ void ui_draw(struct ui* const i) {
 		break;
 	default:
 	case MODE_PROMPT:
+		ui_draw_panel(i, (i->pv == i->fvs[0] ? 0 : 1)); // TODO FIXME
 		break;
 	}
 

@@ -224,7 +224,7 @@ int file_view_enter_selected_dir(struct file_view* fv) {
 		delete_file_list(fv);
 		return err;
 	}
-	sort_file_list(fv->file_list, fv->num_files);
+	sort_file_list(fv->sorting, fv->file_list, fv->num_files);
 	first_entry(fv);
 	return 0;
 }
@@ -239,7 +239,7 @@ int file_view_up_dir(struct file_view* fv) {
 		free(prevdir);
 		return err;
 	}
-	sort_file_list(fv->file_list, fv->num_files);
+	sort_file_list(fv->sorting, fv->file_list, fv->num_files);
 	file_highlight(fv, prevdir);
 	free(prevdir);
 	return 0;
