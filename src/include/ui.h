@@ -17,6 +17,8 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+// vim: syntax=c
+
 #ifndef UI_H
 #define UI_H
 
@@ -358,19 +360,6 @@ static const struct cmd2help cmd_help[] = {
 };
 
 static const size_t cmd_help_length = sizeof(cmd_help)/sizeof(struct cmd2help);
-
-static const char type_symbol_mapping[][2] = {
-	// See mode2type in ui.c
-	[0] = { '+', 11 }, // BLK
-	[1] = { '-', 11 }, // CHR
-	[2] = { '|', 1 }, // FIFO
-	[3] = { ' ', 1 }, // REG
-	[4] = { '/', 9 }, // DIR
-	[5] = { '=', 5 }, // SOCK
-	[6] = { '~', 9 }, // LNK DIR
-	[7] = { '@', 1 }, // LNK OTHER
-	[8] = { '?', 1 }, // default
-};
 
 struct ui_find {
 	utf8* t; // Pointer to buffer where searched name will be held
