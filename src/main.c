@@ -354,33 +354,33 @@ static void mode_manager(struct ui* i, struct task* t) {
 			sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
 			file_view_afterdel(i->pv);
 		}
-		i->scrh = i->scrw = 0;
+		i->ui_needs_refresh = true;
 		break;
 	// TODO sort after each of these
 	case CMD_SORT_BY_NAME_ASC:
 		i->pv->sorting = cmp_name_asc;
 		sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
-		i->scrh = i->scrw = 0;
+		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_BY_NAME_DESC: i->pv->sorting = cmp_name_desc;
 		sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
-		i->scrh = i->scrw = 0;
+		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_BY_DATE_ASC: i->pv->sorting = cmp_date_asc;
 		sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
-		i->scrh = i->scrw = 0;
+		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_BY_DATE_DESC: i->pv->sorting = cmp_date_desc;
 		sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
-		i->scrh = i->scrw = 0;
+		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_BY_SIZE_ASC: i->pv->sorting = cmp_size_asc;
 		sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
-		i->scrh = i->scrw = 0;
+		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_BY_SIZE_DESC: i->pv->sorting = cmp_size_desc;
 		sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
-		i->scrh = i->scrw = 0;
+		i->ui_needs_refresh = true;
 		break;
 	default:
 		break;
@@ -653,7 +653,9 @@ int main(int argc, char* argv[])  {
 
 	snprintf(i.info, MSG_BUFFER_SIZE, "Type ? for help and license notice.");
 	while (i.run) {
-		ui_update_geometry(&i);
+		if (i.ui_needs_refresh) {
+			ui_update_geometry(&i);
+		}
 		ui_draw(&i);
 
 		// Execute mode handler

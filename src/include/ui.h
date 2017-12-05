@@ -400,7 +400,8 @@ struct ui_prompt {
 };
 
 struct ui {
-	int scrh, scrw; // Need this for detecting changes in window size
+	bool ui_needs_refresh;
+	int scrh, scrw; // Last window dimensions
 	bool run;
 	enum mode m;
 

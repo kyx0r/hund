@@ -101,6 +101,7 @@ struct ui ui_init(struct file_view* const pv,
 	i.helpy = 0;
 	i.help = NULL;
 	i.run = true;
+	i.ui_needs_refresh = true;
 	i.kml = default_mapping_length;
 	i.mks = calloc(default_mapping_length, sizeof(int));
 	i.kmap = malloc(default_mapping_length*sizeof(struct input2cmd));
@@ -561,7 +562,6 @@ void ui_draw(struct ui* const i) {
 void ui_update_geometry(struct ui* const i) {
 	int newscrh, newscrw;
 	getmaxyx(stdscr, newscrh, newscrw);
-	if (newscrh == i->scrh && newscrw == i->scrw) return;
 	syslog(LOG_DEBUG, "resized to %ux%u", newscrw, newscrh);
 	i->scrh = newscrh;
 	i->scrw = newscrw;
@@ -590,6 +590,7 @@ void ui_update_geometry(struct ui* const i) {
 		wresize(hw, i->scrh-1, i->scrw);
 		move_panel(hp, 0, 0);
 	}
+	i->ui_needs_refresh = false;
 }
 
 int chmod_open(struct ui* i, utf8* path) {
@@ -614,7 +615,7 @@ int chmod_open(struct ui* i, utf8* path) {
 	strcpy(i->chmod->group, grp->gr_name);
 	i->chmod->ww = 34;
 	i->chmod->wh = 17;
-	i->scrw = i->scrh = 0; // Forces geometry update
+	i->ui_needs_refresh = true;
 	return 0;
 }
 
@@ -685,7 +686,7 @@ struct input get_input(WINDOW* const w) {
 	int init = wgetch(w);
 	const utf8 u = (utf8)init;
 	const char* kn = keyname(init);
-	//syslog(LOG_DEBUG, "get_input: %s (%d)", kn, init);
+	syslog(LOG_DEBUG, "get_input: %s (%d), %d", kn, init, has_key(init));
 	if (init == -1) {
 		r.t = END;
 	}
@@ -705,7 +706,11 @@ struct input get_input(WINDOW* const w) {
 		}
 	}
 	else {
-		r.t = END;
+		if (init == KEY_RESIZE) {
+			r.t = SPECIAL;
+			r.c = init;
+		}
+		else r.t = END;
 	}
 	return r;
 }
@@ -716,12 +721,18 @@ struct input get_input(WINDOW* const w) {
  * clear ili, and hint/matching table.
  * If there are a few, do nothing, wait longer.
  * If there is only one, send it.
+ *
+ * HANDLES KEY_RESIZE
  */
 enum command get_cmd(struct ui* const i) {
 	memset(i->mks, 0, i->kml*sizeof(int));
 	static struct input il[INPUT_LIST_LENGTH];
 	static int ili = 0;
 	struct input newinput = get_input(stdscr);
+	if (newinput.t == SPECIAL && newinput.c == KEY_RESIZE) {
+		ui_update_geometry(i);
+		ui_draw(i);
+	}
 
 	if (newinput.t == END) return CMD_NONE;
 	else if (newinput.t == CTRL && newinput.ctrl == '[') {
