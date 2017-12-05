@@ -299,7 +299,7 @@ static void mode_manager(struct ui* i, struct task* t) {
 		err = file_view_up_dir(i->pv);
 		if (err) failed(i->error, "up dir", err, NULL);
 		break;
-	case CMD_COPY:
+	/*case CMD_COPY:
 		prepare_long_task(i, t, TASK_COPY,
 				task_strings[TASK_COPY][NOUN]);
 		break;
@@ -309,7 +309,7 @@ static void mode_manager(struct ui* i, struct task* t) {
 		break;
 	case CMD_REMOVE:
 		prepare_long_task(i, t, TASK_RM,
-				task_strings[TASK_RM][NOUN]);
+				task_strings[TASK_RM][NOUN]);*/
 		break;
 	case CMD_CREATE_DIR:
 		task_new(t, TASK_MKDIR,
@@ -472,7 +472,7 @@ static void task_state_data_gathered(struct ui* i, struct task* t) {
 		}
 	case TASK_COPY:
 	case TASK_RM:
-		err = task_build_file_list(t);
+		err = task_build_file_list(t, t->src);
 		if (err) {
 			failed(i->error, "build file list", err, NULL);
 			task_clean(t);
@@ -652,7 +652,7 @@ int main(int argc, char* argv[])  {
 	};
 
 	snprintf(i.info, MSG_BUFFER_SIZE, "Type ? for help and license notice.");
-	while (i.run || t.checklist) {
+	while (i.run) {
 		ui_update_geometry(&i);
 		ui_draw(&i);
 

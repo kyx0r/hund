@@ -64,18 +64,18 @@ enum task_state {
 	TASK_STATE_NUM
 };
 
-enum todo {
-	TODO_REMOVE,
-	TODO_COPY,
-	//TODO_MOVE, // AKA copy first, then remove TODO will shorten the todo list
+enum fs_walk {
+	AT_NOWHERE = 0,
+	AT_FILE,
+	AT_DIR,
+	AT_END,
 };
 
-struct file_todo {
-	struct file_todo* next;
-	enum todo td;
-	utf8* path;
-	struct stat s; // TODO symlinks?
-	ssize_t progress;
+struct dirtree {
+	struct dirtree* up;
+	DIR* cd;
+	struct stat cs;
+	struct dirent* ce;
 };
 
 /* AKA long task
@@ -87,7 +87,9 @@ struct task {
 	enum task_type t;
 	bool running;
 	utf8 *src, *dst, *newname;
-	struct file_todo* checklist;
+
+	char wpath[PATH_MAX+1];
+	struct dirtree* dir;
 	int in, out;
 	ssize_t size_total, size_done;
 	int files_total, files_done;
@@ -96,8 +98,7 @@ struct task {
 
 void task_new(struct task*, enum task_type, utf8*, utf8*, utf8*);
 
-int task_build_file_list(struct task*);
-void task_check_file(struct task*);
+int task_build_file_list(struct task*, char*);
 void task_clean(struct task*);
 
 utf8* build_new_path(struct task*, utf8*);
