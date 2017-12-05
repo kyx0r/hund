@@ -45,7 +45,8 @@ $(OBJDIR) :
 $(OBJDIR)/test.o : test/test.c | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $^ -o $@
 
-test : $(OBJDIR)/test.o $(addprefix $(OBJDIR)/, $(subst main.o,,$(OBJ)))
+TESTOBJS := test.o path.o file_view.o task.o file.o utf8.o
+test : $(addprefix $(OBJDIR)/, $(TESTOBJS))
 	$(CC) $(LIBS) -o $(TESTEXENAME) $^ && ./$(TESTEXENAME) && make $(EXENAME)
 
 testex :
