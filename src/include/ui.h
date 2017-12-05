@@ -43,8 +43,6 @@ enum mode {
 	MODE_HELP = 0,
 	MODE_MANAGER,
 	MODE_CHMOD,
-	MODE_PROMPT,
-	MODE_FIND,
 	MODE_WAIT,
 	MODE_NUM
 };
@@ -361,17 +359,6 @@ static const struct cmd2help cmd_help[] = {
 
 static const size_t cmd_help_length = sizeof(cmd_help)/sizeof(struct cmd2help);
 
-struct ui_find {
-	utf8* t; // Pointer to buffer where searched name will be held
-	utf8* t_top; // Used by fill_textbox. Does not have to == t
-	size_t t_size; // Size of buffer; for fill_textbox
-	fnum_t sbfc; // Selection Before Find Command
-	/* If find was escaped, it returns to sbfc.
-	 * If entered, stays on found entry.
-	 */
-	enum mode mb; // Mode Before find mode
-};
-
 struct ui_chmod {
 	PANEL* p;
 	mode_t m; // permissions of chmodded file
@@ -389,21 +376,14 @@ struct ui_chmod {
 	int wh, ww; // Window Width, Window Height
 };
 
-struct ui_prompt {
-	utf8* tb; // TextBox buffer
-	utf8* tb_top;
-	/* ^ Used to prompt with non-empty buffer;
-	 * this is where cursor will be
-	 */
-	size_t tb_size; // size of buffer pointed by tb
-	enum mode mb; // Mode Before find mode
-};
-
 struct ui {
 	bool ui_needs_refresh;
 	int scrh, scrw; // Last window dimensions
 	bool run;
 	enum mode m;
+
+	char prch;
+	utf8* prompt;
 
 	PANEL* fvp[2];
 	struct file_view* fvs[2]; // TODO FIXME
@@ -414,9 +394,7 @@ struct ui {
 	size_t helpy;
 	PANEL* help;
 
-	struct ui_prompt* prompt;
 	struct ui_chmod* chmod;
-	struct ui_find* find;
 	utf8 error[MSG_BUFFER_SIZE];
 	utf8 info[MSG_BUFFER_SIZE];
 
@@ -434,18 +412,12 @@ void ui_update_geometry(struct ui* const);
 int chmod_open(struct ui*, utf8*);
 void chmod_close(struct ui*);
 
-void prompt_open(struct ui*, utf8*, utf8*, size_t);
-void prompt_close(struct ui*);
-
-void find_open(struct ui*, utf8*, utf8*, size_t);
-void find_close(struct ui*, bool);
-
 void help_open(struct ui*);
 void help_close(struct ui*);
 
 struct input get_input(WINDOW* const);
 enum command get_cmd(struct ui* const);
 int fill_textbox(utf8* const, utf8** const,
-		const size_t, const int, WINDOW* const);
+		const size_t, WINDOW* const);
 
 #endif

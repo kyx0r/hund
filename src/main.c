@@ -78,6 +78,63 @@ static int spawn(const char* const prog, char* const arg) {
 	return ret;
 }
 
+void open_prompt(struct ui* i, utf8* const t,
+		utf8* t_top, const size_t t_size) {
+	int r = 1;
+	i->prch = ' ';
+	i->prompt = t;
+	ui_draw(i);
+	while (r != -1 && r != 0) {
+		r = fill_textbox(t, &t_top, t_size, panel_window(i->status));
+		if (r == -3) ui_update_geometry(i);
+	}
+	ui_draw(i);
+}
+
+void open_find(struct ui* i, utf8* const t, const size_t t_size) {
+	// TODO cleanup; make readable
+	int r = 1;
+	fnum_t sbfc = i->pv->selection;
+	utf8* t_top = t;
+	i->prch = '/';
+	i->prompt = t;
+	ui_draw(i);
+	while (r != 0 && r != -1) {
+		r = fill_textbox(t, &t_top, t_size, panel_window(i->status));
+		if (r == -3) ui_update_geometry(i);
+		if (r == -1) {
+			i->pv->selection = sbfc;
+		}
+		else if (r == 2 || r == -2 || t_top != t) {
+			fnum_t s = 0;
+			fnum_t e = i->pv->num_files-1;
+			bool dofind = true;
+			if (r == 2) {
+				if (i->pv->selection < i->pv->num_files-1) {
+					s = i->pv->selection+1;
+					e = i->pv->num_files-1;
+				}
+				else dofind = false;
+			}
+			else if (r == -2) {
+				if (i->pv->selection > 0) {
+					s = i->pv->selection-1;
+					e = 0;
+				}
+				else dofind = false;
+			}
+			bool found = false;
+			if (dofind) found = file_find(i->pv, t, s, e);
+			if (!found) {
+				//i.error = failed("find", ENOENT);
+			}
+		}
+		ui_draw(i);
+	}
+	free(t);
+	i->prompt = NULL;
+}
+
 typedef void (*mode_handler)(struct ui*, struct task*);
 
 static void mode_help(struct ui* i, struct task* t) {
@@ -116,12 +173,14 @@ static void mode_chmod(struct ui* i, struct task* t) {
 	case CMD_CHOWN:
 		task_new(t, TASK_CHOWN, NULL, NULL,
 				calloc(LOGIN_NAME_MAX+1, sizeof(char)));
-		prompt_open(i, t->newname, NULL, LOGIN_NAME_MAX);
+		open_prompt(i, t->newname, t->newname, LOGIN_NAME_MAX);
+		t->s = TASK_STATE_DATA_GATHERED;
 		break;
 	case CMD_CHGRP:
 		task_new(t, TASK_CHGRP, NULL, NULL,
 				calloc(LOGIN_NAME_MAX+1, sizeof(char)));
-		prompt_open(i, t->newname, NULL, LOGIN_NAME_MAX);
+		open_prompt(i, t->newname, t->newname, LOGIN_NAME_MAX);
+		t->s = TASK_STATE_DATA_GATHERED;
 		break;
 	case CMD_TOGGLE_UIOX: i->chmod->m ^= S_ISUID; break;
 	case CMD_TOGGLE_GIOX: i->chmod->m ^= S_ISGID; break;
@@ -136,56 +195,6 @@ static void mode_chmod(struct ui* i, struct task* t) {
 	case CMD_TOGGLE_OW: i->chmod->m ^= S_IWOTH; break;
 	case CMD_TOGGLE_OX: i->chmod->m ^= S_IXOTH; break;
 	default: break;
-	}
-}
-
-static void mode_find(struct ui* i, struct task* t) {
-	(void)(t);
-	int r = fill_textbox(i->find->t, &i->find->t_top,
-			i->find->t_size, 1, panel_window(i->status));
-	if (r == -1) {
-		find_close(i, false);
-	}
-	else if (r == 0) {
-		find_close(i, true);
-	}
-	else if (r == 2 || r == -2 || i->find->t_top != i->find->t) {
-		fnum_t s = 0;
-		fnum_t e = i->pv->num_files-1;
-		bool dofind = true;
-		if (r == 2) {
-			if (i->pv->selection < i->pv->num_files-1) {
-				s = i->pv->selection+1;
-				e = i->pv->num_files-1;
-			}
-			else dofind = false;
-		}
-		else if (r == -2) {
-			if (i->pv->selection > 0) {
-				s = i->pv->selection-1;
-				e = 0;
-			}
-			else dofind = false;
-		}
-		bool found = false;
-		if (dofind) found = file_find(i->pv, i->find->t, s, e);
-		if (!found) {
-			//i.error = failed("find", ENOENT);
-		}
-	}
-	else {
-		i->pv->selection = i->find->sbfc;
-	}
-}
-
-static void mode_prompt(struct ui* i, struct task* t) {
-	int r = fill_textbox(i->prompt->tb, &i->prompt->tb_top,
-			i->prompt->tb_size, 0, panel_window(i->status));
-	if (!r || r == -1) {
-		if (t->t != TASK_NONE && t->s == TASK_STATE_GATHERING_DATA) {
-			t->s = TASK_STATE_DATA_GATHERED;
-		}
-		prompt_close(i);
 	}
 }
 
@@ -224,14 +233,11 @@ static void prepare_long_task(struct ui* i, struct task* t,
 		if (file_on_list(i->sv, fn)) {
 			newname = calloc(NAME_MAX+1, sizeof(char));
 			strncpy(newname, fn, NAME_MAX);
-			i->m = MODE_WAIT; // TODO FIXME
-			// ^ doing so will make prompt set mode to MODE_WAIT
-			prompt_open(i, newname,
+			open_prompt(i, newname,
 					newname+strnlen(newname, NAME_MAX), NAME_MAX);
 		}
 	}
 	task_new(t, tt, src, dst, newname);
-	if (i->m != MODE_PROMPT) i->m = MODE_WAIT; // TODO FIXME
 	if (!newname) {
 		t->s = TASK_STATE_DATA_GATHERED;
 	}
@@ -289,7 +295,8 @@ static void mode_manager(struct ui* i, struct task* t) {
 		task_new(t, TASK_CD,
 				strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX),
 				calloc(PATH_MAX+1, sizeof(char)), NULL);
-		prompt_open(i, t->dst, NULL, PATH_MAX);
+		open_prompt(i, t->dst, t->dst, PATH_MAX);
+		t->s = TASK_STATE_DATA_GATHERED;
 		break;
 	case CMD_ENTER_DIR:
 		err = file_view_enter_selected_dir(i->pv);
@@ -315,10 +322,11 @@ static void mode_manager(struct ui* i, struct task* t) {
 		task_new(t, TASK_MKDIR,
 				strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX),
 				NULL, calloc(NAME_MAX+1, sizeof(char)));
-		prompt_open(i, t->newname, NULL, PATH_MAX);
+		open_prompt(i, t->newname, t->newname, PATH_MAX);
+		t->s = TASK_STATE_DATA_GATHERED;
 		break;
 	case CMD_FIND:
-		find_open(i, calloc(NAME_MAX+1, sizeof(char)), NULL, NAME_MAX);
+		open_find(i, calloc(NAME_MAX+1, sizeof(char)), NAME_MAX);
 		break;
 	case CMD_ENTRY_FIRST:
 		first_entry(i->pv);
@@ -339,8 +347,9 @@ static void mode_manager(struct ui* i, struct task* t) {
 				strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX),
 				strncpy(malloc(NAME_MAX+1),
 					i->pv->file_list[i->pv->selection]->file_name, NAME_MAX));
-		prompt_open(i, t->newname,
+		open_prompt(i, t->newname,
 				t->newname+strnlen(t->newname, NAME_MAX), NAME_MAX);
+		t->s = TASK_STATE_DATA_GATHERED;
 		break;
 	case CMD_TOGGLE_HIDDEN:
 		file_view_toggle_hidden(i->pv);
@@ -638,9 +647,7 @@ int main(int argc, char* argv[])  {
 		[MODE_HELP] = mode_help,
 		[MODE_MANAGER] = mode_manager,
 		[MODE_CHMOD] = mode_chmod,
-		[MODE_PROMPT] = mode_prompt,
 		[MODE_WAIT] = mode_wait,
-		[MODE_FIND] = mode_find,
 	};
 
 	static const task_state_handler shs[TASK_STATE_NUM] = {

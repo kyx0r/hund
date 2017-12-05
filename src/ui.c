@@ -22,6 +22,8 @@
 /* This file contains UI-related functions
  * These functions are supposed to draw elements of UI.
  * They are supposed to read file_view contents, but never modify it.
+ *
+ * TODO KEY_RESIZE - better handling, less mess
  */
 
 /* get cmd2help coresponding to given command */
@@ -94,9 +96,9 @@ struct ui ui_init(struct file_view* const pv,
 	}
 	i.scrw = i.scrh = 0;
 	i.m = MODE_MANAGER;
+	i.prch = ' ';
 	i.prompt = NULL;
 	i.chmod = NULL;
-	i.find = NULL;
 	i.error[0] = i.info[0] = 0;
 	i.helpy = 0;
 	i.help = NULL;
@@ -510,8 +512,6 @@ void ui_draw(struct ui* const i) {
 		}
 		break;
 	default:
-	case MODE_PROMPT:
-		ui_draw_panel(i, (i->pv == i->fvs[0] ? 0 : 1)); // TODO FIXME
 		break;
 	}
 
@@ -532,13 +532,9 @@ void ui_draw(struct ui* const i) {
 				i->scrw-utf8_width(i->info), ' ');
 		i->info[0] = 0;
 	}
-	else if (i->find) {
-		mvwprintw(sw, 0, 0, "/%s%*c", i->find->t,
-				i->scrw-(utf8_width(i->find->t)+1), ' ');
-	}
-	else if (i->prompt) {
-		mvwprintw(sw, 0, 0, "%s%*c", i->prompt->tb,
-				i->scrw-(utf8_width(i->prompt->tb)+2), ' ');
+	else if (i->prompt) { // TODO
+		mvwprintw(sw, 0, 0, "%c%s%*c", i->prch, i->prompt,
+				i->scrw-(utf8_width(i->prompt)+2), ' ');
 	}
 	else {
 		ui_draw_hintbar(i, sw);
@@ -562,7 +558,7 @@ void ui_draw(struct ui* const i) {
 void ui_update_geometry(struct ui* const i) {
 	int newscrh, newscrw;
 	getmaxyx(stdscr, newscrh, newscrw);
-	syslog(LOG_DEBUG, "resized to %ux%u", newscrw, newscrh);
+	//syslog(LOG_DEBUG, "resized to %ux%u", newscrw, newscrh);
 	i->scrh = newscrh;
 	i->scrw = newscrw;
 	int w[2] = { i->scrw/2, i->scrw - w[0] };
@@ -629,41 +625,6 @@ void chmod_close(struct ui* i) {
 	i->chmod = NULL;
 }
 
-/* If tb_top is NULL, then it is set to tb */
-void prompt_open(struct ui* i, utf8* tb, utf8* tb_top, size_t tb_size) {
-	i->prompt = malloc(sizeof(struct ui_prompt));
-	i->prompt->mb = i->m;
-	i->prompt->tb = tb;
-	i->prompt->tb_top = (tb_top ? tb_top : tb);
-	i->prompt->tb_size = tb_size;
-	i->m = MODE_PROMPT;
-}
-
-void prompt_close(struct ui* i) {
-	i->m = i->prompt->mb;
-	free(i->prompt);
-	i->prompt = NULL;
-}
-
-/* If t_top is NULL, then it is set to t */
-void find_open(struct ui* i, utf8* t, utf8* t_top, size_t t_size) {
-	i->find = malloc(sizeof(struct ui_find));
-	i->find->mb = i->m;
-	i->find->sbfc = i->pv->selection;
-	i->find->t = t;
-	i->find->t_top = (t_top ? t_top : t);
-	i->find->t_size = t_size;
-	i->m = MODE_FIND;
-}
-
-void find_close(struct ui* i, bool success) {
-	if (!success) i->pv->selection = i->find->sbfc;
-	i->m = i->find->mb;
-	free(i->find->t);
-	free(i->find);
-	i->find = NULL;
-}
-
 void help_open(struct ui* i) {
 	WINDOW* nw = newwin(1, 1, 0, 0);
 	i->help = new_panel(nw);
@@ -686,7 +647,7 @@ struct input get_input(WINDOW* const w) {
 	int init = wgetch(w);
 	const utf8 u = (utf8)init;
 	const char* kn = keyname(init);
-	syslog(LOG_DEBUG, "get_input: %s (%d), %d", kn, init, has_key(init));
+	//syslog(LOG_DEBUG, "get_input: %s (%d), %d", kn, init, has_key(init));
 	if (init == -1) {
 		r.t = END;
 	}
@@ -732,6 +693,8 @@ enum command get_cmd(struct ui* const i) {
 	if (newinput.t == SPECIAL && newinput.c == KEY_RESIZE) {
 		ui_update_geometry(i);
 		ui_draw(i);
+		ili = 0;
+		return CMD_NONE;
 	}
 
 	if (newinput.t == END) return CMD_NONE;
@@ -826,13 +789,18 @@ enum command get_cmd(struct ui* const i) {
  * If keeps gathering, returns 1.
  * Additionally:
  * returns 2 on ^N and -2 on ^P
+ *
+ * Additionally:
+ * may return -3 if KEY_RESIZE was 'pressed'
  */
-int fill_textbox(utf8* const buf, utf8** const buftop, const size_t bsize,
-		const int coff, WINDOW* const w) {
+int fill_textbox(utf8* const buf, utf8** const buftop,
+		const size_t bsize, WINDOW* const w) {
 	curs_set(2);
-	wmove(w, 0, utf8_width(buf)-utf8_width(*buftop)+coff);
+	wmove(w, 0, utf8_width(buf)-utf8_width(*buftop)+1);
 	wrefresh(w);
 	struct input i = get_input(w);
+	if (i.t == SPECIAL && i.c == KEY_RESIZE) return -3;
+
 	curs_set(0);
 	if (i.t == END) return 1;
 	if (i.t == CTRL && i.ctrl == '[') return -1;
