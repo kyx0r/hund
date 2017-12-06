@@ -40,8 +40,9 @@ void task_new(struct task* t, enum task_type tp,
 }
 
 /* TODO symlinks
+ * Calculates size of all files and subdirectories in directory
  */
-int task_build_file_list(struct task* t, utf8* path) {
+int task_estimate_file_volume(struct task* t, utf8* path) {
 	int r = 0;
 	struct stat s;
 	if (lstat(path, &s)) return errno;
@@ -60,7 +61,7 @@ int task_build_file_list(struct task* t, utf8* path) {
 			if (lstat(fpath, &ss)) return errno;
 			if (S_ISDIR(ss.st_mode)) {
 				t->dirs_total += 1;
-				r |= task_build_file_list(t, fpath);
+				r |= task_estimate_file_volume(t, fpath);
 			}
 			else {
 				t->size_total += ss.st_size;
@@ -138,7 +139,6 @@ static inline int _copy_some(struct task* t, utf8* npath, void* buf, int* c) {
 }
 
 /* How does hund determine paths of files when performing operations?
- * (see build_file_list() too)
  *
  * removing:
  * 		Just rmdir/unlink given path
@@ -220,7 +220,7 @@ utf8* build_new_path(struct task* t, utf8* cp) {
 	}
 	return new_path;
 }
-
+/*
 void dir_start(struct task* t) {
 	t->dir = malloc(sizeof(struct dirtree));
 	strncpy(t->wpath, t->src, PATH_MAX);
@@ -231,7 +231,6 @@ void dir_start(struct task* t) {
 
 void dir_down(struct task* t) {
 	const char* const d_name = t->dir->ce->d_name;
-	fprintf(stderr, "%s {\n", d_name);
 	struct dirtree* const dt = malloc(sizeof(struct dirtree));
 	dt->up = t->dir;
 	t->dir = dt;
@@ -242,16 +241,15 @@ void dir_down(struct task* t) {
 }
 
 void dir_up(struct task* t) {
-	fprintf(stderr, "}\n");
 	struct dirtree* tmp = t->dir;
 	t->dir = tmp->up;
 	closedir(tmp->cd);
 	free(tmp);
 	up_dir(t->wpath);
 }
-
+*/
 enum fs_walk tree_walk(struct task* t, char* path) {
-	if (!t->dir) return AT_NOWHERE;
+	/*if (!t->dir) return AT_NOWHERE;
 	do {
 		t->dir->ce = readdir(t->dir->cd);
 	} while (t->dir->ce && (
@@ -265,11 +263,66 @@ enum fs_walk tree_walk(struct task* t, char* path) {
 	lstat(path, &t->dir->cs);
 	if (S_ISDIR(t->dir->cs.st_mode)) {
 		return AT_DIR;
-	}
+	}*/
 	return AT_FILE;
 }
 
 int do_task(struct task* t, int c) {
+	/*dir_start(t);
+	enum fs_walk fsw = AT_INIT;
+	while ((fsw = tree_walk(t, t->wpath)), c) {
+		switch (fsw) {
+		case AT_INIT:
+			if (t->t == TASK_COPY || t->t == TASK_MOVE) {
+				utf8* npath = build_new_path(t, t->wpath);
+				if (mkdir(npath, t->dir->cs.st_mode)) return errno;
+				free(npath);
+			}
+			break;
+		case AT_NOWHERE:
+			if (t->t == TASK_REMOVE || t->t == TASK_MOVE) {
+				if (rmdir(t->wpath)) return errno;
+			}
+			t->s = TASK_STATE_FINISHED;
+			return 0;
+		case AT_FILE:
+			syslog(LOG_DEBUG, "file %s\n", t->wpath);
+			if (t->t == TASK_COPY || t->t == TASK_MOVE) {
+				utf8* npath = build_new_path(t, t->wpath); // TODO cache
+				static char buf[BUFSIZ];
+				int e = _copy_some(t, npath, buf, &c);
+				free(npath);
+				if (e) return e;
+			}
+			if (t->t == TASK_REMOVE || t->t == TASK_MOVE) {
+				if (unlink(t->wpath)) return errno;
+				t->size_done += t->dir->cs.st_size;
+				c -= 1;
+			}
+			break;
+		case AT_DIR:
+			syslog(LOG_DEBUG, "dir %s\n", t->wpath);
+			if (t->t == TASK_COPY || t->t == TASK_MOVE) {
+				utf8* npath = build_new_path(t, t->wpath);
+				if (mkdir(npath, t->dir->cs.st_mode)) return errno;
+				free(npath);
+			}
+			if (t->t == TASK_REMOVE || t->t == TASK_MOVE) {
+				if (rmdir(t->wpath)) return errno;
+			}
+			c -= 1;
+			t->size_done += t->dir->cs.st_size;
+			t->files_done += 1;
+			dir_down(t);
+			break;
+		case AT_END:
+			syslog(LOG_DEBUG, "end %s\n", t->wpath);
+			dir_up(t);
+			syslog(LOG_DEBUG, "in %s\n", t->wpath);
+			break;
+		default: break;
+		}
+	}*/
 	/*while (t->checklist && c > 0) {
 		mode_t ftype = (t->checklist->s.st_mode & S_IFMT);
 		if (ftype == S_IFBLK || ftype == S_IFCHR ||
@@ -295,35 +348,8 @@ int do_task(struct task* t, int c) {
 			t->files_done += 1;
 		}
 		else if (isdir) {
-			if (t->t == TASK_COPY || t->t == TASK_MOVE) {
-				utf8* npath = build_new_path(t, t->checklist->path);
-				if (mkdir(npath, t->checklist->s.st_mode)) return errno;
-				free(npath);
-			}
-			if (t->t == TASK_REMOVE || t->t == TASK_MOVE) {
-				if (rmdir(t->checklist->path)) return errno;
-			}
-			c -= 1;
-			t->size_done += s.st_size;
-			t->files_done += 1;
-		}
 		else { // regular file
-			if (t->t == TASK_COPY || t->t == TASK_MOVE) {
-				utf8* npath = build_new_path(t, t->checklist->path); // TODO cache
-				static char buf[BUFSIZ];
-				int e = _copy_some(t, npath, buf, &c);
-				free(npath);
-				if (e) return e;
-			}
-			if (t->t == TASK_REMOVE || t->t == TASK_MOVE) {
-				if (unlink(t->checklist->path)) return errno;
-				t->size_done += s.st_size;
-				task_file_done(t);
-				c -= 1;
-			}
-		}
-	}
-	if (!t->checklist) t->s = TASK_STATE_FINISHED;*/
+	}*/
 	return 0;
 }
 

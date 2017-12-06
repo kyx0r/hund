@@ -628,7 +628,7 @@ void chmod_close(struct ui* i) {
 void help_open(struct ui* i) {
 	WINDOW* nw = newwin(1, 1, 0, 0);
 	i->help = new_panel(nw);
-	i->scrw = i->scrh = 0;
+	i->ui_needs_refresh = true;
 	i->m = MODE_HELP;
 }
 
@@ -691,7 +691,7 @@ enum command get_cmd(struct ui* const i) {
 	static int ili = 0;
 	struct input newinput = get_input(stdscr);
 	if (newinput.t == SPECIAL && newinput.c == KEY_RESIZE) {
-		ui_update_geometry(i);
+		ui_update_geometry(i); // TODO TODO FIXME maybe not here
 		ui_draw(i);
 		ili = 0;
 		return CMD_NONE;

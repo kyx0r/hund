@@ -31,14 +31,9 @@
 
 enum task_type {
 	TASK_NONE = 0,
-	TASK_RM,
+	TASK_REMOVE,
 	TASK_COPY,
 	TASK_MOVE,
-	TASK_RENAME,
-	TASK_CD,
-	TASK_MKDIR,
-	TASK_CHOWN,
-	TASK_CHGRP,
 };
 
 #define NOUN 0
@@ -46,12 +41,9 @@ enum task_type {
 #define PAST 2
 static const utf8* const task_strings[][3] = {
 	[TASK_NONE] = { NULL, NULL, NULL},
-	[TASK_RM] = { "remove", "removing", "removed" },
+	[TASK_REMOVE] = { "remove", "removing", "removed" },
 	[TASK_COPY] = { "copy", "copying", "copied" },
 	[TASK_MOVE] = { "move", "moving", "moved" },
-	[TASK_RENAME] = { "rename", NULL, "renamed" },
-	[TASK_CD] = { "open", NULL, "opened" },
-	[TASK_MKDIR] = { "create directory", NULL, "created directory" }
 };
 
 enum task_state {
@@ -65,10 +57,11 @@ enum task_state {
 };
 
 enum fs_walk {
-	AT_NOWHERE = 0,
-	AT_FILE,
-	AT_DIR,
-	AT_END,
+	AT_NOWHERE = 0, // finished walking
+	AT_INIT, // right after start_dir(), expects directory
+	AT_FILE, // on file
+	AT_DIR, // on dir (will enter this dir)
+	AT_END, // finished reading dir, will go up
 };
 
 struct dirtree {
@@ -78,19 +71,23 @@ struct dirtree {
 	struct dirent* ce;
 };
 
-/* AKA long task
- * Requires long disk operations
+struct tree_walk {
+	enum fs_walk fsw;
+	struct dirtree* dt;
+	char* wpath;
+};
+
+/* Requires long disk operations
  * Displays state
  */
 struct task {
 	enum task_state s;
 	enum task_type t;
-	bool running;
-	utf8 *src, *dst, *newname;
+	bool running; // used for pausing
+	utf8 *src, *dst, *newname; // newname is used for name conflicts
 
-	char wpath[PATH_MAX+1];
-	struct dirtree* dir;
-	int in, out;
+	int in, out; // when copying, fd of old and new files are held here
+
 	ssize_t size_total, size_done;
 	int files_total, files_done;
 	int dirs_total, dirs_done;
@@ -98,7 +95,7 @@ struct task {
 
 void task_new(struct task*, enum task_type, utf8*, utf8*, utf8*);
 
-int task_build_file_list(struct task*, char*);
+int task_estimate_file_volume(struct task*, char*);
 void task_clean(struct task*);
 
 utf8* build_new_path(struct task*, utf8*);
