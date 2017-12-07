@@ -39,7 +39,7 @@ enum task_type {
 #define NOUN 0
 #define ING 1
 #define PAST 2
-static const utf8* const task_strings[][3] = {
+static const char* const task_strings[][3] = {
 	[TASK_NONE] = { NULL, NULL, NULL},
 	[TASK_REMOVE] = { "remove", "removing", "removed" },
 	[TASK_COPY] = { "copy", "copying", "copied" },
@@ -48,15 +48,13 @@ static const utf8* const task_strings[][3] = {
 
 enum task_state {
 	TASK_STATE_CLEAN = 0,
-	TASK_STATE_GATHERING_DATA,
-	TASK_STATE_DATA_GATHERED, // AKA ready to execute
 	TASK_STATE_EXECUTING,
 	TASK_STATE_FINISHED, // AKA all done, cleanme
 	//TASK_STATE_FAILED
 	TASK_STATE_NUM
 };
 
-enum fs_walk {
+enum tree_walk_state {
 	AT_NOWHERE = 0, // finished walking
 	AT_INIT, // right after start_dir(), expects directory
 	AT_FILE, // on file
@@ -65,16 +63,22 @@ enum fs_walk {
 };
 
 struct dirtree {
-	struct dirtree* up;
-	DIR* cd;
-	struct stat cs;
-	struct dirent* ce;
+	struct dirtree* up; // ..
+	DIR* cd; // Current Directory
+	struct stat cs; // Current Stat
+	struct dirent* ce; // Current Entry
 };
 
+/* It's basically an iterative directory tree walker
+ * tree_walk_step() goes to the next POINT
+ * POINT may be a file, directory OR directory end or end of tree
+ * Reacting to those POINTS is done in a simple loop and a switch statement.
+ */
 struct tree_walk {
-	enum fs_walk fsw;
+	enum tree_walk_state tws;
 	struct dirtree* dt;
-	char* wpath;
+	char* wpath; // working path; needed for the 'walker'
+	char* cpath; // current path; will contain path of file/dir at current step
 };
 
 /* Requires long disk operations
@@ -84,7 +88,9 @@ struct task {
 	enum task_state s;
 	enum task_type t;
 	bool running; // used for pausing
-	utf8 *src, *dst, *newname; // newname is used for name conflicts
+	char *src, *dst, *newname; // newname is used for name conflicts
+
+	struct tree_walk tw;
 
 	int in, out; // when copying, fd of old and new files are held here
 
@@ -93,12 +99,16 @@ struct task {
 	int dirs_total, dirs_done;
 };
 
-void task_new(struct task*, enum task_type, utf8*, utf8*, utf8*);
+void task_new(struct task*, enum task_type, char*, char*, char*);
 
 int task_estimate_file_volume(struct task*, char*);
 void task_clean(struct task*);
 
-utf8* build_new_path(struct task*, utf8*);
+char* build_new_path(struct task*, char*);
+
+void tree_walk_start(struct tree_walk*, const char* const);
+void tree_walk_end(struct tree_walk*);
+void tree_walk_step(struct tree_walk*);
 
 int do_task(struct task*, int);
 
