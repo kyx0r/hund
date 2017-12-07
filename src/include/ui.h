@@ -357,6 +357,14 @@ static const struct cmd2help cmd_help[] = {
 	{ .c = CMD_HELP_QUIT, .hint = "quit", .help = "Quit help screen." },
 };
 
+static const char* const copyright_notice[] = {
+	"Hund  Copyright (C) 2017  Michał Czarnecki",
+	"Hund comes with ABSOLUTELY NO WARRANTY.",
+	"This is free software, and you are welcome to",
+	"redistribute it under terms of GNU General Public License.",
+	NULL,
+};
+
 static const size_t cmd_help_length = sizeof(cmd_help)/sizeof(struct cmd2help);
 
 struct ui_chmod {

@@ -188,9 +188,6 @@ static void _printw_entry(WINDOW* const w, const fnum_t dr,
 	wattron(w, COLOR_PAIR(te));
 	fnum_t space = width;
 	fnum_t begin = 0;
-	mvwprintw(w, dr, begin, "%c", theme_scheme[te][0]);
-	space -= 1;
-	begin += 1;
 
 	char invname[NAME_MAX+1];
 	const bool valid = utf8_validate(cfr->file_name);
@@ -200,9 +197,10 @@ static void _printw_entry(WINDOW* const w, const fnum_t dr,
 
 	const size_t fnw = utf8_width(fn);
 	const size_t printfn = (space > fnw ? fnw : space);
-	mvwprintw(w, dr, begin, "%.*s", utf8_slice_length(fn, printfn), fn);
-	space -= printfn;
-	begin += printfn;
+	mvwprintw(w, dr, begin, "%c%.*s",
+			theme_scheme[te][0], utf8_slice_length(fn, printfn), fn);
+	space -= printfn+1;
+	begin += printfn+1;
 
 	if (!highlight) {
 		if (cfr->l) wattron(w, COLOR_PAIR(THEME_ENTRY_LNK_PATH));
@@ -211,7 +209,6 @@ static void _printw_entry(WINDOW* const w, const fnum_t dr,
 	if ((cfr->s.st_mode & S_IFMT) == S_IFLNK) {
 		const size_t lpw = utf8_width(lp);
 		const size_t printlp = (space > 4+lpw ? 4+lpw : space);
-		// TODO what if link path is corrupted?
 		mvwprintw(w, dr, begin, " -> %.*s",
 				utf8_slice_length(lp, printlp), lp);
 		space -= printlp;
@@ -357,22 +354,26 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 }
 
 static void ui_draw_help(struct ui* const i) {
-	WINDOW* hw = panel_window(i->help);
-	int hheight = i->scrh-1;
-	int lines = 4*2 + cmd_help_length - 1 + 5; // TODO
+	WINDOW* const hw = panel_window(i->help);
+	const int hheight = i->scrh-1;
+	const int lines = 4*2 + cmd_help_length - 1 + 5; // TODO
 	int dr = -i->helpy;
 	if (dr + lines < hheight) {
 		dr = hheight - lines;
 		i->helpy = -dr;
 	}
 	wattron(hw, A_BOLD);
-	mvwprintw(hw, dr++, 0, "Hund  Copyright (C) 2017  Michał Czarnecki%*c", i->scrw-4, ' ');
-	mvwprintw(hw, dr++, 0, "Hund comes with ABSOLUTELY NO WARRANTY.%*c", i->scrw-4, ' ');
-	mvwprintw(hw, dr++, 0, "This is free software, and you are welcome to%*c", i->scrw-4, ' ');
-	mvwprintw(hw, dr++, 0, "redistribute it under terms of GNU General Public License.%*c", i->scrw-4, ' ');
+	int crl = 0; // Copytight Notice Line
+	while (copyright_notice[crl]) {
+		const char* const cr = copyright_notice[crl];
+		mvwprintw(hw, dr, 0, "%s%*c", cr, i->scrw-utf8_width(cr), ' ');
+		dr += 1;
+		crl += 1;
+	}
+	mvwprintw(hw, dr, 0, "%*c", i->scrw, ' ');
     dr += 1;
-
 	wattroff(hw, A_BOLD);
+
 	for (size_t m = 0; m < MODE_NUM; ++m) {
 		wattron(hw, A_BOLD);
 		switch (m) {
@@ -693,12 +694,14 @@ enum command get_cmd(struct ui* const i) {
 	if (newinput.t == SPECIAL && newinput.c == KEY_RESIZE) {
 		ui_update_geometry(i); // TODO TODO FIXME maybe not here
 		ui_draw(i);
+		memset(il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
 		ili = 0;
 		return CMD_NONE;
 	}
 
 	if (newinput.t == END) return CMD_NONE;
 	else if (newinput.t == CTRL && newinput.ctrl == '[') {
+		memset(il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
 		ili = 0;
 		return CMD_NONE;
 	}
@@ -769,8 +772,8 @@ enum command get_cmd(struct ui* const i) {
 			}
 		}
 		if (fullmatch) {
-			ili = 0;
 			memset(il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
+			ili = 0;
 			// Not clearing on full match to preserve mks information for hints
 			// Instead, mks is cleared when entered get_cmd()
 			return i->kmap[mi].c;
