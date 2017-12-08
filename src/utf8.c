@@ -119,12 +119,11 @@ size_t utf8_cp2nb(const codepoint_t cp) {
 }
 
 /* Apparent width */
-size_t utf8_width(const utf8* const b) {
+size_t utf8_width(const utf8* b) {
 	size_t g = 0;
-	const utf8* p = b;
 	size_t s;
-	while (*p && (s = utf8_g2nb(p)) != 0) {
-		p += s;
+	while (*b && (s = utf8_g2nb(b)) != 0) {
+		b += s;
 		g += 1;
 	}
 	return g;
@@ -140,11 +139,10 @@ size_t utf8_slice_length(const utf8* const b, size_t g) {
 }
 
 /* Number of glyphs till some address in that string */
-size_t utf8_ng_till(const utf8* const a, const utf8* const b) {
-	const utf8* t = a;
+size_t utf8_ng_till(const utf8* a, const utf8* const b) {
 	size_t g = 0;
-	while (b - t > 0) {
-		t += utf8_g2nb(t);
+	while (b - a > 0) {
+		a += utf8_g2nb(a);
 		g += 1;
 	}
 	return g;
@@ -171,15 +169,13 @@ bool utf8_validate(const utf8* const b) {
 	return i == bl;
 }
 
-void utf8_insert(utf8* const a, const utf8* const b, const size_t pos) {
+void utf8_insert(utf8* a, const utf8* const b, const size_t pos) {
 	const size_t bl = strlen(b);
-	utf8* t = a;
-	size_t i = 0;
-	for (; i < pos; ++i) {
-		t += utf8_g2nb(t);
+	for (size_t i = 0; i < pos; ++i) {
+		a += utf8_g2nb(a);
 	}
-	memmove(t+bl, t, strlen(t));
-	memcpy(t, b, bl);
+	memmove(a+bl, a, strlen(a));
+	memcpy(a, b, bl);
 }
 
 /* Remove glyph at index */
