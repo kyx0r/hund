@@ -46,38 +46,34 @@ static const char* const task_strings[][3] = {
 	[TASK_MOVE] = { "move", "moving", "moved" },
 };
 
-enum task_state {
-	TASK_STATE_CLEAN = 0,
-	TASK_STATE_EXECUTING,
-	TASK_STATE_FINISHED, // AKA all done, cleanme
-	//TASK_STATE_FAILED
-	TASK_STATE_NUM
-};
-
 enum tree_walk_state {
-	AT_NOWHERE = 0, // finished walking
-	AT_INIT, // right after start_dir(), expects directory
-	AT_FILE, // on file
+	AT_NOWHERE = 0,
+	AT_EXIT, // finished reading tree
+	AT_INIT,
+	AT_FILE,
 	AT_DIR, // on dir (will enter this dir)
-	AT_END, // finished reading dir, will go up
+	AT_DIR_END, // finished reading dir (will go up)
 };
 
 struct dirtree {
 	struct dirtree* up; // ..
 	DIR* cd; // Current Directory
-	struct stat cs; // Current Stat
-	struct dirent* ce; // Current Entry
 };
 
 /* It's basically an iterative directory tree walker
- * tree_walk_step() goes to the next POINT
- * POINT may be a file, directory OR directory end or end of tree
- * Reacting to those POINTS is done in a simple loop and a switch statement.
+ * Reacting to AT_* steps is done in a simple loop and a switch statement.
+ *
+ * TODO only need d_name from dirent -> char* cfname
+ * TODO only need st_mode from stat -> mode_t cstat
+ * TODO symlinks
  */
 struct tree_walk {
 	enum tree_walk_state tws;
 	struct dirtree* dt;
 	char* wpath; // working path; needed for the 'walker'
+
+	struct stat cs; // Current Stat
+	struct dirent* ce; // Current Entry
 	char* cpath; // current path; will contain path of file/dir at current step
 };
 
@@ -85,32 +81,29 @@ struct tree_walk {
  * Displays state
  */
 struct task {
-	enum task_state s;
 	enum task_type t;
-	bool running; // used for pausing
+	bool paused;
+	bool done;
 	char *src, *dst, *newname; // newname is used for name conflicts
-
 	struct tree_walk tw;
-
 	int in, out; // when copying, fd of old and new files are held here
-
 	ssize_t size_total, size_done;
 	int files_total, files_done;
 	int dirs_total, dirs_done;
 };
 
-void task_new(struct task*, enum task_type, char*, char*, char*);
+void task_new(struct task* const, const enum task_type,
+		char* const, char* const, char* const);
+void task_clean(struct task* const);
 
 int task_estimate_file_volume(struct task*, char*);
-void task_clean(struct task*);
 
-char* build_new_path(struct task*, char*);
+char* build_new_path(const struct task* const,
+		const char* const, char* const);
 
 void tree_walk_start(struct tree_walk*, const char* const);
 void tree_walk_end(struct tree_walk*);
 void tree_walk_step(struct tree_walk*);
 
 int do_task(struct task*, int);
-
-int rename_if_same_fs(const struct task* const);
 #endif

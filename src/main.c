@@ -132,6 +132,7 @@ static void mode_help(struct ui* i, struct task* t) {
 }
 
 static void mode_chmod(struct ui* i, struct task* t) {
+	(void)(t);
 	switch (get_cmd(i)) {
 	case CMD_RETURN:
 		chmod_close(i);
@@ -201,13 +202,13 @@ static void mode_chmod(struct ui* i, struct task* t) {
 static void mode_wait(struct ui* i, struct task* t) {
 	switch (get_cmd(i)) {
 	case CMD_TASK_QUIT:
-		t->s = TASK_STATE_FINISHED;
+		t->done = true; // TODO
 		break;
 	case CMD_TASK_PAUSE:
-		t->running = false;
+		t->paused = true;
 		break;
 	case CMD_TASK_RESUME:
-		t->running = true;
+		t->paused = false;
 		break;
 	default: break;
 	}
@@ -218,7 +219,6 @@ static void prepare_long_task(struct ui* i, struct task* t,
 		enum task_type tt, const utf8* const err) {
 	// TODO OOM proof
 	// TODO cleanup
-	// TODO estimate_file_volume
 	if (!i->pv->num_files) return;
 	utf8* src = NULL, *dst = NULL, *nn = NULL;
 	if (!(src = file_view_path_to_selected(i->pv))) {
@@ -240,21 +240,12 @@ static void prepare_long_task(struct ui* i, struct task* t,
 		}
 	}
 	int r; // TODO
-	task_new(t, tt, src, dst, nn); // TODO
-	if ((r = rename_if_same_fs(t)) != -1) { // TODO
-		if (r) {
-			failed(i->error, "move via rename()", r, NULL);
-			task_clean(t);
-		}
-		else t->s = TASK_STATE_FINISHED;
-		return;
-	}
+	task_new(t, tt, src, dst, nn);
 	if ((r = task_estimate_file_volume(t, t->src))) {
 		failed(i->error, "build file list", r, NULL);
 		task_clean(t);
 		return;
 	}
-	t->s = TASK_STATE_EXECUTING;
 }
 
 static void mode_manager(struct ui* i, struct task* t) {
@@ -280,16 +271,14 @@ static void mode_manager(struct ui* i, struct task* t) {
 		prev_entry(i->pv);
 		break;
 	case CMD_EDIT_FILE:
-		path = file_view_path_to_selected(i->pv);
-		if (path) {
+		if ((path = file_view_path_to_selected(i->pv))) {
 			if (is_dir(path)) failed(i->error, "edit", EISDIR, NULL);
 			spawn("vi", path);
 			free(path);
 		}
 		break;
 	case CMD_OPEN_FILE:
-		path = file_view_path_to_selected(i->pv);
-		if (path) {
+		if ((path = file_view_path_to_selected(i->pv))) {
 			if (is_dir(path)) failed(i->error, "open", EISDIR, NULL);
 			spawn("less", path);
 			free(path);
@@ -300,7 +289,7 @@ static void mode_manager(struct ui* i, struct task* t) {
 		utf8* path = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
 		utf8* cdp = calloc(PATH_MAX+1, sizeof(utf8));
 		if (open_prompt(i, cdp, cdp, PATH_MAX)) {
-			free(path);
+			free(path); // TODO?
 			free(cdp);
 			break;
 		}
@@ -339,7 +328,7 @@ static void mode_manager(struct ui* i, struct task* t) {
 		{
 		utf8* npath = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
 		utf8* nname = calloc(NAME_MAX+1, sizeof(utf8));
-		if (open_prompt(i, nname, nname, PATH_MAX)) {
+		if (open_prompt(i, nname, nname, PATH_MAX)) { // TODO?
 			free(npath);
 			free(nname);
 			break;
@@ -378,12 +367,17 @@ static void mode_manager(struct ui* i, struct task* t) {
 		break;
 	case CMD_RENAME:
 		{
+		/* TODO what is user enters someting like:
+		 * 'dir/renamed.txt'
+		 * which perfectly fits NAME_MAX and will be accepted by append_dir()
+		 * conclusion: entering a PATH should be detected and not permitted
+		 */
 		utf8* opath = file_view_path_to_selected(i->pv);
 		utf8* npath = strcpy(malloc(PATH_MAX+1), i->pv->wd);
 		utf8* nname = calloc(NAME_MAX+1, sizeof(utf8));
 		strncpy(nname, i->pv->file_list[i->pv->selection]->file_name, NAME_MAX);
 		if (open_prompt(i, nname, nname+strnlen(nname, NAME_MAX), NAME_MAX)) {
-			free(opath);
+			free(opath); // ^^^^^^ TODO?
 			free(npath);
 			free(nname);
 		}
@@ -449,44 +443,9 @@ static void mode_manager(struct ui* i, struct task* t) {
 	}
 }
 
-/* Task state handler functions...
- * handle tasks depending on their state
- */
-typedef void (*task_state_handler) (struct ui*, struct task*);
-
-/* If task is long (removing, moving, copying)
- * it reaches TASK_STATE_EXECUTING,
- */
-static void task_state_executing(struct ui* i, struct task* t) {
-	wtimeout(stdscr, 5);
-	int e = 0;
-	if (t->running) e = do_task(t, 1024);
-	if (e && t->running) {
-		failed(i->error, task_strings[t->t][NOUN], e, NULL);
-		t->s = TASK_STATE_FINISHED;
-	}
-	else {
-		char sdone[SIZE_BUF_SIZE];
-		char stota[SIZE_BUF_SIZE];
-		pretty_size(t->size_done, sdone);
-		pretty_size(t->size_total, stota);
-		snprintf(i->info, MSG_BUFFER_SIZE,
-			"%s %s %d/%df, %d/%dd, %s / %s",
-			(t->running ? ">>" : "||"),
-			task_strings[t->t][ING],
-			t->files_done, t->files_total,
-			t->dirs_done, t->dirs_total,
-			sdone, stota);
-		// TODO merge task_state_finished
-	}
-}
-
 /* Display message and clean task */
-static void task_state_finished(struct ui* i, struct task* t) {
-	// TODO
-	if (t->t == TASK_REMOVE || t->t == TASK_MOVE || t->t == TASK_COPY) {
-		wtimeout(stdscr, -1);
-	}
+static void task_finish(struct ui* const i, struct task* const t) {
+	wtimeout(stdscr, -1);
 	// TODO
 	int epv = scan_dir(i->pv->wd, &i->pv->file_list, &i->pv->num_files);
 	int esv = scan_dir(i->sv->wd, &i->sv->file_list, &i->sv->num_files);
@@ -510,7 +469,29 @@ static void task_state_finished(struct ui* i, struct task* t) {
 				task_strings[t->t][PAST], t->src);
 	}
 	task_clean(t);
+	i->ui_needs_refresh = true;
 	i->m = MODE_MANAGER;
+}
+
+static void task_execute(struct ui* i, struct task* t) {
+	wtimeout(stdscr, 5);
+	int e = 0;
+	if (!t->paused && (e = do_task(t, 1024))) {
+		failed(i->error, task_strings[t->t][NOUN], e, NULL);
+		task_clean(t);
+		wtimeout(stdscr, -1);
+	}
+	char sdone[SIZE_BUF_SIZE];
+	char stota[SIZE_BUF_SIZE];
+	pretty_size(t->size_done, sdone);
+	pretty_size(t->size_total, stota);
+	snprintf(i->info, MSG_BUFFER_SIZE,
+		"%s %s %d/%df, %d/%dd, %s / %s",
+		(t->paused ? ">>" : "||"),
+		task_strings[t->t][ING],
+		t->files_done, t->files_total,
+		t->dirs_done, t->dirs_total,
+		sdone, stota);
 }
 
 int main(int argc, char* argv[])  {
@@ -532,7 +513,11 @@ int main(int argc, char* argv[])  {
 		if (o == -1) break;
 		switch (o) {
 		case 'c':
-			chdir(optarg);
+			if (chdir(optarg)) {
+				int e = errno;
+				fprintf(stderr, "chdir failed: %s (%d)\n", strerror(e), e);
+				exit(EXIT_FAILURE);
+			}
 			break;
 		case 'h':
 			printf("%s\n", help);
@@ -570,11 +555,10 @@ int main(int argc, char* argv[])  {
 	struct ui i = ui_init(&fvs[0], &fvs[1]);
 
 	for (int v = 0; v < 2; ++v) {
-		get_cwd(fvs[v].wd);
+		if (!getcwd(fvs[v].wd, PATH_MAX)) exit(EXIT_FAILURE); // TODO
 		if (init_wd[v]) { // Apply argument-passed paths
-			utf8* e = strndup(init_wd[v], PATH_MAX);
-			int r = enter_dir(fvs[v].wd, e);
-			if (r) {
+			utf8* const e = strndup(init_wd[v], PATH_MAX);
+			if (enter_dir(fvs[v].wd, e)) {
 				ui_end(&i);
 				fprintf(stderr, "path too long: limit is %d\n", PATH_MAX);
 				exit(EXIT_FAILURE);
@@ -612,8 +596,9 @@ int main(int argc, char* argv[])  {
 		// Execute mode handler
 		mhs[i.m](&i, &t);
 
-		if (t.s == TASK_STATE_EXECUTING) {
-			// TODO
+		if (t.t != TASK_NONE) {
+			if (t.done) task_finish(&i, &t);
+			else task_execute(&i, &t);
 		}
 	}
 

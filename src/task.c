@@ -19,25 +19,30 @@
 
 #include "include/task.h"
 
-void task_new(struct task* t, enum task_type tp,
-		char* src, char* dst, char* newname) {
-	*t = (struct task) {
-		.s = TASK_STATE_FINISHED,
-		.t = tp,
-		.running = true,
-		.src = src, // Full path of source file/dir
-		.dst = dst, // Contains working directory of the other panel
-		.newname = newname, // Used for conflicts
-		.in = -1,
-		.out = -1,
-		.size_total = 0,
-		.size_done = 0,
-		.files_total = 0,
-		.files_done = 0,
-		.dirs_total = 0,
-		.dirs_done = 0
-	};
+void task_new(struct task* const t, const enum task_type tp,
+		char* const src, char* const dst, char* const newname) {
+	t->t = tp;
+	t->paused = t->done = false;
+	t->src = src;
+	t->dst = dst;
+	t->newname = newname;
+	t->in = t->out = -1;
+	t->size_total = t->size_done = 0,
+	t->files_total = t->files_done = 0,
+	t->dirs_total = t->dirs_done = 0;
 	memset(&t->tw, 0, sizeof(struct tree_walk));
+}
+
+void task_clean(struct task* const t) {
+	if (t->src) free(t->src);
+	if (t->dst) free(t->dst);
+	if (t->newname) free(t->newname);
+	t->src = t->dst = t->newname = NULL;
+	t->t = TASK_NONE;
+	t->paused = t->done = false;
+	if (t->in != -1) close(t->in);
+	if (t->out != -1) close(t->out);
+	t->in = t->out = -1;
 }
 
 /* TODO symlinks
@@ -81,61 +86,54 @@ int task_estimate_file_volume(struct task* t, char* path) {
 	return r;
 }
 
-void task_clean(struct task* t) {
-	if (t->src) free(t->src);
-	if (t->dst) free(t->dst);
-	if (t->newname) free(t->newname);
-	t->src = NULL;
-	t->dst = NULL;
-	t->newname = NULL;
-	t->s = TASK_STATE_CLEAN;
-	t->t = TASK_NONE;
-	if (t->in != -1) close(t->in);
-	t->in = -1;
-	if (t->out != -1) close(t->out);
-	t->out = -1;
-}
-
 static int _close_inout(struct task* t) {
 	int r = 0; // TODO
 	r |= close(t->in);
 	r |= close(t->out);
-	t->in = -1;
-	t->out = -1;
+	t->in = t->out = -1;
 	return r;
 }
 
-static inline int _copy_some(struct task* t, char* npath, void* buf, int* c) {
-	/*if (t->out == -1 || t->in == -1) {
-		t->out = open(t->checklist->path, O_RDONLY);
+static int _copy_some(struct task* t,
+		const char* const src, const char* const dst,
+		void* const buf, const size_t bufsize, int* const c) {
+	// TODO better error handling
+	int e = 0;
+	if (t->out == -1 || t->in == -1) {
+		t->out = open(src, O_RDONLY);
 		if (t->out == -1) return errno;
-		t->in = open(npath, O_CREAT | O_WRONLY | t->checklist->s.st_mode);
+		t->in = open(dst, O_CREAT | O_WRONLY, t->tw.cs.st_mode);
 		if (t->in == -1) return errno;
 
 		struct stat outs;
 		fstat(t->out, &outs);
-		int e = posix_fallocate(t->in, 0, outs.st_size);
-		// TODO detect earlier if fallocate is supported
-		if (e != EOPNOTSUPP && e != ENOSYS) return errno;
+		if (outs.st_size > 0) {
+			e = posix_fallocate(t->in, 0, outs.st_size);
+			// TODO detect earlier if fallocate is supported
+			if (e != EOPNOTSUPP && e != ENOSYS) return e;
+		}
 	}
 	ssize_t wb = -1, rb = -1;
 	while (*c > 0) {
-		rb = read(t->out, buf, BUFSIZ);
+		rb = read(t->out, buf, bufsize);
 		if (!rb) {
-			task_file_done(t);
+			t->files_done += 1;
 			return _close_inout(t);
 		}
 		if (rb == -1) {
-			return errno | _close_inout(t);
+			e = errno;
+			_close_inout(t);
+			return e;
 		}
 		wb = write(t->in, buf, rb);
 		if (wb == -1) {
-			return errno | _close_inout(t);
+			e = errno;
+			_close_inout(t);
+			return e;
 		}
 		t->size_done += wb;
-		t->checklist->progress += wb;
 		*c -= 1;
-	}*/
+	}
 	return 0;
 }
 
@@ -202,45 +200,46 @@ static inline int _copy_some(struct task* t, char* npath, void* buf, int* c) {
  *
  * TODO block doing anything to block devices, sockets and other non-regular files
  */
-char* build_new_path(struct task* t, char* cp) {
-	char* new_path = malloc(PATH_MAX+1);
-	strncpy(new_path, cp, PATH_MAX);
+
+char* build_new_path(const struct task* const t,
+		const char* const cp, char* const buf) {
+	strncpy(buf, cp, PATH_MAX);
 	if (t->newname) { // name colission; using new name
 		static char _dst[PATH_MAX+1];
 		strncpy(_dst, t->dst, PATH_MAX);
 		if (append_dir(_dst, t->newname)) return NULL;
-		substitute(new_path, t->src, _dst);
+		substitute(buf, t->src, _dst);
 	}
 	else { // name stays the same
 		const size_t repll = current_dir_i(t->src)-1;
-		char* repl = malloc(repll);
-		strncpy(repl, t->src, repll);
+		char* const repl = strncpy(malloc(repll+1), t->src, repll);
 		repl[repll] = 0;
-		substitute(new_path, repl, t->dst);
+		substitute(buf, repl, t->dst);
 		free(repl);
 	}
-	return new_path;
+	return buf;
 }
 
 void tree_walk_start(struct tree_walk* tw, const char* const path) {
-	tw->cpath = calloc(PATH_MAX+1, sizeof(char));
-	tw->wpath = malloc(PATH_MAX+1);
+	tw->cpath = strncpy(malloc(PATH_MAX+1), path, PATH_MAX);
+	tw->wpath = strncpy(malloc(PATH_MAX+1), path, PATH_MAX);
 	tw->dt = malloc(sizeof(struct dirtree));
-	strncpy(tw->wpath, path, PATH_MAX);
-	tw->dt->cd = opendir(tw->wpath); // TODO errors
+	//tw->dt->cd = opendir(tw->wpath); // TODO errors
+	tw->dt->cd = NULL;
 	tw->dt->up = NULL;
-	tw->dt->ce = NULL;
+	tw->ce = NULL;
+	lstat(path, &tw->cs);
 	tw->tws = AT_INIT;
 }
 
 static void tree_walk_down(struct tree_walk* tw) {
-	const char* const d_name = tw->dt->ce->d_name;
+	const char* const d_name = tw->ce->d_name;
 	struct dirtree* const dt = malloc(sizeof(struct dirtree));
 	dt->up = tw->dt;
 	tw->dt = dt;
-	dt->ce = NULL;
 	dt->cd = NULL;
 	append_dir(tw->wpath, d_name);
+	strncpy(tw->cpath, tw->wpath, PATH_MAX);
 	tw->dt->cd = opendir(tw->wpath);
 }
 
@@ -261,119 +260,156 @@ void tree_walk_end(struct tree_walk* tw) {
 
 void tree_walk_step(struct tree_walk* tw) {
 	// TODO error handling
+	// TODO links
 	switch (tw->tws)  {
-	case AT_NOWHERE: return;
+	case AT_INIT:
+		if (S_ISDIR(tw->cs.st_mode)) {
+			tw->dt->cd = opendir(tw->wpath);
+		}
+		else {
+			tw->tws = AT_FILE;
+			return;
+		}
+		break;
+	case AT_FILE:
+		if (!tw->dt->cd) {
+			tw->tws = AT_EXIT;
+			return;
+		}
+		up_dir(tw->cpath);
+		break;
 	case AT_DIR: tree_walk_down(tw); break;
-	case AT_END: tree_walk_up(tw); break;
+	case AT_DIR_END: tree_walk_up(tw); break;
 	default: break;
 	}
 
 	if (!tw->dt) { // dirtree is empty
-		tw->tws = AT_NOWHERE;
+		tw->tws = AT_EXIT;
 		return;
 	}
-	do {
-		tw->dt->ce = readdir(tw->dt->cd);
-	} while (tw->dt->ce && (
-			!strcmp(tw->dt->ce->d_name, ".") ||
-			!strcmp(tw->dt->ce->d_name, "..")));
-	if (!tw->dt->ce) { // directory is empty or reached end of directory
-		tw->tws = AT_END;
+
+	do { // Skip . and .
+		tw->ce = readdir(tw->dt->cd);
+	} while (tw->ce && (
+			!strncmp(tw->ce->d_name, ".", 2) ||
+			!strncmp(tw->ce->d_name, "..", 3)));
+
+	if (!tw->ce) { // directory is empty or reached end of directory
+		tw->tws = AT_DIR_END;
 		return;
 	}
+
 	strncpy(tw->cpath, tw->wpath, PATH_MAX);
-	append_dir(tw->cpath, tw->dt->ce->d_name);
-	lstat(tw->cpath, &tw->dt->cs);
-	if (S_ISDIR(tw->dt->cs.st_mode)) { // entry is directory
+	append_dir(tw->cpath, tw->ce->d_name);
+	lstat(tw->cpath, &tw->cs);
+	if (S_ISDIR(tw->cs.st_mode)) { // entry is directory
 		tw->tws = AT_DIR;
 		return;
 	}
 	tw->tws = AT_FILE; // entry is file
-	// TODO links
+}
+
+int _at_step(struct task* const t, int* const c,
+		char* const npath, char* const buf, const size_t bufsize) {
+	const bool copy = t->t == TASK_COPY || t->t == TASK_MOVE;
+	const bool remove = t->t == TASK_MOVE || t->t == TASK_REMOVE;
+	const bool file = (t->tw.cs.st_mode & S_IFMT) == S_IFREG;
+	const bool dir = (t->tw.cs.st_mode & S_IFMT) == S_IFDIR;
+	const bool link = (t->tw.cs.st_mode & S_IFMT) == S_IFLNK;
+	if (link) {
+		syslog(LOG_DEBUG, "skipping symlink %s"
+				" (this will be implemented later)", t->tw.cpath);
+		return 0; // TODO TODO TODO
+	}
+	int e;
+	switch (t->tw.tws) {
+	case AT_INIT:
+		// TODO check same fs
+		//syslog(LOG_DEBUG, "init %s\n", t->tw.cpath);
+		if (copy) {
+			build_new_path(t, t->tw.cpath, npath);
+			if (dir) {
+				//syslog(LOG_DEBUG, "  mkdir %s", npath);
+				if (mkdir(npath, t->tw.cs.st_mode)) return errno;
+				t->dirs_done += 1;
+			}
+			else if (file) {
+				//syslog(LOG_DEBUG, "  cp %s -> %s", t->tw.cpath, npath);
+				e = _copy_some(t, t->tw.cpath, npath, buf, bufsize, c);
+				if (e) {
+					//syslog(LOG_DEBUG, "  err %s (%d)", strerror(e), e);
+					return e;
+				}
+			}
+		}
+		if (remove && file) {
+			build_new_path(t, t->tw.cpath, npath);
+			//syslog(LOG_DEBUG, "  rm %s", t->tw.cpath);
+			if (unlink(t->tw.cpath)) return errno;
+			t->files_done += 1;
+		}
+		t->size_done += t->tw.cs.st_size;
+		*c -= 1;
+		break;
+	case AT_FILE:
+		//syslog(LOG_DEBUG, "file %s\n", t->tw.cpath);
+		if (copy) {
+			build_new_path(t, t->tw.cpath, npath);
+			//syslog(LOG_DEBUG, "  cp %s -> %s", t->tw.cpath, npath);
+			e = _copy_some(t, t->tw.cpath, npath, buf, bufsize, c);
+			if (e) {
+				syslog(LOG_DEBUG, "  err %s %s (%d)",
+						t->tw.cpath, strerror(e), e);
+				return e;
+			}
+		}
+		if (remove) {
+			//syslog(LOG_DEBUG, "  rm %s", t->tw.cpath);
+			if (unlink(t->tw.cpath)) return errno;
+		}
+		if (remove && !copy) {
+			t->size_done += t->tw.cs.st_size;
+			t->files_done += 1;
+			*c -= 1;
+		}
+		break;
+	case AT_DIR:
+		//syslog(LOG_DEBUG, "dir: %s\n", t->tw.cpath);
+		if (copy) {
+			build_new_path(t, t->tw.cpath, npath);
+			//syslog(LOG_DEBUG, "  mkdir %s", npath);
+			if (mkdir(npath, t->tw.cs.st_mode)) return errno;
+			t->size_done += t->tw.cs.st_size;
+			t->dirs_done += 1;
+			*c -= 1;
+		}
+		break;
+	case AT_DIR_END:
+		//syslog(LOG_DEBUG, "end: %s\n", t->tw.cpath);
+		if (remove) {
+			//syslog(LOG_DEBUG, "  rmdir %s", t->tw.cpath);
+			if (rmdir(t->tw.cpath)) return errno;
+			t->dirs_done += 1;
+			*c -= 1;
+		}
+		break;
+	default: break;
+	}
+	return 0;
 }
 
 int do_task(struct task* t, int c) {
-	struct tree_walk* const tw = &t->tw; // FIXME
-	tree_walk_start(tw, t->src);
-	syslog(LOG_DEBUG, "entry %s %s\n", tw->cpath, tw->wpath);
-	while (tw->tws != AT_NOWHERE) {
-		tree_walk_step(tw);
-		switch (tw->tws) {
-		case AT_NOWHERE:
-			syslog(LOG_DEBUG, "finished %s %s\n", tw->cpath, tw->wpath);
-			break;
-		case AT_INIT:
-			syslog(LOG_DEBUG, "init %s %s\n", tw->cpath, tw->wpath);
-			break;
-		case AT_FILE:
-			syslog(LOG_DEBUG, "file %s %s\n", tw->cpath, tw->wpath);
-			break;
-		case AT_DIR:
-			syslog(LOG_DEBUG, "dir: %s %s\n", tw->cpath, tw->wpath);
-			break;
-		case AT_END:
-			syslog(LOG_DEBUG, "end: %s %s\n", tw->cpath, tw->wpath);
-			break;
-		default: break;
-		}
+	if (t->tw.tws == AT_NOWHERE) tree_walk_start(&t->tw, t->src);
+	char npath[PATH_MAX+1];
+	char buf[BUFSIZ];
+	while (t->tw.tws != AT_EXIT && c > 0) {
+		_at_step(t, &c, npath, buf, BUFSIZ); // TODO error
+		if (t->in == -1 && t->out == -1) tree_walk_step(&t->tw);
 	}
-	tree_walk_end(tw);
-	t->s = TASK_STATE_FINISHED;
-	/*dir_start(t);
-	enum fs_walk fsw = AT_INIT;
-	while ((fsw = tree_walk(t, t->wpath)), c) {
-		switch (fsw) {
-		case AT_INIT:
-			if (t->t == TASK_COPY || t->t == TASK_MOVE) {
-				utf8* npath = build_new_path(t, t->wpath);
-				if (mkdir(npath, t->dir->cs.st_mode)) return errno;
-				free(npath);
-			}
-			break;
-		case AT_NOWHERE:
-			if (t->t == TASK_REMOVE || t->t == TASK_MOVE) {
-				if (rmdir(t->wpath)) return errno;
-			}
-			t->s = TASK_STATE_FINISHED;
-			return 0;
-		case AT_FILE:
-			syslog(LOG_DEBUG, "file %s\n", t->wpath);
-			if (t->t == TASK_COPY || t->t == TASK_MOVE) {
-				utf8* npath = build_new_path(t, t->wpath); // TODO cache
-				static char buf[BUFSIZ];
-				int e = _copy_some(t, npath, buf, &c);
-				free(npath);
-				if (e) return e;
-			}
-			if (t->t == TASK_REMOVE || t->t == TASK_MOVE) {
-				if (unlink(t->wpath)) return errno;
-				t->size_done += t->dir->cs.st_size;
-				c -= 1;
-			}
-			break;
-		case AT_DIR:
-			syslog(LOG_DEBUG, "dir %s\n", t->wpath);
-			if (t->t == TASK_COPY || t->t == TASK_MOVE) {
-				utf8* npath = build_new_path(t, t->wpath);
-				if (mkdir(npath, t->dir->cs.st_mode)) return errno;
-				free(npath);
-			}
-			if (t->t == TASK_REMOVE || t->t == TASK_MOVE) {
-				if (rmdir(t->wpath)) return errno;
-			}
-			c -= 1;
-			t->size_done += t->dir->cs.st_size;
-			t->files_done += 1;
-			dir_down(t);
-			break;
-		case AT_END:
-			syslog(LOG_DEBUG, "end %s\n", t->wpath);
-			dir_up(t);
-			syslog(LOG_DEBUG, "in %s\n", t->wpath);
-			break;
-		default: break;
-		}
-	}*/
+	if (t->tw.tws == AT_EXIT) {
+		t->done = true;
+		tree_walk_end(&t->tw);
+	}
 	/*while (t->checklist && c > 0) {
 		mode_t ftype = (t->checklist->s.st_mode & S_IFMT);
 		if (ftype == S_IFBLK || ftype == S_IFCHR ||
@@ -398,31 +434,6 @@ int do_task(struct task* t, int c) {
 			t->size_done += s.st_size;
 			t->files_done += 1;
 		}
-		else if (isdir) {
-		else { // regular file
 	}*/
 	return 0;
-}
-
-/* If files are on the same filesystem, then the quickest
- * way to move files or whole directories is to rename() them.
- *
- * Returns 0 if was same fs and operation was succesful
- * Returns -1 if wasn't the same fs
- * Returns errno code if something went wrong
- */
-int rename_if_same_fs(const struct task* const t) {
-	if (same_fs(t->src, t->dst)) {
-		char* ndst = malloc(PATH_MAX);
-		strncpy(ndst, t->dst, PATH_MAX);
-		append_dir(ndst, t->src+current_dir_i(t->src));
-		if (rename(t->src, ndst)) {
-			int e = errno;
-			free(ndst);
-			return e;
-		}
-		free(ndst);
-		return 0;
-	}
-	return -1;
 }
