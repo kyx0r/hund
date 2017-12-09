@@ -33,18 +33,17 @@
 #include <grp.h>
 #include <errno.h>
 
-void get_cwd(char*);
 struct passwd* get_pwd(void);
 
 int append_dir(char* const, const char* const);
 int enter_dir(char* const, const char* const);
 int up_dir(char* const);
-int prettify_path(char*, char*);
+int prettify_path(char* const, const char* const);
 void current_dir(const char* const, char* const);
 bool path_is_relative(const char* const);
 
 int prettify_path_i(const char* const, const char* const);
-int current_dir_i(const char*);
+int current_dir_i(const char* const);
 
 bool substitute(char* const, const char* const, const char* const);
 size_t imb(const char*, const char*);

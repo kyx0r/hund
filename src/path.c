@@ -19,10 +19,6 @@
 
 #include "include/path.h"
 
-void get_cwd(char* b) {
-	getcwd(b, PATH_MAX);
-}
-
 struct passwd* get_pwd(void) {
 	return getpwuid(geteuid());
 }
@@ -138,7 +134,7 @@ int up_dir(char* const path) {
  * 0 if found home in path and changed
  * -1 if not found home in path; path unchanged
  */
-int prettify_path(char* path, char* home) {
+int prettify_path(char* const path, const char* const home) {
 	const int hlen = strnlen(home, PATH_MAX);
 	const int plen = strnlen(path, PATH_MAX);
 	if (!memcmp(path, home, hlen)) {
@@ -186,7 +182,7 @@ int prettify_path_i(const char* const path, const char* const home) {
  * it just points to place in buffer,
  * where current dir's name starts
  */
-int current_dir_i(const char* path) {
+int current_dir_i(const char* const path) {
 	const int plen = strlen(path);
 	int i = plen-1; // i will point last slash in path
 	while (path[i] != '/' && i >= 0) {
