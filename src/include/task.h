@@ -63,17 +63,17 @@ struct dirtree {
 /* It's basically an iterative directory tree walker
  * Reacting to AT_* steps is done in a simple loop and a switch statement.
  *
- * TODO only need d_name from dirent -> char* cfname
  * TODO only need st_mode from stat -> mode_t cstat
  * TODO symlinks
+ * TODO cpath & wpath: reduce to only one if possible
  */
 struct tree_walk {
 	enum tree_walk_state tws;
 	struct dirtree* dt;
-	char* wpath; // working path; needed for the 'walker'
+	char* wpath;
 
 	struct stat cs; // Current Stat
-	struct dirent* ce; // Current Entry
+	char* dname;
 	char* cpath; // current path; will contain path of file/dir at current step
 };
 
