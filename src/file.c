@@ -161,7 +161,7 @@ int cmp_date_desc(const void* p1, const void* p2) {
 }
 
 int sort_file_list(int (*cmp)(const void*, const void*),
-		struct file_record** fl, fnum_t nf) {
+		struct file_record** fl, const fnum_t nf) {
 	qsort(fl, nf, sizeof(struct file_record*), cmp);
 	return 0;
 }

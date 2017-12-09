@@ -84,7 +84,7 @@ int cmp_date_asc(const void*, const void*);
 int cmp_date_desc(const void*, const void*);
 
 int sort_file_list(int (*)(const void*, const void*),
-		struct file_record**, fnum_t);
+		struct file_record**, const fnum_t);
 
 int link_copy(const char* const, const char* const, const char* const);
 
