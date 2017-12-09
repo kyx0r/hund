@@ -28,11 +28,12 @@ struct passwd* get_pwd(void) {
  * and dir to be NAME_MAX long.
  *
  * returns ENAMETOOLONG if buffer would overflow and leaves path unchanged
- * returns 0 if succesful
+ * returns 0 if succesful or dir is empty string
  */
 int append_dir(char* const path, const char* const dir) {
-	const size_t pl = strnlen(path, PATH_MAX);
 	const size_t dl = strnlen(dir, NAME_MAX);
+	if (!dl) return 0;
+	const size_t pl = strnlen(path, PATH_MAX);
 	if (pl+2+dl > PATH_MAX) return ENAMETOOLONG;
 	strncat(path, "/", 2);
 	strncat(path, dir, dl+1); // null-terminator
