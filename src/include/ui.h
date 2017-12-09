@@ -174,7 +174,7 @@ enum input_type {
 	CTRL,
 };
 
-struct input {
+struct input { // TODO
 	enum input_type t;
 	union {
 		char utf[5];
@@ -416,11 +416,11 @@ void ui_end(struct ui* const);
 void ui_draw(struct ui* const);
 void ui_update_geometry(struct ui* const);
 
-int chmod_open(struct ui*, utf8*);
-void chmod_close(struct ui*);
+int chmod_open(struct ui* const, utf8* const);
+void chmod_close(struct ui* const);
 
-void help_open(struct ui*);
-void help_close(struct ui*);
+void help_open(struct ui* const);
+void help_close(struct ui* const);
 
 struct input get_input(WINDOW* const);
 enum command get_cmd(struct ui* const);

@@ -27,6 +27,7 @@
  */
 
 /* get cmd2help coresponding to given command */
+// TODO FIXME
 static const struct cmd2help* get_help_data(const enum command c) {
 	for (size_t i = 0; i < CMD_NUM && i < cmd_help_length; ++i) {
 		if (cmd_help[i].c == c) return &cmd_help[i];
@@ -156,13 +157,13 @@ void ui_end(struct ui* const i) {
 
 static void _printw_pathbar(const char* const path,
 		WINDOW* const w, fnum_t width) {
+	// TODO
 	const struct passwd* const pwd = get_pwd();
 	const int pi = prettify_path_i(path, pwd->pw_dir);
 	const size_t path_width = utf8_width(path+pi) + (pi ? 1 : 0);
 	wattron(w, COLOR_PAIR(THEME_PATHBAR));
 	if (path_width <= width-2) {
-		mvwprintw(w, 0, 0, "%s%s%*c ",
-				(pi ? " ~" : " "),
+		mvwprintw(w, 0, 0, "%s%s%*c ", (pi ? " ~" : " "),
 				path+pi, width-utf8_width(path+pi), ' ');
 	}
 	else {
@@ -183,7 +184,7 @@ static void _printw_entry(WINDOW* const w, const fnum_t dr,
 	char* const buf = malloc(bufl);
 	memset(buf, ' ', bufl);
 	buf[bufl-1] = 0;
-	buf[strlen(buf)] = ' ';
+	buf[strnlen(buf, bufl)] = ' ';
 
 	wattron(w, COLOR_PAIR(te));
 	fnum_t space = width;
@@ -223,11 +224,6 @@ static void _printw_entry(WINDOW* const w, const fnum_t dr,
 	free(buf);
 }
 
-/* I'm drawing N entries before selection,
- * selection itself
- * and as many entries after selection as needed
- * to fill remaining space. */
-
 /* - Max Entries = how many entries I need to fill
  * all available space in file view
  * (selection excluded - it's always drawn)
@@ -245,11 +241,40 @@ static void _printw_entry(WINDOW* const w, const fnum_t dr,
  * - Under Index = iterator; an index offset relative from selection,
  *   selection-ui = effective index
  */
+
+/*
+ * At which index should I start looking
+ * for visible entries to catch all that can be displayed
+ */
+static fnum_t _start_search_index(const struct file_view* const s,
+		const fnum_t nhf, const fnum_t me) {
+	fnum_t eo = 0; // Entries Over
+	fnum_t oi = 1; // Over Index
+	fnum_t bi = 0; // Begin Index
+	fnum_t eu = 0; // Entries Under
+	fnum_t ui = 1; // Under Index
+	/* How many entries are under selection? */
+	while (s->num_files-nhf && s->selection+ui < s->num_files && eu <= me/2) {
+		if (visible(s, s->selection+ui)) eu += 1;
+		ui += 1;
+	}
+	/* How many entries are over selection?
+	 * (If there are few entries under, then use up all remaining space)
+	 */
+	while (s->num_files-nhf && s->selection >= oi && eo + 1 + eu <= me) {
+		if (visible(s, s->selection-oi)) eo += 1;
+		bi = s->selection-oi;
+		oi += 1;
+	}
+	return bi;
+}
+
 static void ui_draw_panel(struct ui* const i, const int v) {
 	// TODO make readable
 	const struct file_view* const s = i->fvs[v];
 	const bool sh = s->show_hidden;
 	WINDOW* const w = panel_window(i->fvp[v]);
+
 	int _ph = 0, _pw = 0;
 	getmaxyx(w, _ph, _pw);
 	if (_ph < 0 || _ph < 0) return; // these may be -1
@@ -275,35 +300,14 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 		}
 	}
 
-	fnum_t me = ph - 3; // Max Entries
-	// 3 = 1 path bar + 1 statusbar + 1 infobar
-	fnum_t eo = 0; // Entries Over
-	fnum_t oi = 1; // Over Index
-	fnum_t bi = 0; // Begin Index
-	fnum_t eu = 0; // Entries Under
-	fnum_t ui = 1; // Under Index
-	/* How many entries are under selection? */
-	while (s->num_files-nhf && s->selection+ui < s->num_files && eu <= me/2) {
-		if (visible(s, s->selection+ui)) eu += 1;
-		ui += 1;
-	}
-	/* How many entries are over selection?
-	 * (If there are few entries under, then use up all remaining space)
-	 */
-	while (s->num_files-nhf && s->selection >= oi && eo + 1 + eu <= me) {
-		if (visible(s, s->selection-oi)) eo += 1;
-		bi = s->selection-oi;
-		oi += 1;
-	}
-
 	fnum_t dr = 1; // Drawing Row
-	fnum_t e = bi;
+	fnum_t e = _start_search_index(s, nhf, ph - 3);
 	while (s->num_files-nhf && e < s->num_files && dr < ph-1) {
 		if (!visible(s, e)) {
 			e += 1;
 			continue;
 		}
-		bool hl = (e == s->selection && i->fvs[v] == i->pv);
+		const bool hl = (e == s->selection && i->fvs[v] == i->pv);
 		_printw_entry(w, dr, s->file_list[e], pw, hl);
 		dr += 1;
 		e += 1;
@@ -331,6 +335,8 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	}
 	char sbuf[SIZE_BUF_SIZE];
 	pretty_size(fsize, sbuf);
+	// TODO FIXME does not fit 80x24
+	// shorten or something
 	snprintf(status, status_size,
 			"%u/%u %c%u %c%u hL%lu, %o %s",
 			(s->num_files ? hi+1 : 0),
@@ -346,6 +352,7 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	 * symlinks permissions are never used.
 	 */
 
+	// TODO glitches when padding is <0 (screen too small)
 	mvwprintw(w, dr, 0, " %s%*c%s ", status,
 			pw-utf8_width(status)-strnlen(time, time_size)-2, ' ', time);
 	wattroff(w, COLOR_PAIR(THEME_STATUSBAR));
@@ -354,6 +361,7 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 }
 
 static void ui_draw_help(struct ui* const i) {
+	// TODO
 	WINDOW* const hw = panel_window(i->help);
 	const int hheight = i->scrh-1;
 	const int lines = 4*2 + cmd_help_length - 1 + 5; // TODO
@@ -491,7 +499,7 @@ static void ui_draw_chmod(struct ui* const i) {
 	mvwprintw(cw, 3, 2, "group: %s%*c", i->chmod->group,
 			i->chmod->ww-(utf8_width(i->chmod->group)+7+2+1), ' ');
 	for (int b = 0; b < 12; ++b) {
-		char s = (m & (mode_t)1 ? 'x' : ' ');
+		const char s = (m & (mode_t)1 ? 'x' : ' ');
 		mvwprintw(cw, i->chmod->wh-2-b, 2, "[%c] %s",
 				s, mode_bit_meaning[b]);
 		m >>= 1;
@@ -517,7 +525,7 @@ void ui_draw(struct ui* const i) {
 	}
 
 	WINDOW* sw = panel_window(i->status);
-	if (i->error[0]) {
+	if (i->error[0]) { // TODO
 		wattron(sw, COLOR_PAIR(THEME_ERROR));
 		mvwprintw(sw, 0, 0, "%s", i->error);
 		wattroff(sw, COLOR_PAIR(THEME_ERROR));
@@ -525,7 +533,7 @@ void ui_draw(struct ui* const i) {
 				i->scrw-utf8_width(i->error), ' ');
 		i->error[0] = 0;
 	}
-	else if (i->info[0]) {
+	else if (i->info[0]) { // TODO
 		wattron(sw, COLOR_PAIR(THEME_INFO));
 		mvwprintw(sw, 0, 0, "%s", i->info);
 		wattroff(sw, COLOR_PAIR(THEME_INFO));
@@ -562,8 +570,8 @@ void ui_update_geometry(struct ui* const i) {
 	//syslog(LOG_DEBUG, "resized to %ux%u", newscrw, newscrh);
 	i->scrh = newscrh;
 	i->scrw = newscrw;
-	int w[2] = { i->scrw/2, i->scrw - w[0] };
-	int px[2] = { 0, w[0] };
+	const int w[2] = { i->scrw/2, i->scrw - w[0] };
+	const int px[2] = { 0, w[0] };
 	for (int x = 0; x < 2; ++x) {
 		PANEL* p = i->fvp[x];
 		WINDOW* ow = panel_window(p);
@@ -590,7 +598,8 @@ void ui_update_geometry(struct ui* const i) {
 	i->ui_needs_refresh = false;
 }
 
-int chmod_open(struct ui* i, utf8* path) {
+int chmod_open(struct ui* const i, utf8* const path) {
+	// TODO put chmod data into struct ui (?)
 	struct stat s;
 	if (stat(path, &s)) return errno;
 	errno = 0;
@@ -616,7 +625,7 @@ int chmod_open(struct ui* i, utf8* path) {
 	return 0;
 }
 
-void chmod_close(struct ui* i) {
+void chmod_close(struct ui* const i) {
 	i->m = i->chmod->mb;
 	WINDOW* cw = panel_window(i->chmod->p);
 	del_panel(i->chmod->p);
@@ -626,14 +635,14 @@ void chmod_close(struct ui* i) {
 	i->chmod = NULL;
 }
 
-void help_open(struct ui* i) {
+void help_open(struct ui* const i) {
 	WINDOW* nw = newwin(1, 1, 0, 0);
 	i->help = new_panel(nw);
 	i->ui_needs_refresh = true;
 	i->m = MODE_HELP;
 }
 
-void help_close(struct ui* i) {
+void help_close(struct ui* const i) {
 	WINDOW* hw = panel_window(i->help);
 	del_panel(i->help);
 	delwin(hw);
@@ -684,9 +693,10 @@ struct input get_input(WINDOW* const w) {
  * If there are a few, do nothing, wait longer.
  * If there is only one, send it.
  *
- * HANDLES KEY_RESIZE
+ * HANDLES KEY_RESIZE // FIXME somewhere else?
  */
 enum command get_cmd(struct ui* const i) {
+	// TODO simplify
 	memset(i->mks, 0, i->kml*sizeof(int));
 	static struct input il[INPUT_LIST_LENGTH];
 	static int ili = 0;
@@ -792,9 +802,7 @@ enum command get_cmd(struct ui* const i) {
  * If keeps gathering, returns 1.
  * Additionally:
  * returns 2 on ^N and -2 on ^P
- *
- * Additionally:
- * may return -3 if KEY_RESIZE was 'pressed'
+ * returns -3 if KEY_RESIZE was 'pressed'
  */
 int fill_textbox(utf8* const buf, utf8** const buftop,
 		const size_t bsize, WINDOW* const w) {
@@ -802,15 +810,14 @@ int fill_textbox(utf8* const buf, utf8** const buftop,
 	wmove(w, 0, utf8_width(buf)-utf8_width(*buftop)+1);
 	wrefresh(w);
 	struct input i = get_input(w);
-	if (i.t == SPECIAL && i.c == KEY_RESIZE) return -3;
-
 	curs_set(0);
+	if (i.t == SPECIAL && i.c == KEY_RESIZE) return -3;
 	if (i.t == END) return 1;
 	if (i.t == CTRL && i.ctrl == '[') return -1;
 	else if (i.t == CTRL && i.ctrl == 'N') return 2;
 	else if (i.t == CTRL && i.ctrl == 'P') return -2;
 	else if ((i.t == CTRL && i.ctrl == 'J') ||
-			(i.t == UTF8 && (i.utf[0] == '\n' || i.utf[0] == '\r'))) {
+	         (i.t == UTF8 && (i.utf[0] == '\n' || i.utf[0] == '\r'))) {
 		if (*buftop != buf) return 0;
 	}
 	else if (i.t == UTF8 && (size_t)(*buftop - buf) < bsize) {
@@ -818,44 +825,44 @@ int fill_textbox(utf8* const buf, utf8** const buftop,
 		*buftop += utf8_g2nb(i.utf);
 	}
 	else if ((i.t == CTRL && i.ctrl == 'H') ||
-			(i.t == SPECIAL && i.c == KEY_BACKSPACE)) {
+	         (i.t == SPECIAL && i.c == KEY_BACKSPACE)) {
 		if (*buftop != buf) {
-			const size_t before = strlen(buf);
+			const size_t before = strnlen(buf, bsize);
 			utf8_remove(buf, utf8_ng_till(buf, *buftop)-1);
-			*buftop -= before - strlen(buf);
+			*buftop -= before - strnlen(buf, bsize);
 		}
-		else if (strlen(buf));
+		else if (strnlen(buf, bsize));
  		// Exit only when buf is empty
 		else return -1;
 	}
 	else if ((i.t == CTRL && i.ctrl == 'D') ||
-			(i.t == SPECIAL && i.c == KEY_DC)) {
+	         (i.t == SPECIAL && i.c == KEY_DC)) {
 		utf8_remove(buf, utf8_ng_till(buf, *buftop));
 	}
 	else if ((i.t == CTRL && i.ctrl == 'A') ||
-			(i.t == SPECIAL && i.c == KEY_HOME)) {
+	         (i.t == SPECIAL && i.c == KEY_HOME)) {
 		*buftop = buf;
 	}
 	else if ((i.t == CTRL && i.ctrl == 'E') ||
-			(i.t == SPECIAL && i.c == KEY_END)) {
-		*buftop = buf+strlen(buf);
+	         (i.t == SPECIAL && i.c == KEY_END)) {
+		*buftop = buf+strnlen(buf, bsize);
 	}
 	else if (i.t == CTRL && i.ctrl == 'U') {
 		*buftop = buf;
 		memset(buf, 0, bsize);
 	}
 	else if (i.t == CTRL && i.ctrl == 'K') {
-		memset(*buftop, 0, strlen(*buftop));
+		memset(*buftop, 0, strlen(*buftop)); // TODO strn*
 	}
 	else if ((i.t == CTRL && i.ctrl == 'F') ||
-			(i.t == SPECIAL && i.c == KEY_RIGHT)) {
+	         (i.t == SPECIAL && i.c == KEY_RIGHT)) {
 		if ((size_t)(*buftop - buf) < bsize) {
 			*buftop += utf8_g2nb(*buftop);
 		}
 	}
 	else if ((i.t == CTRL && i.ctrl == 'B') ||
-			(i.t == SPECIAL && i.c == KEY_LEFT)) {
-		if ((size_t)(*buftop - buf) != 0) {
+	         (i.t == SPECIAL && i.c == KEY_LEFT)) {
+		if ((size_t)(*buftop - buf)) {
 			const size_t gt = utf8_ng_till(buf, *buftop);
 			*buftop = buf;
 			for (size_t i = 0; i < gt-1; ++i) {
