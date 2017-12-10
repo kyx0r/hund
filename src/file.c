@@ -53,8 +53,7 @@ bool file_exists(const char* path) {
 	return !access(path, F_OK);
 }
 
-void file_list_clean(struct file_record*** const fl,
-		fnum_t* const nf) {
+void file_list_clean(struct file_record*** const fl, fnum_t* const nf) {
 	if (!*nf) return;
 	for (fnum_t i = 0; i < *nf; ++i) {
 		free((*fl)[i]->file_name);
@@ -168,10 +167,9 @@ int cmp_date_desc(const void* p1, const void* p2) {
 	return fr1->s.st_mtim.tv_sec < fr2->s.st_mtim.tv_sec;
 }
 
-int sort_file_list(int (*cmp)(const void*, const void*),
+void sort_file_list(int (*cmp)(const void*, const void*),
 		struct file_record** fl, const fnum_t nf) {
 	qsort(fl, nf, sizeof(struct file_record*), cmp);
-	return 0;
 }
 
 /* Copies link from src to dst, relative to wd
@@ -220,7 +218,7 @@ int link_copy(const char* const wd,
 			up_dir(_dst);
 			strcat(newlpath, "../");
 		}
-		strcat(newlpath, target+strlen(_dst)+1);
+		strcat(newlpath, target+strnlen(_dst, PATH_MAX)+1); // TODO
 		if (symlink(newlpath, dst)) return errno;
 	}
 	return 0;
@@ -242,6 +240,8 @@ void pretty_size(off_t s, char* const buf) {
 		s /= 1024;
 		unit += 1;
 	}
+	if (rest > 100) rest /= 10;
+	if (!(rest % 10)) rest /= 10;
 	if (rest > 100) rest /= 10;
 	if (!(rest % 10)) rest /= 10;
 	if (rest) snprintf(buf, SIZE_BUF_SIZE, "%u.%u%c", (unsigned)s, rest, *unit);

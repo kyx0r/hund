@@ -326,7 +326,7 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	pretty_size(fsize, sbuf);
 	// TODO FIXME does not always fit 80x24
 	snprintf(status, status_size,
-			"%uf %u%c, %o %s",
+			"%uf %u%c %03o %s",
 			s->num_files-(sh ? 0 : nhf),
 			nhf, (sh ? 'H' : 'h'),
 			(hfr && hfr->l ? (hfr->l->st_mode & 0xfff) : 0),
@@ -837,7 +837,8 @@ int fill_textbox(utf8* const buf, utf8** const buftop,
 		memset(buf, 0, bsize);
 	}
 	else if (i.t == CTRL && i.ctrl == 'K') {
-		memset(*buftop, 0, strlen(*buftop)); // TODO strn*
+		const size_t clen = strnlen(buf, bsize);
+		memset(*buftop, 0, strnlen(*buftop, bsize-clen));
 	}
 	else if ((i.t == CTRL && i.ctrl == 'F') ||
 	         (i.t == SPECIAL && i.c == KEY_RIGHT)) {
