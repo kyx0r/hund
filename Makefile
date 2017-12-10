@@ -1,14 +1,18 @@
-CC = gcc
+CC = gcc # clang works too!
 LD = gcc
-CFLAGS = --std=c11 -g -Wall -Wextra -pedantic -Wimplicit-fallthrough=0
-LIBS = -Wl,--start-group -ltinfo -lpanel -lncurses -Wl,--end-group
-# "-ltinfo" and "-Wl,--start/end-group" are here because
-# at some point - most likely after system update (arch ftw)
-# I started to get gcc errors:
-# undefined reference to symbol 'wtimeout'
-# /usr/lib/libtinfo.so.6: error adding symbols: DSO missing from command line
+# TODO ld?
+# TODO test older C standards
+CFLAGS = --std=c11 -Wall -Wextra -pedantic -Wimplicit-fallthrough=0
+DEBUG = true
+ifeq ($(DEBUG),true)
+	CFLAGS += -g
+else
+	CFLAGS += -O2 -s
+endif
+LIBS = -lpanel -lncurses
 OBJDIR = obj
 OBJ = main.o path.o file.o ui.o file_view.o utf8.o task.o
+TESTOBJ := test.o path.o file.o ui.o file_view.o utf8.o task.o
 EXENAME = hund
 TESTEXENAME = test/testme
 TESTSCRIPTNAME = test/test.sh
@@ -18,7 +22,7 @@ all : $(EXENAME)
 $(EXENAME) : $(addprefix $(OBJDIR)/, $(OBJ))
 	$(LD) $^ -o $(EXENAME) $(LIBS)
 
-$(OBJDIR)/main.o : src/main.c src/include/ui.h | $(OBJDIR)
+$(OBJDIR)/main.o : src/main.c src/include/ui.h src/include/task.h | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJDIR)/utf8.o : src/utf8.c src/include/utf8.h | $(OBJDIR)
@@ -30,13 +34,14 @@ $(OBJDIR)/path.o : src/path.c src/include/path.h | $(OBJDIR)
 $(OBJDIR)/file.o : src/file.c src/include/file.h src/include/path.h | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(OBJDIR)/file_view.o : src/file_view.c src/include/file_view.h src/include/file.h | $(OBJDIR)
+$(OBJDIR)/file_view.o : src/file_view.c src/include/file_view.h \
+	src/include/file.h src/include/utf8.h | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(OBJDIR)/ui.o : src/ui.c src/include/ui.h src/include/file_view.h | $(OBJDIR)
+$(OBJDIR)/ui.o : src/ui.c src/include/ui.h src/include/file_view.h src/include/utf8.h | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(OBJDIR)/task.o : src/task.c src/include/task.h src/include/utf8.h | $(OBJDIR)
+$(OBJDIR)/task.o : src/task.c src/include/task.h src/include/file.h src/include/utf8.h | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJDIR) :
@@ -45,14 +50,13 @@ $(OBJDIR) :
 $(OBJDIR)/test.o : test/test.c | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $^ -o $@
 
-TESTOBJS := test.o path.o file_view.o task.o file.o utf8.o
-test : $(addprefix $(OBJDIR)/, $(TESTOBJS))
+test : $(addprefix $(OBJDIR)/, $(TESTOBJ))
 	$(CC) $(LIBS) -o $(TESTEXENAME) $^ && ./$(TESTEXENAME) && make $(EXENAME)
 
 testex :
 	./$(TESTSCRIPTNAME)
 
-.PHONY : clean test testex
+.PHONY : all clean test testex
 clean :
 	rm -r testdir &> /dev/null || true
 	rm -r $(OBJDIR) &> /dev/null || true
