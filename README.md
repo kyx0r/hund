@@ -11,6 +11,12 @@ A terminal file manager.
 - Change file permissions/owner/group
 - Find file in current directory
 - Sort by name/date/size ascending/descending
+- Licensed under GPL-3.0
+#### Environment Variables
+| variable | usage              | default |
+| -------- | ------------------ | ------- |
+| $EDITOR  | `ed` - text editor | vi      |
+| $PAGER   | `o` - text pager   | less    |
 #### Planned features
 - Open in external program, based on extension
 - Rename multiple files at once (somewhat like ranger)
@@ -25,6 +31,10 @@ A terminal file manager.
 - Support for terminals without color
 - ARM support
 - BSD and other UNIX support (?)
+#### Dependencies & Requirements
+- ncurses
+- gcc or clang
+- make
 #### Commands
 Type `?` while in hund for help.
 #### License
