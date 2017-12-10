@@ -177,7 +177,7 @@ static void _printw_pathbar(const char* const path,
 static void _printw_entry(WINDOW* const w, const fnum_t dr,
 		const struct file_record* const cfr,
 		const fnum_t width, const bool highlight) {
-	static const char* corrupted = "(error)";
+	static const char* corrupted = "(error)"; // TODO display errno or something
 	const enum theme_element te = mode2theme(cfr->s.st_mode,
 			(cfr->l ? cfr->l->st_mode : 0)) + (highlight ? 1 : 0);
 	const size_t bufl = width*4;
@@ -254,7 +254,7 @@ static fnum_t _start_search_index(const struct file_view* const s,
 	fnum_t eu = 0; // Entries Under
 	fnum_t ui = 1; // Under Index
 	/* How many entries are under selection? */
-	while (s->num_files-nhf && s->selection+ui < s->num_files && eu <= me/2) {
+	while (s->num_files-nhf && s->selection+ui < s->num_files && eu < me/2) {
 		if (visible(s, s->selection+ui)) eu += 1;
 		ui += 1;
 	}
@@ -273,6 +273,7 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	// TODO make readable
 	const struct file_view* const s = i->fvs[v];
 	const bool sh = s->show_hidden;
+	const fnum_t nhf = i->fvs[v]->num_hidden;
 	WINDOW* const w = panel_window(i->fvp[v]);
 
 	int _ph = 0, _pw = 0;
@@ -284,21 +285,9 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	_printw_pathbar(s->wd, w, pw);
 
 	/* Entry list */
-	fnum_t nhf = 0; // Number of Hidden Files
-	fnum_t nsl = 0; // Number of SymLinks
-	fnum_t hi = 0; // Highlighted file Index
-	bool sisl = false; // Selected Is SymLink
-	const struct file_record *hfr = NULL; // Highlighted File Record
-	for (fnum_t i = 0; i < s->num_files; ++i) {
-		if (hidden(s, i)) nhf += 1;
-		const bool sl = S_ISLNK(s->file_list[i]->s.st_mode);
-		if (sl) nsl += 1;
-		if (i == s->selection) {
-			hi = i-nhf;
-			sisl = sl;
-			hfr = s->file_list[i];
-		}
-	}
+	const struct file_record* const hfr =
+		(s->selection < s->num_files ?
+		 s->file_list[s->selection] : NULL);
 
 	fnum_t dr = 1; // Drawing Row
 	fnum_t e = _start_search_index(s, nhf, ph - 3);
@@ -335,15 +324,11 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	}
 	char sbuf[SIZE_BUF_SIZE];
 	pretty_size(fsize, sbuf);
-	// TODO FIXME does not fit 80x24
-	// shorten or something
+	// TODO FIXME does not always fit 80x24
 	snprintf(status, status_size,
-			"%u/%u %c%u %c%u hL%lu, %o %s",
-			(s->num_files ? hi+1 : 0),
+			"%uf %u%c, %o %s",
 			s->num_files-(sh ? 0 : nhf),
-			(sh ? 'H' : 'h'), nhf,
-			(sisl ? 'L' : 'l'), nsl,
-			(hfr && hfr->l ? hfr->l->st_nlink : 0),
+			nhf, (sh ? 'H' : 'h'),
 			(hfr && hfr->l ? (hfr->l->st_mode & 0xfff) : 0),
 			sbuf);
 	/* BTW chmod man page says chmod
@@ -401,7 +386,7 @@ static void ui_draw_help(struct ui* const i) {
 		}
 		wattroff(hw, A_BOLD);
 		dr += 1;
-		for (size_t c = 1; c < CMD_NUM; ++c) {
+		for (size_t c = 1; c < CMD_NUM; ++c) { // TODO redo
 			size_t w = 0;
 			int last = -1;
 			for (size_t k = 0; k < i->kml; ++k) {
@@ -457,7 +442,7 @@ static void ui_draw_help(struct ui* const i) {
 static void ui_draw_hintbar(struct ui* const i, WINDOW* const sw) {
 	mvwprintw(sw, 0, 0, "%*c", i->scrw-1, ' ');
 	wmove(sw, 0, 0);
-	for (size_t x = 0; x < i->kml; ++x) {
+	for (size_t x = 0; x < i->kml; ++x) { // TODO redo
 		if (!i->mks[x]) continue;
 		wprintw(sw, " ");
 		const struct input* const ins = i->kmap[x].i;

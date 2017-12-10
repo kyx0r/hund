@@ -156,7 +156,7 @@ void last_entry(struct file_view* fv) {
 
 void delete_file_list(struct file_view* fv) {
 	file_list_clean(&fv->file_list, &fv->num_files);
-	fv->selection = 0;
+	fv->selection = fv->num_hidden = 0;
 }
 
 bool file_on_list(struct file_view* fv, const utf8* const name) {
@@ -220,7 +220,8 @@ int file_view_enter_selected_dir(struct file_view* fv) {
 		if (enter_dir(fv->wd, fn)) return ENAMETOOLONG;
 	}
 	else return ENOTDIR;
-	int err = scan_dir(fv->wd, &fv->file_list, &fv->num_files);
+	int err = scan_dir(fv->wd, &fv->file_list,
+			&fv->num_files, &fv->num_hidden);
 	if (err) {
 		delete_file_list(fv);
 		return err;
@@ -234,7 +235,8 @@ int file_view_up_dir(struct file_view* fv) {
 	utf8* prevdir = malloc(NAME_MAX+1);
 	current_dir(fv->wd, prevdir);
 	up_dir(fv->wd);
-	int err = scan_dir(fv->wd, &fv->file_list, &fv->num_files);
+	int err = scan_dir(fv->wd, &fv->file_list,
+			&fv->num_files, &fv->num_hidden);
 	if (err) {
 		delete_file_list(fv);
 		free(prevdir);

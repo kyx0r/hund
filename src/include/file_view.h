@@ -27,6 +27,7 @@ struct file_view {
 	char wd[PATH_MAX];
 	struct file_record** file_list;
 	fnum_t num_files;
+	fnum_t num_hidden;
 	fnum_t selection;
 	sorting_foo sorting;
 	bool show_hidden;

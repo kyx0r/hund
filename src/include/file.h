@@ -72,8 +72,10 @@ bool same_fs(const char* const, const char* const);
 bool executable(const mode_t, const mode_t);
 
 bool file_exists(const char*);
-void file_list_clean(struct file_record***, fnum_t*);
-int scan_dir(const char*, struct file_record***, fnum_t*);
+void file_list_clean(struct file_record*** const,
+		fnum_t* const);
+int scan_dir(const char* const, struct file_record*** const,
+		fnum_t* const, fnum_t* const);
 
 typedef int (*sorting_foo)(const void*, const void*);
 int cmp_name_asc(const void*, const void*);

@@ -53,7 +53,8 @@ bool file_exists(const char* path) {
 	return !access(path, F_OK);
 }
 
-void file_list_clean(struct file_record*** fl, fnum_t* nf) {
+void file_list_clean(struct file_record*** const fl,
+		fnum_t* const nf) {
 	if (!*nf) return;
 	for (fnum_t i = 0; i < *nf; ++i) {
 		free((*fl)[i]->file_name);
@@ -71,9 +72,12 @@ void file_list_clean(struct file_record*** fl, fnum_t* nf) {
  *
  * On ENOMEM: cleans everything
  * On stat/lstat errors: zeroes failed fields
+ * TODO test
  */
-int scan_dir(const char* const wd, struct file_record*** fl, fnum_t* nf) {
+int scan_dir(const char* const wd, struct file_record*** const fl,
+		fnum_t* const nf, fnum_t* const nhf) {
 	file_list_clean(fl, nf);
+	*nhf = 0;
 	int r = 0;
 	DIR* dir = opendir(wd);
 	if (!dir) return errno;
@@ -81,10 +85,13 @@ int scan_dir(const char* const wd, struct file_record*** fl, fnum_t* nf) {
 	static char lpath[PATH_MAX+1];
 	struct dirent* de;
 	while ((de = readdir(dir)) != NULL) {
-		if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, "..")) continue;
-		void* tmp = realloc(*fl, sizeof(struct file_record*) * (*nf+1));
+		if (!strncmp(de->d_name, ".", 2) ||
+		    !strncmp(de->d_name, "..", 3)) continue;
+		if (de->d_name[0] == '.') *nhf += 1;
+		void* tmp = realloc(*fl, sizeof(struct file_record*) * ((*nf)+1));
 		if (!tmp) {
 			r = ENOMEM;
+			*nhf = 0;
 			file_list_clean(fl, nf);
 			break;
 		}
@@ -94,6 +101,7 @@ int scan_dir(const char* const wd, struct file_record*** fl, fnum_t* nf) {
 		struct file_record* nfr = (*fl)[(*nf)-1];
 		if (!nfr) {
 			r = ENOMEM;
+			*nhf = 0;
 			file_list_clean(fl, nf);
 			break;
 		}
@@ -177,7 +185,7 @@ int sort_file_list(int (*cmp)(const void*, const void*),
  * TODO lots of testing
  * FIXME 4*PATH_MAX ~= 32786B - a lot
  *
- * Working Directory, New Directory - roots of the operation
+ * Working Directory - root of the operation
  * Source, Destination */
 int link_copy(const char* const wd,
 		const char* const src, const char* const dst) {

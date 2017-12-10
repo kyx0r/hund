@@ -144,7 +144,8 @@ static void mode_chmod(struct ui* i, struct task* t) {
 		if (lchown(i->chmod->path, i->chmod->o, i->chmod->g)) {
 			failed(i->error, "chmod", errno, NULL);
 		}
-		scan_dir(i->pv->wd, &i->pv->file_list, &i->pv->num_files);
+		scan_dir(i->pv->wd, &i->pv->file_list,
+				&i->pv->num_files, &i->pv->num_hidden);
 		chmod_close(i);
 		break;
 	case CMD_CHOWN:
@@ -340,7 +341,8 @@ static void mode_manager(struct ui* i, struct task* t) {
 			free(nname);
 			break;
 		}
-		scan_dir(i->pv->wd, &i->pv->file_list, &i->pv->num_files); // TODO error
+		scan_dir(i->pv->wd, &i->pv->file_list,
+				&i->pv->num_files, &i->pv->num_hidden); // TODO error
 		sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
 		file_highlight(i->pv, nname);
 		ui_draw(i);
@@ -389,7 +391,8 @@ static void mode_manager(struct ui* i, struct task* t) {
 			free(nname);
 			break;
 		}
-		scan_dir(i->pv->wd, &i->pv->file_list, &i->pv->num_files); // TODO error
+		scan_dir(i->pv->wd, &i->pv->file_list,
+				&i->pv->num_files, &i->pv->num_hidden); // TODO error
 		sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
 		file_highlight(i->pv, nname);
 		ui_draw(i);
@@ -402,7 +405,8 @@ static void mode_manager(struct ui* i, struct task* t) {
 		file_view_toggle_hidden(i->pv);
 		break;
 	case CMD_REFRESH:
-		err = scan_dir(i->pv->wd, &i->pv->file_list, &i->pv->num_files);
+		err = scan_dir(i->pv->wd, &i->pv->file_list,
+				&i->pv->num_files, &i->pv->num_hidden);
 		if (err) {
 			failed(i->error, "refresh", err, NULL);
 		}
@@ -447,8 +451,10 @@ static void mode_manager(struct ui* i, struct task* t) {
 static void task_finish(struct ui* const i, struct task* const t) {
 	wtimeout(stdscr, -1);
 	// TODO
-	int epv = scan_dir(i->pv->wd, &i->pv->file_list, &i->pv->num_files);
-	int esv = scan_dir(i->sv->wd, &i->sv->file_list, &i->sv->num_files);
+	int epv = scan_dir(i->pv->wd, &i->pv->file_list,
+			&i->pv->num_files, &i->pv->num_hidden);
+	int esv = scan_dir(i->sv->wd, &i->sv->file_list,
+			&i->sv->num_files, &i->sv->num_hidden);
 	if (epv || esv) {
 		failed(i->error, task_strings[t->t][NOUN], epv | esv, NULL);
 	}
@@ -565,7 +571,8 @@ int main(int argc, char* argv[])  {
 			}
 			free(e);
 		}
-		int r = scan_dir(fvs[v].wd, &fvs[v].file_list, &fvs[v].num_files);
+		int r = scan_dir(fvs[v].wd, &fvs[v].file_list,
+				&fvs[v].num_files, &fvs[v].num_hidden);
 		if (r) {
 			ui_end(&i);
 			fprintf(stderr, "cannot scan directory '%s': %s (%d)\n",
