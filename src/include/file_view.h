@@ -36,23 +36,26 @@ struct file_view {
 bool hidden(const struct file_view* const, const fnum_t);
 bool visible(const struct file_view* const, const fnum_t);
 
-void next_entry(struct file_view*);
-void first_entry(struct file_view*);
-void prev_entry(struct file_view*);
-void last_entry(struct file_view*);
+void next_entry(struct file_view* const);
+void first_entry(struct file_view* const);
+void prev_entry(struct file_view* const);
+void last_entry(struct file_view* const);
 
-void delete_file_list(struct file_view*);
-bool file_on_list(struct file_view*, const utf8* const);
-void file_highlight(struct file_view*, const utf8* const);
+void delete_file_list(struct file_view* const);
+bool file_on_list(struct file_view* const, const utf8* const);
+void file_highlight(struct file_view* const, const utf8* const);
 
-bool file_find(struct file_view*, const char* const, fnum_t, fnum_t);
+bool file_find(struct file_view* const, const char* const, fnum_t, fnum_t);
 
-int file_view_enter_selected_dir(struct file_view*);
-int file_view_up_dir(struct file_view*);
+int file_view_enter_selected_dir(struct file_view* const);
+int file_view_up_dir(struct file_view* const);
 
-void file_view_afterdel(struct file_view*);
-void file_view_toggle_hidden(struct file_view*);
+void file_view_afterdel(struct file_view* const);
+void file_view_toggle_hidden(struct file_view* const);
 
-utf8* file_view_path_to_selected(struct file_view*);
+int file_view_scan_dir(struct file_view* const);
+void file_view_sort(struct file_view* const);
+
+utf8* file_view_path_to_selected(struct file_view* const);
 
 #endif

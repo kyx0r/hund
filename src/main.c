@@ -133,6 +133,7 @@ static void mode_help(struct ui* i, struct task* t) {
 
 static void mode_chmod(struct ui* i, struct task* t) {
 	(void)(t);
+	int err;
 	switch (get_cmd(i)) {
 	case CMD_RETURN:
 		chmod_close(i);
@@ -144,24 +145,23 @@ static void mode_chmod(struct ui* i, struct task* t) {
 		if (lchown(i->chmod->path, i->chmod->o, i->chmod->g)) {
 			failed(i->error, "chmod", errno, NULL);
 		}
-		scan_dir(i->pv->wd, &i->pv->file_list,
-				&i->pv->num_files, &i->pv->num_hidden);
+		if ((err = file_view_scan_dir(i->pv))) {
+			failed(i->error, "directory scan", err, NULL);
+		}
 		chmod_close(i);
 		break;
 	case CMD_CHOWN:
 		{
 		utf8* newlogin = calloc(LOGIN_NAME_MAX+1, sizeof(utf8));
-		if (open_prompt(i, newlogin, newlogin, LOGIN_NAME_MAX)) {
-			free(newlogin);
-			break;
-		}
-		errno = 0;
-		struct passwd* pwd = getpwnam(newlogin);
-		if (!pwd) failed(i->error, "chown", errno,
-				"Such user does not exist");
-		else {
-			i->chmod->o = pwd->pw_uid;
-			strncpy(i->chmod->owner, pwd->pw_name, LOGIN_NAME_MAX);
+		if (!open_prompt(i, newlogin, newlogin, LOGIN_NAME_MAX)) {
+			errno = 0;
+			struct passwd* pwd = getpwnam(newlogin);
+			if (!pwd) failed(i->error, "chown", errno,
+					"Such user does not exist");
+			else {
+				i->chmod->o = pwd->pw_uid;
+				strncpy(i->chmod->owner, pwd->pw_name, LOGIN_NAME_MAX);
+			}
 		}
 		free(newlogin);
 		}
@@ -169,17 +169,15 @@ static void mode_chmod(struct ui* i, struct task* t) {
 	case CMD_CHGRP:
 		{
 		utf8* newgrp = calloc(LOGIN_NAME_MAX+1, sizeof(utf8));
-		if (open_prompt(i, newgrp, newgrp, LOGIN_NAME_MAX)) {
-			free(newgrp);
-			break;
-		}
-		errno = 0;
-		struct group* grp = getgrnam(newgrp);
-		if (!grp) failed(i->error, "chgrp", errno,
-				"Such group does not exist");
-		else {
-			i->chmod->g = grp->gr_gid;
-			strncpy(i->chmod->group, grp->gr_name, LOGIN_NAME_MAX);
+		if (!open_prompt(i, newgrp, newgrp, LOGIN_NAME_MAX)) {
+			errno = 0;
+			struct group* grp = getgrnam(newgrp);
+			if (!grp) failed(i->error, "chgrp", errno,
+					"Such group does not exist");
+			else {
+				i->chmod->g = grp->gr_gid;
+				strncpy(i->chmod->group, grp->gr_name, LOGIN_NAME_MAX);
+			}
 		}
 		free(newgrp);
 		}
@@ -215,7 +213,6 @@ static void mode_wait(struct ui* i, struct task* t) {
 	}
 }
 
-/* Dedicated for long tasks such as COPY, REMOVE, MOVE */
 static void prepare_long_task(struct ui* i, struct task* t,
 		enum task_type tt, const utf8* const err) {
 	// TODO OOM proof
@@ -232,7 +229,8 @@ static void prepare_long_task(struct ui* i, struct task* t,
 		dst = strncpy(malloc(PATH_MAX+1), i->sv->wd, PATH_MAX);
 		if (file_on_list(i->sv, fn)) {
 			nn = strncpy(calloc(NAME_MAX+1, sizeof(char)), fn, NAME_MAX);
-			if (open_prompt(i, nn, nn+strnlen(nn, NAME_MAX), NAME_MAX)) {
+			const size_t nnlen = strnlen(nn, NAME_MAX);
+			if (open_prompt(i, nn, nn+nnlen, NAME_MAX)) {
 				free(src);
 				free(dst);
 				free(nn);
@@ -251,7 +249,8 @@ static void prepare_long_task(struct ui* i, struct task* t,
 
 static void mode_manager(struct ui* i, struct task* t) {
 	struct file_view* tmp = NULL;
-	utf8* path = NULL;
+	utf8 *path = NULL, *cdp = NULL, *name = NULL,
+	     *opath = NULL, *npath = NULL;
 	int err = 0;
 	switch (get_cmd(i)) {
 	case CMD_QUIT:
@@ -274,39 +273,40 @@ static void mode_manager(struct ui* i, struct task* t) {
 	case CMD_EDIT_FILE:
 		if ((path = file_view_path_to_selected(i->pv))) {
 			if (is_dir(path)) failed(i->error, "edit", EISDIR, NULL);
-			spawn("vi", path);
+			const char* const ed = getenv("EDITOR");
+			spawn(ed ? ed : "vi", path);
 			free(path);
 		}
 		break;
 	case CMD_OPEN_FILE:
 		if ((path = file_view_path_to_selected(i->pv))) {
 			if (is_dir(path)) failed(i->error, "open", EISDIR, NULL);
-			spawn("less", path);
+			const char* const pager = getenv("PAGER");
+			spawn(pager ? pager : "less", path);
 			free(path);
 		}
 		break;
 	case CMD_CD:
-		{
-		utf8* path = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
-		utf8* cdp = calloc(PATH_MAX+1, sizeof(utf8));
-		if (open_prompt(i, cdp, cdp, PATH_MAX)) {
-			free(path); // TODO?
-			free(cdp);
-			break;
+		path = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
+		cdp = calloc(PATH_MAX+1, sizeof(utf8));
+		if (open_prompt(i, cdp, cdp, PATH_MAX) ||
+		   (err = ENAMETOOLONG, enter_dir(path, cdp)) ||
+		   (err = ENOENT, !file_exists(path)) ||
+		   (err = EISDIR, !is_dir(path))) {
+			if (err) failed(i->error, "cd", err, NULL);
 		}
-		int reason;
-		if ((reason = ENAMETOOLONG, enter_dir(path, cdp)) ||
-		    (reason = ENOENT, !file_exists(path)) ||
-		    (reason = EISDIR, !is_dir(path))) {
-			failed(i->error, "cd", reason, NULL);
-			free(path);
-			free(cdp);
-			break;
+		else {
+			strncpy(i->pv->wd, path, PATH_MAX);
+			if ((err = file_view_scan_dir(i->pv))) { // TODO
+				failed(i->error, "directory scan", err, NULL);
+			}
+			else {
+				sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
+				first_entry(i->pv);
+			}
 		}
-		strncpy(i->pv->wd, path, PATH_MAX);
 		free(path);
 		free(cdp);
-		}
 		break;
 	case CMD_ENTER_DIR:
 		err = file_view_enter_selected_dir(i->pv);
@@ -326,29 +326,20 @@ static void mode_manager(struct ui* i, struct task* t) {
 		prepare_long_task(i, t, TASK_REMOVE, task_strings[TASK_REMOVE][NOUN]);
 		break;
 	case CMD_CREATE_DIR:
-		{
-		utf8* npath = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
-		utf8* nname = calloc(NAME_MAX+1, sizeof(utf8));
-		if (open_prompt(i, nname, nname, PATH_MAX)) { // TODO?
-			free(npath);
-			free(nname);
-			break;
+		path = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
+		name = calloc(NAME_MAX+1, sizeof(utf8));
+		if (open_prompt(i, name, name, PATH_MAX) ||
+		   (err = append_dir(path, name)) ||
+		   (err = dir_make(path)) ||
+		   (err = file_view_scan_dir(i->pv))) {
+			if (err) failed(i->error, "creating directory", err, NULL);
 		}
-		if ((err = append_dir(npath, nname)) ||
-		    (err = dir_make(npath))) {
-			failed(i->error, "creating directory", err, NULL);
-			free(npath);
-			free(nname);
-			break;
+		else {
+			file_view_sort(i->pv);
+			file_highlight(i->pv, name);
 		}
-		scan_dir(i->pv->wd, &i->pv->file_list,
-				&i->pv->num_files, &i->pv->num_hidden); // TODO error
-		sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
-		file_highlight(i->pv, nname);
-		ui_draw(i);
-		free(npath);
-		free(nname);
-		}
+		free(path);
+		free(name);
 		break;
 	case CMD_FIND:
 		open_find(i);
@@ -360,54 +351,40 @@ static void mode_manager(struct ui* i, struct task* t) {
 		last_entry(i->pv);
 		break;
 	case CMD_CHMOD:
-		path = file_view_path_to_selected(i->pv);
-		if (!path) {
+		if (!(path = file_view_path_to_selected(i->pv))) {
 			failed(i->error, "chmod", ENAMETOOLONG, NULL);
-			break;
 		}
-		chmod_open(i, path);
+		else chmod_open(i, path);
 		break;
 	case CMD_RENAME:
-		{
 		/* TODO what is user enters someting like:
 		 * 'dir/renamed.txt'
 		 * which perfectly fits NAME_MAX and will be accepted by append_dir()
 		 * conclusion: entering a PATH should be detected and not permitted
 		 */
-		utf8* opath = file_view_path_to_selected(i->pv);
-		utf8* npath = strcpy(malloc(PATH_MAX+1), i->pv->wd);
-		utf8* nname = calloc(NAME_MAX+1, sizeof(utf8));
-		strncpy(nname, i->pv->file_list[i->pv->selection]->file_name, NAME_MAX);
-		if (open_prompt(i, nname, nname+strnlen(nname, NAME_MAX), NAME_MAX)) {
-			free(opath); // ^^^^^^ TODO?
-			free(npath);
-			free(nname);
+		opath = file_view_path_to_selected(i->pv);
+		npath = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
+		name = strncpy(malloc(NAME_MAX+1),
+				i->pv->file_list[i->pv->selection]->file_name, NAME_MAX);
+		if (open_prompt(i, name, name+strnlen(name, NAME_MAX), NAME_MAX) ||
+		   (err = append_dir(npath, name)) ||
+		   (err = rename(opath, npath)) ||
+		   (err = file_view_scan_dir(i->pv))) {
+			if (err) failed(i->error, "rename", err, NULL);
 		}
-		if ((err = append_dir(npath, nname)) ||
-		    (err = rename(opath, npath))) {
-			failed(i->error, "rename", err, NULL);
-			free(opath);
-			free(npath);
-			free(nname);
-			break;
+		else {
+			file_view_sort(i->pv);
+			file_highlight(i->pv, name);
 		}
-		scan_dir(i->pv->wd, &i->pv->file_list,
-				&i->pv->num_files, &i->pv->num_hidden); // TODO error
-		sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
-		file_highlight(i->pv, nname);
-		ui_draw(i);
 		free(opath);
 		free(npath);
-		free(nname);
-		}
+		free(name);
 		break;
 	case CMD_TOGGLE_HIDDEN:
 		file_view_toggle_hidden(i->pv);
 		break;
 	case CMD_REFRESH:
-		err = scan_dir(i->pv->wd, &i->pv->file_list,
-				&i->pv->num_files, &i->pv->num_hidden);
-		if (err) {
+		if ((err = file_view_scan_dir(i->pv))) {
 			failed(i->error, "refresh", err, NULL);
 		}
 		else {
@@ -416,30 +393,34 @@ static void mode_manager(struct ui* i, struct task* t) {
 		}
 		i->ui_needs_refresh = true;
 		break;
-	// TODO sort after each of these
 	case CMD_SORT_BY_NAME_ASC:
 		i->pv->sorting = cmp_name_asc;
-		sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
+		file_view_sort(i->pv);
 		i->ui_needs_refresh = true;
 		break;
-	case CMD_SORT_BY_NAME_DESC: i->pv->sorting = cmp_name_desc;
-		sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
+	case CMD_SORT_BY_NAME_DESC:
+		i->pv->sorting = cmp_name_desc;
+		file_view_sort(i->pv);
 		i->ui_needs_refresh = true;
 		break;
-	case CMD_SORT_BY_DATE_ASC: i->pv->sorting = cmp_date_asc;
-		sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
+	case CMD_SORT_BY_DATE_ASC:
+		i->pv->sorting = cmp_date_asc;
+		file_view_sort(i->pv);
 		i->ui_needs_refresh = true;
 		break;
-	case CMD_SORT_BY_DATE_DESC: i->pv->sorting = cmp_date_desc;
-		sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
+	case CMD_SORT_BY_DATE_DESC:
+		i->pv->sorting = cmp_date_desc;
+		file_view_sort(i->pv);
 		i->ui_needs_refresh = true;
 		break;
-	case CMD_SORT_BY_SIZE_ASC: i->pv->sorting = cmp_size_asc;
-		sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
+	case CMD_SORT_BY_SIZE_ASC:
+		i->pv->sorting = cmp_size_asc;
+		file_view_sort(i->pv);
 		i->ui_needs_refresh = true;
 		break;
-	case CMD_SORT_BY_SIZE_DESC: i->pv->sorting = cmp_size_desc;
-		sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
+	case CMD_SORT_BY_SIZE_DESC:
+		i->pv->sorting = cmp_size_desc;
+		file_view_sort(i->pv);
 		i->ui_needs_refresh = true;
 		break;
 	default:
@@ -451,29 +432,26 @@ static void mode_manager(struct ui* i, struct task* t) {
 static void task_finish(struct ui* const i, struct task* const t) {
 	wtimeout(stdscr, -1);
 	// TODO
-	int epv = scan_dir(i->pv->wd, &i->pv->file_list,
-			&i->pv->num_files, &i->pv->num_hidden);
-	int esv = scan_dir(i->sv->wd, &i->sv->file_list,
-			&i->sv->num_files, &i->sv->num_hidden);
+	int epv = file_view_scan_dir(i->pv);
+	int esv = file_view_scan_dir(i->sv);
 	if (epv || esv) {
 		failed(i->error, task_strings[t->t][NOUN], epv | esv, NULL);
 	}
-	sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
-	sort_file_list(i->sv->sorting, i->sv->file_list, i->sv->num_files);
-	if (t->t == TASK_REMOVE) {
+	else {
+		file_view_sort(i->pv);
+		file_view_sort(i->sv);
+	}
+	switch (t->t) {
+	case TASK_REMOVE:
 		file_view_afterdel(i->pv);
-		snprintf(i->info, MSG_BUFFER_SIZE, "%s %s",
-				task_strings[t->t][PAST], t->src);
-	}
-	else if (t->t == TASK_COPY) {
-		snprintf(i->info, MSG_BUFFER_SIZE, "%s %s",
-				task_strings[t->t][PAST], t->src);
-	}
-	else if (t->t == TASK_MOVE) {
+		break;
+	case TASK_MOVE:
 		prev_entry(i->pv);
-		snprintf(i->info, MSG_BUFFER_SIZE, "%s %s",
-				task_strings[t->t][PAST], t->src);
+		break;
+	default: break;
 	}
+	snprintf(i->info, MSG_BUFFER_SIZE, "%s %s",
+			task_strings[t->t][PAST], t->src);
 	task_clean(t);
 	i->ui_needs_refresh = true;
 	i->m = MODE_MANAGER;
@@ -501,7 +479,7 @@ static void task_execute(struct ui* i, struct task* t) {
 }
 
 int main(int argc, char* argv[])  {
-	static const char* help = \
+	static const char* const help = \
 	"Usage: hund [OPTION] [left panel] [right panel]\n"
 	"Options:\n"
 	"  -c, --chdir=PATH      change initial directory\n"
@@ -528,8 +506,7 @@ int main(int argc, char* argv[])  {
 		case 'h':
 			printf("%s\n", help);
 			exit(EXIT_SUCCESS);
-		default:
-			exit(1);
+		default: exit(EXIT_FAILURE);
 		}
 	}
 
@@ -571,8 +548,7 @@ int main(int argc, char* argv[])  {
 			}
 			free(e);
 		}
-		int r = scan_dir(fvs[v].wd, &fvs[v].file_list,
-				&fvs[v].num_files, &fvs[v].num_hidden);
+		int r = file_view_scan_dir(&fvs[v]);
 		if (r) {
 			ui_end(&i);
 			fprintf(stderr, "cannot scan directory '%s': %s (%d)\n",

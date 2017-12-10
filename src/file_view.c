@@ -48,7 +48,7 @@ bool visible(const struct file_view* const fv, const fnum_t i) {
 	return fv->show_hidden || !hidden(fv, i);
 }
 
-void next_entry(struct file_view* fv) {
+void next_entry(struct file_view* const fv) {
 	if (!fv->num_files || fv->selection > fv->num_files-1) {
 		fv->selection = 0;
 		return;
@@ -63,19 +63,19 @@ void next_entry(struct file_view* fv) {
 		/* Truth table - "Keep looking?" or "What to put in while"
 		 * 1 = Keep looking
 		 * 0 = Give up
-		 *        visible | not visible
+		 *         hidden | not hidden
 		 * out of array |0|0|
 		 * in array     |0|1|
 		 */
 		do {
 			i += 1;
-		} while (i <= fv->num_files-1 && hidden(fv, i));
-		if (i > fv->num_files-1) return;
+		} while (i < fv->num_files && hidden(fv, i));
+		if (i >= fv->num_files) return;
 		fv->selection = i;
 	}
 }
 
-void prev_entry(struct file_view* fv) {
+void prev_entry(struct file_view* const fv) {
 	if (!fv->num_files || fv->selection > fv->num_files-1) {
 		fv->selection = 0;
 		return;
@@ -114,7 +114,7 @@ void prev_entry(struct file_view* fv) {
 	}
 }
 
-void first_entry(struct file_view* fv) {
+void first_entry(struct file_view* const fv) {
 	if (!fv->num_files || fv->show_hidden ||
 			(!fv->show_hidden && !fv->num_files)) {
 		fv->selection = 0;
@@ -133,7 +133,7 @@ void first_entry(struct file_view* fv) {
 	}
 }
 
-void last_entry(struct file_view* fv) {
+void last_entry(struct file_view* const fv) {
 	if (!fv->num_files) {
 		fv->selection = 0;
 	}
@@ -154,12 +154,12 @@ void last_entry(struct file_view* fv) {
 	}
 }
 
-void delete_file_list(struct file_view* fv) {
+void delete_file_list(struct file_view* const fv) {
 	file_list_clean(&fv->file_list, &fv->num_files);
 	fv->selection = fv->num_hidden = 0;
 }
 
-bool file_on_list(struct file_view* fv, const utf8* const name) {
+bool file_on_list(struct file_view* const fv, const utf8* const name) {
 	fnum_t i = 0;
 	while (i < fv->num_files &&	strcmp(fv->file_list[i]->file_name, name)) {
 		i += 1;
@@ -168,7 +168,7 @@ bool file_on_list(struct file_view* fv, const utf8* const name) {
 }
 
 /* Finds and highlighs file with given name */
-void file_highlight(struct file_view* fv, const utf8* const name) {
+void file_highlight(struct file_view* const fv, const utf8* const name) {
 	fnum_t i = 0;
 	while (i < fv->num_files &&	strcmp(fv->file_list[i]->file_name, name)) {
 		i += 1;
@@ -183,7 +183,7 @@ void file_highlight(struct file_view* fv, const utf8* const name) {
 	}
 }
 
-bool file_find(struct file_view* fv, const utf8* const name,
+bool file_find(struct file_view* const fv, const utf8* const name,
 		fnum_t start, fnum_t end) {
 	if (start <= end) {
 		for (fnum_t i = start; i <= end; ++i) {
@@ -210,7 +210,7 @@ bool file_find(struct file_view* fv, const utf8* const name,
 	return false;
 }
 
-int file_view_enter_selected_dir(struct file_view* fv) {
+int file_view_enter_selected_dir(struct file_view* const fv) {
 	if (!fv->num_files || !visible(fv, fv->selection)) return 0;
 	utf8* fn = fv->file_list[fv->selection]->file_name;
 	const struct stat* rst = &fv->file_list[fv->selection]->s;
@@ -220,35 +220,33 @@ int file_view_enter_selected_dir(struct file_view* fv) {
 		if (enter_dir(fv->wd, fn)) return ENAMETOOLONG;
 	}
 	else return ENOTDIR;
-	int err = scan_dir(fv->wd, &fv->file_list,
-			&fv->num_files, &fv->num_hidden);
+	int err = file_view_scan_dir(fv);
 	if (err) {
 		delete_file_list(fv);
 		return err;
 	}
-	sort_file_list(fv->sorting, fv->file_list, fv->num_files);
+	file_view_sort(fv);
 	first_entry(fv);
 	return 0;
 }
 
-int file_view_up_dir(struct file_view* fv) {
+int file_view_up_dir(struct file_view* const fv) {
 	utf8* prevdir = malloc(NAME_MAX+1);
 	current_dir(fv->wd, prevdir);
 	up_dir(fv->wd);
-	int err = scan_dir(fv->wd, &fv->file_list,
-			&fv->num_files, &fv->num_hidden);
+	int err = file_view_scan_dir(fv);
 	if (err) {
 		delete_file_list(fv);
 		free(prevdir);
 		return err;
 	}
-	sort_file_list(fv->sorting, fv->file_list, fv->num_files);
+	file_view_sort(fv);
 	file_highlight(fv, prevdir);
 	free(prevdir);
 	return 0;
 }
 
-void file_view_afterdel(struct file_view* fv) {
+void file_view_afterdel(struct file_view* const fv) {
 	if (fv->num_files) {
 		if (fv->selection >= fv->num_files-1) {
 			last_entry(fv);
@@ -262,14 +260,22 @@ void file_view_afterdel(struct file_view* fv) {
 	}
 }
 
-void file_view_toggle_hidden(struct file_view* fv) {
+void file_view_toggle_hidden(struct file_view* const fv) {
 	fv->show_hidden = !fv->show_hidden;
 	if (!fv->num_files || !visible(fv, fv->selection)) {
 		first_entry(fv);
 	}
 }
 
-utf8* file_view_path_to_selected(struct file_view* fv) {
+int file_view_scan_dir(struct file_view* const fv) {
+	return scan_dir(fv->wd, &fv->file_list, &fv->num_files, &fv->num_hidden);
+}
+
+void file_view_sort(struct file_view* const fv) {
+	sort_file_list(fv->sorting, fv->file_list, fv->num_files);
+}
+
+utf8* file_view_path_to_selected(struct file_view* const fv) {
 	if (!fv->num_files) return NULL;
 	utf8* p = malloc(PATH_MAX+1);
 	strncpy(p, fv->wd, PATH_MAX);
