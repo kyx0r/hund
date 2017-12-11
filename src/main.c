@@ -45,16 +45,17 @@ static void failed(utf8* error_buf, const utf8* f, int reason, utf8* custom) {
 	}
 }
 
-static int spawn(const char* const prog, char* const arg) {
-	// TODO how to pass more arguments?
+extern char** environ;
+
+static int spawn(char* const arg[]) { // TODO
 	def_prog_mode();
 	endwin();
 	int ret = 0;
 	int status;
-	pid_t pid = fork(); // TODO vfork() wouldn't need waitpid(), but ... ???
+	pid_t pid = fork();
 	if (pid == 0) {
 		// TODO what about std{in,out,err}?
-		if (execlp(prog, prog, arg, NULL)) ret = errno;
+		if (execve(arg[0], arg, environ)) ret = errno;
 	}
 	else {
 		while (waitpid(pid, &status, 0) == -1);
@@ -273,16 +274,24 @@ static void mode_manager(struct ui* i, struct task* t) {
 	case CMD_EDIT_FILE:
 		if ((path = file_view_path_to_selected(i->pv))) {
 			if (is_dir(path)) failed(i->error, "edit", EISDIR, NULL);
-			const char* const ed = getenv("EDITOR");
-			spawn(ed ? ed : "vi", path);
+			char exeimg[NAME_MAX]; // TODO
+			strcpy(exeimg, "/bin");
+			char* const ed = getenv("EDITOR");
+			append_dir(exeimg, ed ? ed : "vi");
+			char* const arg[] = { exeimg, path, NULL };
+			spawn(arg);
 			free(path);
 		}
 		break;
 	case CMD_OPEN_FILE:
 		if ((path = file_view_path_to_selected(i->pv))) {
 			if (is_dir(path)) failed(i->error, "open", EISDIR, NULL);
-			const char* const pager = getenv("PAGER");
-			spawn(pager ? pager : "less", path);
+			char exeimg[NAME_MAX]; // TODO
+			strcpy(exeimg, "/bin");
+			char* const pager = getenv("PAGER");
+			append_dir(exeimg, pager ? pager : "less");
+			char* const arg[] = { exeimg, path, NULL };
+			spawn(arg);
 			free(path);
 		}
 		break;
@@ -329,6 +338,7 @@ static void mode_manager(struct ui* i, struct task* t) {
 		path = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
 		name = calloc(NAME_MAX+1, sizeof(utf8));
 		if (open_prompt(i, name, name, PATH_MAX) ||
+		   (err = EINVAL, contains(name, "/")) || // TODO
 		   (err = append_dir(path, name)) ||
 		   (err = dir_make(path)) ||
 		   (err = file_view_scan_dir(i->pv))) {
@@ -357,16 +367,12 @@ static void mode_manager(struct ui* i, struct task* t) {
 		else chmod_open(i, path);
 		break;
 	case CMD_RENAME:
-		/* TODO what is user enters someting like:
-		 * 'dir/renamed.txt'
-		 * which perfectly fits NAME_MAX and will be accepted by append_dir()
-		 * conclusion: entering a PATH should be detected and not permitted
-		 */
 		opath = file_view_path_to_selected(i->pv);
 		npath = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
 		name = strncpy(malloc(NAME_MAX+1),
 				i->pv->file_list[i->pv->selection]->file_name, NAME_MAX);
 		if (open_prompt(i, name, name+strnlen(name, NAME_MAX), NAME_MAX) ||
+		   (err = EINVAL, contains(name, "/")) || // TODO
 		   (err = append_dir(npath, name)) ||
 		   (err = rename(opath, npath)) ||
 		   (err = file_view_scan_dir(i->pv))) {
@@ -431,27 +437,19 @@ static void mode_manager(struct ui* i, struct task* t) {
 /* Display message and clean task */
 static void task_finish(struct ui* const i, struct task* const t) {
 	wtimeout(stdscr, -1);
-	// TODO
-	int epv = file_view_scan_dir(i->pv);
-	int esv = file_view_scan_dir(i->sv);
-	if (epv || esv) {
-		failed(i->error, task_strings[t->t][NOUN], epv | esv, NULL);
+	int err;
+	if ((err =  file_view_scan_dir(i->pv)) ||
+	    (err = file_view_scan_dir(i->sv))) {
+		failed(i->error, task_strings[t->t][NOUN], err, NULL);
 	}
 	else {
 		file_view_sort(i->pv);
 		file_view_sort(i->sv);
+		if (t->t == TASK_REMOVE) file_view_afterdel(i->pv);
+		else if (t->t == TASK_MOVE) prev_entry(i->pv);
+		snprintf(i->info, MSG_BUFFER_SIZE, "%s %s",
+				task_strings[t->t][PAST], t->src);
 	}
-	switch (t->t) {
-	case TASK_REMOVE:
-		file_view_afterdel(i->pv);
-		break;
-	case TASK_MOVE:
-		prev_entry(i->pv);
-		break;
-	default: break;
-	}
-	snprintf(i->info, MSG_BUFFER_SIZE, "%s %s",
-			task_strings[t->t][PAST], t->src);
 	task_clean(t);
 	i->ui_needs_refresh = true;
 	i->m = MODE_MANAGER;
@@ -462,7 +460,7 @@ static void task_execute(struct ui* i, struct task* t) {
 	int e = 0;
 	if (!t->paused && (e = do_task(t, 1024))) {
 		failed(i->error, task_strings[t->t][NOUN], e, NULL);
-		task_clean(t);
+		task_clean(t); // TODO
 		wtimeout(stdscr, -1);
 	}
 	char sdone[SIZE_BUF_SIZE];
@@ -536,15 +534,17 @@ int main(int argc, char* argv[])  {
 	fvs[0].sorting = fvs[1].sorting = cmp_name_asc;
 
 	struct ui i = ui_init(&fvs[0], &fvs[1]);
-
+	// TODO is jumping to / a good practice?
 	for (int v = 0; v < 2; ++v) {
-		if (!getcwd(fvs[v].wd, PATH_MAX)) exit(EXIT_FAILURE); // TODO
+		if (!getcwd(fvs[v].wd, PATH_MAX)) {
+			fprintf(stderr, "could not read cwd; jumping to /\n");
+			strncpy(fvs[v].wd, "/", 2);
+		}
 		if (init_wd[v]) { // Apply argument-passed paths
 			utf8* const e = strndup(init_wd[v], PATH_MAX);
 			if (enter_dir(fvs[v].wd, e)) {
-				ui_end(&i);
-				fprintf(stderr, "path too long: limit is %d\n", PATH_MAX);
-				exit(EXIT_FAILURE);
+				fprintf(stderr, "path too long: limit is %d; jumping to /\n", PATH_MAX);
+				strncpy(fvs[v].wd, "/", 2);
 			}
 			free(e);
 		}
@@ -571,7 +571,7 @@ int main(int argc, char* argv[])  {
 
 	snprintf(i.info, MSG_BUFFER_SIZE, "Type ? for help and license notice.");
 	while (i.run) {
-		if (i.ui_needs_refresh) { // TODO FIXME here ?
+		if (i.ui_needs_refresh) {
 			ui_update_geometry(&i);
 		}
 		ui_draw(&i);
