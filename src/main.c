@@ -140,10 +140,10 @@ static void mode_chmod(struct ui* i, struct task* t) {
 		chmod_close(i);
 		break;
 	case CMD_CHANGE:
-		if (chmod(i->chmod->path, i->chmod->m)) {
+		if (chmod(i->path, i->perm)) {
 			failed(i->error, "chmod", errno, NULL);
 		}
-		if (lchown(i->chmod->path, i->chmod->o, i->chmod->g)) {
+		if (lchown(i->path, i->o, i->g)) {
 			failed(i->error, "chmod", errno, NULL);
 		}
 		if ((err = file_view_scan_dir(i->pv))) {
@@ -160,8 +160,8 @@ static void mode_chmod(struct ui* i, struct task* t) {
 			if (!pwd) failed(i->error, "chown", errno,
 					"Such user does not exist");
 			else {
-				i->chmod->o = pwd->pw_uid;
-				strncpy(i->chmod->owner, pwd->pw_name, LOGIN_NAME_MAX);
+				i->o = pwd->pw_uid;
+				strncpy(i->owner, pwd->pw_name, LOGIN_NAME_MAX);
 			}
 		}
 		free(newlogin);
@@ -176,25 +176,25 @@ static void mode_chmod(struct ui* i, struct task* t) {
 			if (!grp) failed(i->error, "chgrp", errno,
 					"Such group does not exist");
 			else {
-				i->chmod->g = grp->gr_gid;
-				strncpy(i->chmod->group, grp->gr_name, LOGIN_NAME_MAX);
+				i->g = grp->gr_gid;
+				strncpy(i->group, grp->gr_name, LOGIN_NAME_MAX);
 			}
 		}
 		free(newgrp);
 		}
 		break;
-	case CMD_TOGGLE_UIOX: i->chmod->m ^= S_ISUID; break;
-	case CMD_TOGGLE_GIOX: i->chmod->m ^= S_ISGID; break;
-	case CMD_TOGGLE_SB: i->chmod->m ^= S_ISVTX; break;
-	case CMD_TOGGLE_UR: i->chmod->m ^= S_IRUSR; break;
-	case CMD_TOGGLE_UW: i->chmod->m ^= S_IWUSR; break;
-	case CMD_TOGGLE_UX: i->chmod->m ^= S_IXUSR; break;
-	case CMD_TOGGLE_GR: i->chmod->m ^= S_IRGRP; break;
-	case CMD_TOGGLE_GW: i->chmod->m ^= S_IWGRP; break;
-	case CMD_TOGGLE_GX: i->chmod->m ^= S_IXGRP; break;
-	case CMD_TOGGLE_OR: i->chmod->m ^= S_IROTH; break;
-	case CMD_TOGGLE_OW: i->chmod->m ^= S_IWOTH; break;
-	case CMD_TOGGLE_OX: i->chmod->m ^= S_IXOTH; break;
+	case CMD_TOGGLE_UIOX: i->perm ^= S_ISUID; break;
+	case CMD_TOGGLE_GIOX: i->perm ^= S_ISGID; break;
+	case CMD_TOGGLE_SB: i->perm ^= S_ISVTX; break;
+	case CMD_TOGGLE_UR: i->perm ^= S_IRUSR; break;
+	case CMD_TOGGLE_UW: i->perm ^= S_IWUSR; break;
+	case CMD_TOGGLE_UX: i->perm ^= S_IXUSR; break;
+	case CMD_TOGGLE_GR: i->perm ^= S_IRGRP; break;
+	case CMD_TOGGLE_GW: i->perm ^= S_IWGRP; break;
+	case CMD_TOGGLE_GX: i->perm ^= S_IXGRP; break;
+	case CMD_TOGGLE_OR: i->perm ^= S_IROTH; break;
+	case CMD_TOGGLE_OW: i->perm ^= S_IWOTH; break;
+	case CMD_TOGGLE_OX: i->perm ^= S_IXOTH; break;
 	default: break;
 	}
 }

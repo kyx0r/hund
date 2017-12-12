@@ -497,7 +497,7 @@ static void ui_draw_chmod(struct ui* const i) {
 
 	for (int b = 0; b < 12; ++b) {
 		const char s = (m & (mode_t)1 ? 'x' : ' ');
-		mvwprintw(cw, dr++, 2, "[%c] %s", s, mode_bit_meaning[b]);
+		mvwprintw(cw, dr+11-b, 2, "[%c] %s", s, mode_bit_meaning[b]);
 		m >>= 1;
 	}
 	wrefresh(cw);
