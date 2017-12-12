@@ -174,13 +174,14 @@ enum input_type {
 	CTRL,
 };
 
-struct input { // TODO
+union input_data {
+	char utf[5];
+	int c; // ctrl code or special key
+};
+
+struct input {
 	enum input_type t;
-	union {
-		char utf[5];
-		char ctrl;
-		int c;
-	};
+	union input_data d;
 };
 
 struct input get_input(WINDOW* const);
@@ -194,9 +195,9 @@ struct input2cmd {
 };
 
 #define ENDK { .t = END }
-#define UTF8(K) { .t = UTF8, .utf = K }
-#define SPEC(K) { .t = SPECIAL, .c = K }
-#define CTRL(K) { .t = CTRL, .ctrl = K }
+#define UTF8(K) { .t = UTF8, .d.utf = K }
+#define SPEC(K) { .t = SPECIAL, .d.c = (int)K }
+#define CTRL(K) { .t = CTRL, .d.c = (int)K }
 
 static const struct input2cmd default_mapping[] = {
 	/* MODE MANGER */

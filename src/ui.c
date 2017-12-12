@@ -116,13 +116,11 @@ struct ui ui_init(struct file_view* const pv,
 			switch (i.kmap[k].i[il].t) {
 			case END: break;
 			case UTF8:
-				strncpy(i.kmap[k].i[il].utf, default_mapping[k].i[il].utf, 5);
+				strncpy(i.kmap[k].i[il].d.utf, default_mapping[k].i[il].d.utf, 5);
 				break;
 			case SPECIAL:
-				i.kmap[k].i[il].c = default_mapping[k].i[il].c;
-				break;
 			case CTRL:
-				i.kmap[k].i[il].ctrl = default_mapping[k].i[il].ctrl;
+				i.kmap[k].i[il].d.c = default_mapping[k].i[il].d.c;
 				break;
 			}
 		}
@@ -397,20 +395,20 @@ static void ui_draw_help(struct ui* const i) {
 				while (i->kmap[k].i[ks].t != END) {
 					switch (i->kmap[k].i[ks].t) {
 					case UTF8:
-						mvwprintw(hw, dr, w, "%s", i->kmap[k].i[ks].utf);
-						w += utf8_width(i->kmap[k].i[ks].utf);
-						ww += utf8_width(i->kmap[k].i[ks].utf);
+						mvwprintw(hw, dr, w, "%s", i->kmap[k].i[ks].d.utf);
+						w += utf8_width(i->kmap[k].i[ks].d.utf);
+						ww += utf8_width(i->kmap[k].i[ks].d.utf);
 						break;
 					case CTRL:
-						mvwprintw(hw, dr, w, "^%c", i->kmap[k].i[ks].ctrl);
+						mvwprintw(hw, dr, w, "^%c", i->kmap[k].i[ks].d.c);
 						w += 2;
 						ww += 2;
 						break;
 					case SPECIAL:
 						mvwprintw(hw, dr, w, "%s",
-								keyname(i->kmap[k].i[ks].c)+4);
-						w += strlen(keyname(i->kmap[k].i[ks].c)+4);
-						ww += strlen(keyname(i->kmap[k].i[ks].c)+4);
+								keyname(i->kmap[k].i[ks].d.c)+4);
+						w += strlen(keyname(i->kmap[k].i[ks].d.c)+4);
+						ww += strlen(keyname(i->kmap[k].i[ks].d.c)+4);
 						break;
 					default: break;
 					}
@@ -450,13 +448,13 @@ static void ui_draw_hintbar(struct ui* const i, WINDOW* const sw) {
 			switch (ins[c].t) {
 			case END: break;
 			case UTF8:
-				wprintw(sw, "%s", ins[c].utf);
+				wprintw(sw, "%s", ins[c].d.utf);
 				break;
 			case SPECIAL:
-				wprintw(sw, "%s", keyname(ins[c].c)+4);
+				wprintw(sw, "%s", keyname(ins[c].d.c)+4);
 				break;
 			case CTRL:
-				wprintw(sw, "^%c", ins[c].ctrl);
+				wprintw(sw, "^%c", ins[c].d.c);
 				break;
 			default:
 				break;
@@ -561,11 +559,7 @@ void ui_draw(struct ui* const i) {
  * ...but if you do, delete old window AFTER you assign new one to panel.
  */
 void ui_update_geometry(struct ui* const i) {
-	int newscrh, newscrw;
-	getmaxyx(stdscr, newscrh, newscrw);
-	//syslog(LOG_DEBUG, "resized to %ux%u", newscrw, newscrh);
-	i->scrh = newscrh;
-	i->scrw = newscrw;
+	getmaxyx(stdscr, i->scrh, i->scrw);
 	const int w[2] = { i->scrw/2, i->scrw - w[0] };
 	const int px[2] = { 0, w[0] };
 	for (int x = 0; x < 2; ++x) {
@@ -630,6 +624,10 @@ void help_close(struct ui* const i) {
 	i->m = MODE_MANAGER;
 }
 
+/*
+ * Unused bytes of union input_data are zeroed,
+ * so comparing two inputs via memcmp is possible.
+ */
 struct input get_input(WINDOW* const w) {
 	struct input r;
 	memset(&r, 0, sizeof(struct input));
@@ -637,29 +635,29 @@ struct input get_input(WINDOW* const w) {
 	int init = wgetch(w);
 	const utf8 u = (utf8)init;
 	const char* kn = keyname(init);
-	//syslog(LOG_DEBUG, "get_input: %s (%d), %d", kn, init, has_key(init));
+	syslog(LOG_DEBUG, "get_input: %s (%d), %d", kn, init, has_key(init));
 	if (init == -1) {
 		r.t = END;
 	}
 	else if (strlen(kn) == 2 && kn[0] == '^') {
 		r.t = CTRL;
-		r.ctrl = kn[1];
+		r.d.c = kn[1];
 	}
 	else if (has_key(init)) {
 		r.t = SPECIAL;
-		r.c = init;
+		r.d.c = init;
 	}
 	else if ((utflen = utf8_g2nb(&u))) {
 		r.t = UTF8;
-		r.utf[0] = u;
+		r.d.utf[0] = u;
 		for (size_t i = 1; i < utflen; ++i) {
-			r.utf[i] = (utf8)wgetch(w);
+			r.d.utf[i] = (utf8)wgetch(w);
 		}
 	}
 	else {
 		if (init == KEY_RESIZE) {
 			r.t = SPECIAL;
-			r.c = init;
+			r.d.c = init;
 		}
 		else r.t = END;
 	}
@@ -676,12 +674,11 @@ struct input get_input(WINDOW* const w) {
  * HANDLES KEY_RESIZE // FIXME somewhere else?
  */
 enum command get_cmd(struct ui* const i) {
-	// TODO simplify
 	memset(i->mks, 0, i->kml*sizeof(int));
 	static struct input il[INPUT_LIST_LENGTH];
 	static int ili = 0;
 	struct input newinput = get_input(stdscr);
-	if (newinput.t == SPECIAL && newinput.c == KEY_RESIZE) {
+	if (newinput.t == SPECIAL && newinput.d.c == KEY_RESIZE) {
 		ui_update_geometry(i); // TODO TODO FIXME maybe not here
 		ui_draw(i);
 		memset(il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
@@ -690,7 +687,7 @@ enum command get_cmd(struct ui* const i) {
 	}
 
 	if (newinput.t == END) return CMD_NONE;
-	else if (newinput.t == CTRL && newinput.ctrl == '[') {
+	else if (newinput.t == CTRL && newinput.d.c == '[') { // ESC
 		memset(il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
 		ili = 0;
 		return CMD_NONE;
@@ -704,20 +701,7 @@ enum command get_cmd(struct ui* const i) {
 		const struct input* const in = i2c->i;
 		for (int s = 0; s < ili; ++s) {
 			if (in[s].t != il[s].t) break;
-			bool match = false;
-			switch (in[s].t) {
-			case END: break;
-			case UTF8:
-				match = !strcmp(in[s].utf, il[s].utf);
-				break;
-			case SPECIAL:
-				match = in[s].c == il[s].c;
-				break;
-			case CTRL:
-				match = in[s].ctrl == il[s].ctrl;
-				break;
-			}
-			if (match) {
+			if (!memcmp(&in[s], &il[s], sizeof(struct input))) {
 				i->mks[m] += 1;
 			}
 			else {
@@ -727,8 +711,8 @@ enum command get_cmd(struct ui* const i) {
 		}
 	}
 
-	int matches = 0;
-	size_t mi = 0;
+	int matches = 0; // number of matches
+	size_t mi = 0; // (last) Match Index
 	for (size_t m = 0; m < i->kml; ++m) {
 		if (i->mks[m]) {
 			matches += 1;
@@ -743,24 +727,8 @@ enum command get_cmd(struct ui* const i) {
 		return CMD_NONE;
 	}
 	else if (matches == 1) {
-		bool fullmatch = true;
-		for (int s = 0; s < INPUT_LIST_LENGTH &&
-				i->kmap[mi].i[s].t != END; ++s) {
-			fullmatch = fullmatch && il[s].t == i->kmap[mi].i[s].t;
-			switch (il[s].t) {
-			case END: break;
-			case UTF8:
-				fullmatch = fullmatch &&
-					!strcmp(il[s].utf, i->kmap[mi].i[s].utf);
-				break;
-			case SPECIAL:
-				fullmatch = fullmatch && il[s].c == i->kmap[mi].i[s].c;
-				break;
-			case CTRL:
-				fullmatch = fullmatch && il[s].ctrl == i->kmap[mi].i[s].ctrl;
-				break;
-			}
-		}
+		const bool fullmatch = !memcmp(il,
+				i->kmap[mi].i, INPUT_LIST_LENGTH*sizeof(struct input));
 		if (fullmatch) {
 			memset(il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
 			ili = 0;
@@ -768,9 +736,6 @@ enum command get_cmd(struct ui* const i) {
 			// Instead, mks is cleared when entered get_cmd()
 			return i->kmap[mi].c;
 		}
-	}
-	else { // some matches
-
 	}
 	return CMD_NONE;
 }
@@ -791,21 +756,21 @@ int fill_textbox(utf8* const buf, utf8** const buftop,
 	wrefresh(w);
 	struct input i = get_input(w);
 	curs_set(0);
-	if (i.t == SPECIAL && i.c == KEY_RESIZE) return -3;
+	if (i.t == SPECIAL && i.d.c == KEY_RESIZE) return -3;
 	if (i.t == END) return 1;
-	if (i.t == CTRL && i.ctrl == '[') return -1;
-	else if (i.t == CTRL && i.ctrl == 'N') return 2;
-	else if (i.t == CTRL && i.ctrl == 'P') return -2;
-	else if ((i.t == CTRL && i.ctrl == 'J') ||
-	         (i.t == UTF8 && (i.utf[0] == '\n' || i.utf[0] == '\r'))) {
+	if (i.t == CTRL && i.d.c == '[') return -1;
+	else if (i.t == CTRL && i.d.c == 'N') return 2;
+	else if (i.t == CTRL && i.d.c == 'P') return -2;
+	else if ((i.t == CTRL && i.d.c == 'J') ||
+	         (i.t == UTF8 && (i.d.utf[0] == '\n' || i.d.utf[0] == '\r'))) {
 		if (*buftop != buf) return 0;
 	}
 	else if (i.t == UTF8 && (size_t)(*buftop - buf) < bsize) {
-		utf8_insert(buf, i.utf, utf8_ng_till(buf, *buftop));
-		*buftop += utf8_g2nb(i.utf);
+		utf8_insert(buf, i.d.utf, utf8_ng_till(buf, *buftop));
+		*buftop += utf8_g2nb(i.d.utf);
 	}
-	else if ((i.t == CTRL && i.ctrl == 'H') ||
-	         (i.t == SPECIAL && i.c == KEY_BACKSPACE)) {
+	else if ((i.t == CTRL && i.d.c == 'H') ||
+	         (i.t == SPECIAL && i.d.c == KEY_BACKSPACE)) {
 		if (*buftop != buf) {
 			const size_t before = strnlen(buf, bsize);
 			utf8_remove(buf, utf8_ng_till(buf, *buftop)-1);
@@ -815,34 +780,34 @@ int fill_textbox(utf8* const buf, utf8** const buftop,
  		// Exit only when buf is empty
 		else return -1;
 	}
-	else if ((i.t == CTRL && i.ctrl == 'D') ||
-	         (i.t == SPECIAL && i.c == KEY_DC)) {
+	else if ((i.t == CTRL && i.d.c == 'D') ||
+	         (i.t == SPECIAL && i.d.c == KEY_DC)) {
 		utf8_remove(buf, utf8_ng_till(buf, *buftop));
 	}
-	else if ((i.t == CTRL && i.ctrl == 'A') ||
-	         (i.t == SPECIAL && i.c == KEY_HOME)) {
+	else if ((i.t == CTRL && i.d.c == 'A') ||
+	         (i.t == SPECIAL && i.d.c == KEY_HOME)) {
 		*buftop = buf;
 	}
-	else if ((i.t == CTRL && i.ctrl == 'E') ||
-	         (i.t == SPECIAL && i.c == KEY_END)) {
+	else if ((i.t == CTRL && i.d.c == 'E') ||
+	         (i.t == SPECIAL && i.d.c == KEY_END)) {
 		*buftop = buf+strnlen(buf, bsize);
 	}
-	else if (i.t == CTRL && i.ctrl == 'U') {
+	else if (i.t == CTRL && i.d.c == 'U') {
 		*buftop = buf;
 		memset(buf, 0, bsize);
 	}
-	else if (i.t == CTRL && i.ctrl == 'K') {
+	else if (i.t == CTRL && i.d.c == 'K') {
 		const size_t clen = strnlen(buf, bsize);
 		memset(*buftop, 0, strnlen(*buftop, bsize-clen));
 	}
-	else if ((i.t == CTRL && i.ctrl == 'F') ||
-	         (i.t == SPECIAL && i.c == KEY_RIGHT)) {
+	else if ((i.t == CTRL && i.d.c == 'F') ||
+	         (i.t == SPECIAL && i.d.c == KEY_RIGHT)) {
 		if ((size_t)(*buftop - buf) < bsize) {
 			*buftop += utf8_g2nb(*buftop);
 		}
 	}
-	else if ((i.t == CTRL && i.ctrl == 'B') ||
-	         (i.t == SPECIAL && i.c == KEY_LEFT)) {
+	else if ((i.t == CTRL && i.d.c == 'B') ||
+	         (i.t == SPECIAL && i.d.c == KEY_LEFT)) {
 		if ((size_t)(*buftop - buf)) {
 			const size_t gt = utf8_ng_till(buf, *buftop);
 			*buftop = buf;
