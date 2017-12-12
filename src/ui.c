@@ -99,7 +99,6 @@ struct ui ui_init(struct file_view* const pv,
 	i.m = MODE_MANAGER;
 	i.prch = ' ';
 	i.prompt = NULL;
-	i.chmod = NULL;
 	i.error[0] = i.info[0] = 0;
 	i.helpy = 0;
 	i.help = NULL;
@@ -154,9 +153,8 @@ void ui_end(struct ui* const i) {
 	free(i->mks);
 	endwin();
 }
-
 static void _printw_pathbar(const char* const path,
-		WINDOW* const w, fnum_t width) {
+		WINDOW* const w, const fnum_t width) {
 	// TODO
 	const struct passwd* const pwd = get_pwd();
 	const int pi = prettify_path_i(path, pwd->pw_dir);
@@ -164,12 +162,12 @@ static void _printw_pathbar(const char* const path,
 	wattron(w, COLOR_PAIR(THEME_PATHBAR));
 	if (path_width <= width-2) {
 		mvwprintw(w, 0, 0, "%s%s%*c ", (pi ? " ~" : " "),
-				path+pi, width-utf8_width(path+pi), ' ');
+				path+pi, width-(path_width+2), ' ');
 	}
 	else {
-		const size_t sg = path_width - (width-2) - (pi?1:0);
-		mvwprintw(w, 0, 0, " %s ",
-				path+pi+utf8_slice_length(path+pi, sg));
+		const size_t sg = path_width - ((width-2) + (pi?1:0));
+		const char* const p = path+pi+utf8_slice_length(path+pi, sg);
+		mvwprintw(w, 0, 0, " %s ", p);
 	}
 	wattroff(w, COLOR_PAIR(THEME_PATHBAR));
 }
@@ -474,19 +472,32 @@ static void ui_draw_hintbar(struct ui* const i, WINDOW* const sw) {
 }
 
 static void ui_draw_chmod(struct ui* const i) {
-	WINDOW* cw = panel_window(i->chmod->p);
-	box(cw, 0, 0);
-	mode_t m = i->chmod->m;
-	mvwprintw(cw, 1, 2, "permissions: %o", m);
-	mvwprintw(cw, 2, 2, "owner: %s%*c", i->chmod->owner,
-			// 7 = "owner: ", 2 = x offset + 1 for border
-			i->chmod->ww-(utf8_width(i->chmod->owner)+7+2+1), ' ');
-	mvwprintw(cw, 3, 2, "group: %s%*c", i->chmod->group,
-			i->chmod->ww-(utf8_width(i->chmod->group)+7+2+1), ' ');
+	WINDOW* cw;
+	for (int p = 0; p < 2; ++p) {
+		if (i->fvs[p] == i->sv) {
+			cw = panel_window(i->fvp[p]);
+		}
+	}
+	wclear(cw);
+	mode_t m = i->perm;
+	int dr = 1;
+
+	int ph, pw;
+	getmaxyx(cw, ph, pw); // TODO
+	(void)(ph);
+
+	_printw_pathbar(i->path, cw, pw);
+	static const char* txt[] = { "permissions: ", "owner: ", "group: " };
+	mvwprintw(cw, dr++, 2, "%s%06o", txt[0], m,
+			pw-(strlen(txt[0])+6), ' ');
+	mvwprintw(cw, dr++, 2, "%s%s%*c", txt[1], i->owner,
+			pw-(strlen(txt[1])+strnlen(i->owner, LOGIN_NAME_MAX)), ' ');
+	mvwprintw(cw, dr++, 2, "%s%s%*c", txt[2], i->group,
+			pw-(strlen(txt[2])+strnlen(i->group, LOGIN_NAME_MAX)), ' ');
+
 	for (int b = 0; b < 12; ++b) {
 		const char s = (m & (mode_t)1 ? 'x' : ' ');
-		mvwprintw(cw, i->chmod->wh-2-b, 2, "[%c] %s",
-				s, mode_bit_meaning[b]);
+		mvwprintw(cw, dr++, 2, "[%c] %s", s, mode_bit_meaning[b]);
 		m >>= 1;
 	}
 	wrefresh(cw);
@@ -568,12 +579,6 @@ void ui_update_geometry(struct ui* const i) {
 	wresize(sw, 1, i->scrw);
 	move_panel(i->status, i->scrh-1, 0);
 
-	if (i->chmod) {
-		WINDOW* cw = panel_window(i->chmod->p);
-		PANEL* cp = i->chmod->p;
-		wresize(cw, i->chmod->wh, i->chmod->ww);
-		move_panel(cp, (i->scrh-i->chmod->wh)/2, (i->scrw-i->chmod->ww)/2);
-	}
 	if (i->help) {
 		WINDOW* hw = panel_window(i->help);
 		PANEL* hp = i->help;
@@ -584,7 +589,6 @@ void ui_update_geometry(struct ui* const i) {
 }
 
 int chmod_open(struct ui* const i, utf8* const path) {
-	// TODO put chmod data into struct ui (?)
 	struct stat s;
 	if (stat(path, &s)) return errno;
 	errno = 0;
@@ -593,31 +597,22 @@ int chmod_open(struct ui* const i, utf8* const path) {
 	struct group* grp = getgrgid(s.st_gid);
 	if (!grp) return errno;
 
-	i->chmod = malloc(sizeof(struct ui_chmod));
-	i->chmod->o = s.st_uid;
-	i->chmod->g = s.st_gid;
-	i->chmod->mb = i->m;
-	i->chmod->path = path;
-	i->chmod->m = s.st_mode;
-	WINDOW* cw = newwin(1, 1, 0, 0);
-	i->chmod->p = new_panel(cw);
+	i->o = s.st_uid;
+	i->g = s.st_gid;
+	i->mb = i->m;
 	i->m = MODE_CHMOD;
-	strcpy(i->chmod->owner, pwd->pw_name);
-	strcpy(i->chmod->group, grp->gr_name);
-	i->chmod->ww = 34;
-	i->chmod->wh = 17;
+	i->path = path;
+	i->perm = s.st_mode;
+	strncpy(i->owner, pwd->pw_name, LOGIN_NAME_MAX);
+	strncpy(i->group, grp->gr_name, LOGIN_NAME_MAX);
 	i->ui_needs_refresh = true;
 	return 0;
 }
 
 void chmod_close(struct ui* const i) {
-	i->m = i->chmod->mb;
-	WINDOW* cw = panel_window(i->chmod->p);
-	del_panel(i->chmod->p);
-	delwin(cw);
-	free(i->chmod->path);
-	free(i->chmod);
-	i->chmod = NULL;
+	i->m = i->mb;
+	free(i->path);
+	i->path = NULL;
 }
 
 void help_open(struct ui* const i) {
