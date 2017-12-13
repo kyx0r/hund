@@ -241,6 +241,7 @@ static void prepare_long_task(struct ui* i, struct task* t,
 	}
 	int r; // TODO
 	task_new(t, tt, src, dst, nn);
+	i->m = MODE_WAIT;
 	if ((r = task_estimate_file_volume(t, t->src))) {
 		failed(i->error, "build file list", r, NULL);
 		task_clean(t);
