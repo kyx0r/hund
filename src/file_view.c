@@ -212,7 +212,7 @@ bool file_find(struct file_view* const fv, const utf8* const name,
 
 int file_view_enter_selected_dir(struct file_view* const fv) {
 	if (!fv->num_files || !visible(fv, fv->selection)) return 0;
-	utf8* fn = fv->file_list[fv->selection]->file_name;
+	const utf8* const fn = fv->file_list[fv->selection]->file_name;
 	const struct stat* rst = &fv->file_list[fv->selection]->s;
 	const struct stat* lst = fv->file_list[fv->selection]->l;
 	if (!lst) return ENOENT;
@@ -231,8 +231,8 @@ int file_view_enter_selected_dir(struct file_view* const fv) {
 }
 
 int file_view_up_dir(struct file_view* const fv) {
-	utf8* prevdir = malloc(NAME_MAX+1);
-	current_dir(fv->wd, prevdir);
+	utf8* prevdir = strncpy(malloc(NAME_MAX+1),
+			fv->wd+current_dir_i(fv->wd), NAME_MAX);
 	up_dir(fv->wd);
 	int err = file_view_scan_dir(fv);
 	if (err) {
