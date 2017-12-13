@@ -99,9 +99,8 @@ struct ui ui_init(struct file_view* const pv,
 	i.m = MODE_MANAGER;
 	i.prch = ' ';
 	i.prompt = NULL;
-	i.error[0] = i.info[0] = 0;
+	i.mt = MSG_NONE;
 	i.helpy = 0;
-	i.help = NULL;
 	i.run = true;
 	i.ui_needs_refresh = true;
 	i.kml = default_mapping_length;
@@ -342,8 +341,8 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 }
 
 static void ui_draw_help(struct ui* const i) {
-	// TODO
-	WINDOW* const hw = panel_window(i->help);
+	// TODO redo
+	WINDOW* const hw = stdscr;
 	const int hheight = i->scrh-1;
 	const int lines = 4*2 + cmd_help_length - 1 + 5; // TODO
 	int dr = -i->helpy;
@@ -436,6 +435,7 @@ static void ui_draw_help(struct ui* const i) {
 }
 
 static void ui_draw_hintbar(struct ui* const i, WINDOW* const sw) {
+	// TODO redo
 	mvwprintw(sw, 0, 0, "%*c", i->scrw-1, ' ');
 	wmove(sw, 0, 0);
 	for (size_t x = 0; x < i->kml; ++x) { // TODO redo
@@ -519,21 +519,19 @@ void ui_draw(struct ui* const i) {
 	}
 
 	WINDOW* sw = panel_window(i->status);
-	if (i->error[0]) { // TODO
-		wattron(sw, COLOR_PAIR(THEME_ERROR));
-		mvwprintw(sw, 0, 0, "%s", i->error);
-		wattroff(sw, COLOR_PAIR(THEME_ERROR));
-		mvwprintw(sw, 0, strlen(i->error), "%*c",
-				i->scrw-utf8_width(i->error), ' ');
-		i->error[0] = 0;
-	}
-	else if (i->info[0]) { // TODO
-		wattron(sw, COLOR_PAIR(THEME_INFO));
-		mvwprintw(sw, 0, 0, "%s", i->info);
-		wattroff(sw, COLOR_PAIR(THEME_INFO));
-		mvwprintw(sw, 0, strlen(i->info), "%*c",
-				i->scrw-utf8_width(i->info), ' ');
-		i->info[0] = 0;
+	if (i->mt) {
+		int cp = 0;
+		switch (i->mt) {
+		case MSG_INFO: cp = THEME_INFO; break;
+		case MSG_ERROR: cp = THEME_ERROR; break;
+		default: break;
+		}
+		wattron(sw, COLOR_PAIR(cp));
+		mvwprintw(sw, 0, 0, "%s", i->msg);
+		wattroff(sw, COLOR_PAIR(cp));
+		mvwprintw(sw, 0, strlen(i->msg), "%*c",
+				i->scrw-utf8_width(i->msg), ' ');
+		i->mt = MSG_NONE;
 	}
 	else if (i->prompt) { // TODO
 		mvwprintw(sw, 0, 0, "%c%s%*c", i->prch, i->prompt,
@@ -573,12 +571,6 @@ void ui_update_geometry(struct ui* const i) {
 	wresize(sw, 1, i->scrw);
 	move_panel(i->status, i->scrh-1, 0);
 
-	if (i->help) {
-		WINDOW* hw = panel_window(i->help);
-		PANEL* hp = i->help;
-		wresize(hw, i->scrh-1, i->scrw);
-		move_panel(hp, 0, 0);
-	}
 	i->ui_needs_refresh = false;
 }
 
@@ -593,7 +585,6 @@ int chmod_open(struct ui* const i, utf8* const path) {
 
 	i->o = s.st_uid;
 	i->g = s.st_gid;
-	i->mb = i->m;
 	i->m = MODE_CHMOD;
 	i->path = path;
 	i->perm = s.st_mode;
@@ -604,24 +595,9 @@ int chmod_open(struct ui* const i, utf8* const path) {
 }
 
 void chmod_close(struct ui* const i) {
-	i->m = i->mb;
+	i->m = MODE_MANAGER;
 	free(i->path);
 	i->path = NULL;
-}
-
-void help_open(struct ui* const i) {
-	WINDOW* nw = newwin(1, 1, 0, 0);
-	i->help = new_panel(nw);
-	i->ui_needs_refresh = true;
-	i->m = MODE_HELP;
-}
-
-void help_close(struct ui* const i) {
-	WINDOW* hw = panel_window(i->help);
-	del_panel(i->help);
-	delwin(hw);
-	i->help = NULL;
-	i->m = MODE_MANAGER;
 }
 
 /*
@@ -635,7 +611,7 @@ struct input get_input(WINDOW* const w) {
 	int init = wgetch(w);
 	const utf8 u = (utf8)init;
 	const char* kn = keyname(init);
-	syslog(LOG_DEBUG, "get_input: %s (%d), %d", kn, init, has_key(init));
+	//syslog(LOG_DEBUG, "get_input: %s (%d), %d", kn, init, has_key(init));
 	if (init == -1) {
 		r.t = END;
 	}
@@ -732,7 +708,7 @@ enum command get_cmd(struct ui* const i) {
 		if (fullmatch) {
 			memset(il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
 			ili = 0;
-			// Not clearing on full match to preserve mks information for hints
+			// Not clearing mks on full match to preserve this information for hints
 			// Instead, mks is cleared when entered get_cmd()
 			return i->kmap[mi].c;
 		}
@@ -762,7 +738,8 @@ int fill_textbox(utf8* const buf, utf8** const buftop,
 	else if (i.t == CTRL && i.d.c == 'N') return 2;
 	else if (i.t == CTRL && i.d.c == 'P') return -2;
 	else if ((i.t == CTRL && i.d.c == 'J') ||
-	         (i.t == UTF8 && (i.d.utf[0] == '\n' || i.d.utf[0] == '\r'))) {
+	         (i.t == UTF8 &&
+	         (i.d.utf[0] == '\n' || i.d.utf[0] == '\r'))) {
 		if (*buftop != buf) return 0;
 	}
 	else if (i.t == UTF8 && (size_t)(*buftop - buf) < bsize) {
@@ -808,7 +785,7 @@ int fill_textbox(utf8* const buf, utf8** const buftop,
 	}
 	else if ((i.t == CTRL && i.d.c == 'B') ||
 	         (i.t == SPECIAL && i.d.c == KEY_LEFT)) {
-		if ((size_t)(*buftop - buf)) {
+		if (*buftop - buf) {
 			const size_t gt = utf8_ng_till(buf, *buftop);
 			*buftop = buf;
 			for (size_t i = 0; i < gt-1; ++i) {

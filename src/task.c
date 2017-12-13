@@ -354,11 +354,11 @@ int _at_step(struct task* const t, int* const c,
 		}
 		if (remove) {
 			if (unlink(t->tw.cpath)) return errno;
-		}
-		if (remove && !copy) {
-			t->size_done += t->tw.cs.st_size;
-			t->files_done += 1;
-			*c -= 1;
+			if (!copy) {
+				t->size_done += t->tw.cs.st_size;
+				t->files_done += 1;
+				*c -= 1;
+			}
 		}
 		break;
 	case AT_FILE:
@@ -369,11 +369,11 @@ int _at_step(struct task* const t, int* const c,
 		}
 		if (remove) {
 			if (unlink(t->tw.cpath)) return errno;
-		}
-		if (remove && !copy) {
-			t->size_done += t->tw.cs.st_size;
-			t->files_done += 1;
-			*c -= 1;
+			if (!copy) {
+				t->size_done += t->tw.cs.st_size;
+				t->files_done += 1;
+				*c -= 1;
+			}
 		}
 		break;
 	case AT_DIR:

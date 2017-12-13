@@ -366,10 +366,19 @@ static const char* const copyright_notice[] = {
 
 static const size_t cmd_help_length = sizeof(cmd_help)/sizeof(struct cmd2help);
 
+enum msg_type {
+	MSG_NONE = 0,
+	MSG_INFO,
+	//MSG_WARNING,
+	MSG_ERROR,
+};
+
 struct ui {
-	bool ui_needs_refresh;
 	int scrh, scrw; // Last window dimensions
+
+	bool ui_needs_refresh;
 	bool run;
+
 	enum mode m;
 
 	char prch;
@@ -382,16 +391,14 @@ struct ui {
 
 	PANEL* status;
 	size_t helpy;
-	PANEL* help;
 
-	utf8 error[MSG_BUFFER_SIZE];
-	utf8 info[MSG_BUFFER_SIZE];
+	enum msg_type mt;
+	utf8 msg[MSG_BUFFER_SIZE];
 
 	struct input2cmd* kmap;
 	size_t kml; // Key Mapping Length
 	int* mks; // Matching Key Sequence
 
-	/* CHMOD */
 	mode_t perm; // permissions of chmodded file
 	utf8* path; // path of chmodded file
 	uid_t o; // owner uid
@@ -403,7 +410,6 @@ struct ui {
 	 */
 	utf8 owner[LOGIN_NAME_MAX];
 	utf8 group[LOGIN_NAME_MAX];
-	enum mode mb; // Mode Before find mode
 };
 
 struct ui ui_init(struct file_view* const, struct file_view* const);
@@ -413,9 +419,6 @@ void ui_update_geometry(struct ui* const);
 
 int chmod_open(struct ui* const, utf8* const);
 void chmod_close(struct ui* const);
-
-void help_open(struct ui* const);
-void help_close(struct ui* const);
 
 struct input get_input(WINDOW* const);
 enum command get_cmd(struct ui* const);

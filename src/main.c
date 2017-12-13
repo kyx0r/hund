@@ -35,12 +35,14 @@
 #include "include/ui.h"
 #include "include/task.h"
 
-static void failed(utf8* error_buf, const utf8* f, int reason, utf8* custom) {
+static void failed(struct ui* const i, const utf8* const f,
+		const int reason, const utf8* const custom) {
+	i->mt = MSG_ERROR;
 	if (custom) {
-		snprintf(error_buf, MSG_BUFFER_SIZE, "%s failed: %s", f, custom);
+		snprintf(i->msg, MSG_BUFFER_SIZE, "%s failed: %s", f, custom);
 	}
 	else {
-		snprintf(error_buf, MSG_BUFFER_SIZE, "%s failed: %s (%d)",
+		snprintf(i->msg, MSG_BUFFER_SIZE, "%s failed: %s (%d)",
 				f, strerror(reason), reason);
 	}
 }
@@ -112,116 +114,14 @@ static void open_find(struct ui* const i) {
 	i->prompt = NULL;
 }
 
-typedef void (*mode_handler)(struct ui*, struct task*);
-
-static void mode_help(struct ui* i, struct task* t) {
-	(void)(t);
-	switch (get_cmd(i)) {
-	case CMD_HELP_QUIT:
-		help_close(i);
-		break;
-	case CMD_HELP_DOWN:
-		i->helpy += 1;
-		break;
-	case CMD_HELP_UP:
-		if (i->helpy > 0) {
-			i->helpy -= 1;
-		}
-		break;
-	default: break;
-	}
-}
-
-static void mode_chmod(struct ui* i, struct task* t) {
-	(void)(t);
-	int err;
-	switch (get_cmd(i)) {
-	case CMD_RETURN:
-		chmod_close(i);
-		break;
-	case CMD_CHANGE:
-		if (chmod(i->path, i->perm)) {
-			failed(i->error, "chmod", errno, NULL);
-		}
-		if (lchown(i->path, i->o, i->g)) {
-			failed(i->error, "chmod", errno, NULL);
-		}
-		if ((err = file_view_scan_dir(i->pv))) {
-			failed(i->error, "directory scan", err, NULL);
-		}
-		chmod_close(i);
-		break;
-	case CMD_CHOWN:
-		{
-		utf8* newlogin = calloc(LOGIN_NAME_MAX+1, sizeof(utf8));
-		if (!open_prompt(i, newlogin, newlogin, LOGIN_NAME_MAX)) {
-			errno = 0;
-			struct passwd* pwd = getpwnam(newlogin);
-			if (!pwd) failed(i->error, "chown", errno,
-					"Such user does not exist");
-			else {
-				i->o = pwd->pw_uid;
-				strncpy(i->owner, pwd->pw_name, LOGIN_NAME_MAX);
-			}
-		}
-		free(newlogin);
-		}
-		break;
-	case CMD_CHGRP:
-		{
-		utf8* newgrp = calloc(LOGIN_NAME_MAX+1, sizeof(utf8));
-		if (!open_prompt(i, newgrp, newgrp, LOGIN_NAME_MAX)) {
-			errno = 0;
-			struct group* grp = getgrnam(newgrp);
-			if (!grp) failed(i->error, "chgrp", errno,
-					"Such group does not exist");
-			else {
-				i->g = grp->gr_gid;
-				strncpy(i->group, grp->gr_name, LOGIN_NAME_MAX);
-			}
-		}
-		free(newgrp);
-		}
-		break;
-	case CMD_TOGGLE_UIOX: i->perm ^= S_ISUID; break;
-	case CMD_TOGGLE_GIOX: i->perm ^= S_ISGID; break;
-	case CMD_TOGGLE_SB: i->perm ^= S_ISVTX; break;
-	case CMD_TOGGLE_UR: i->perm ^= S_IRUSR; break;
-	case CMD_TOGGLE_UW: i->perm ^= S_IWUSR; break;
-	case CMD_TOGGLE_UX: i->perm ^= S_IXUSR; break;
-	case CMD_TOGGLE_GR: i->perm ^= S_IRGRP; break;
-	case CMD_TOGGLE_GW: i->perm ^= S_IWGRP; break;
-	case CMD_TOGGLE_GX: i->perm ^= S_IXGRP; break;
-	case CMD_TOGGLE_OR: i->perm ^= S_IROTH; break;
-	case CMD_TOGGLE_OW: i->perm ^= S_IWOTH; break;
-	case CMD_TOGGLE_OX: i->perm ^= S_IXOTH; break;
-	default: break;
-	}
-}
-
-static void mode_wait(struct ui* i, struct task* t) {
-	switch (get_cmd(i)) {
-	case CMD_TASK_QUIT:
-		t->done = true; // TODO
-		break;
-	case CMD_TASK_PAUSE:
-		t->paused = true;
-		break;
-	case CMD_TASK_RESUME:
-		t->paused = false;
-		break;
-	default: break;
-	}
-}
-
-static void prepare_long_task(struct ui* i, struct task* t,
+static void prepare_long_task(struct ui* const i, struct task* const t,
 		enum task_type tt, const utf8* const err) {
 	// TODO OOM proof
 	// TODO cleanup
 	if (!i->pv->num_files) return;
 	utf8* src = NULL, *dst = NULL, *nn = NULL;
 	if (!(src = file_view_path_to_selected(i->pv))) {
-		failed(i->error, err, ENAMETOOLONG, NULL);
+		failed(i, err, ENAMETOOLONG, NULL);
 		free(src);
 		return;
 	}
@@ -241,25 +141,105 @@ static void prepare_long_task(struct ui* i, struct task* t,
 	}
 	int r; // TODO
 	task_new(t, tt, src, dst, nn);
-	i->m = MODE_WAIT;
 	if ((r = task_estimate_file_volume(t, t->src))) {
-		failed(i->error, "build file list", r, NULL);
+		failed(i, "build file list", r, NULL);
 		task_clean(t);
 		return;
 	}
+	i->m = MODE_WAIT;
 }
 
-static void mode_manager(struct ui* i, struct task* t) {
+static void process_input(struct ui* const i, struct task* const t) {
 	struct file_view* tmp = NULL;
 	utf8 *path = NULL, *cdp = NULL, *name = NULL,
 	     *opath = NULL, *npath = NULL;
 	int err = 0;
-	switch (get_cmd(i)) {
+	const enum command cmd = get_cmd(i);
+	switch (cmd) {
+	/* HELP */
+	case CMD_HELP_QUIT:
+		i->m = MODE_MANAGER;
+		break;
+	case CMD_HELP_DOWN:
+		i->helpy += 1;
+		break;
+	case CMD_HELP_UP:
+		if (i->helpy > 0) {
+			i->helpy -= 1;
+		}
+		break;
+	/* CHMOD */
+	case CMD_RETURN:
+		chmod_close(i);
+		break;
+	case CMD_CHANGE:
+		if (chmod(i->path, i->perm)) {
+			failed(i, "chmod", errno, NULL);
+		}
+		if (lchown(i->path, i->o, i->g)) {
+			failed(i, "chmod", errno, NULL);
+		}
+		if ((err = file_view_scan_dir(i->pv))) {
+			failed(i, "directory scan", err, NULL);
+		}
+		chmod_close(i);
+		break;
+	case CMD_CHOWN:
+		name = calloc(LOGIN_NAME_MAX+1, sizeof(utf8));
+		if (!open_prompt(i, name, name, LOGIN_NAME_MAX)) {
+			errno = 0;
+			struct passwd* pwd = getpwnam(name);
+			if (!pwd) failed(i, "chown", 0,
+					"Such user does not exist");
+			else {
+				i->o = pwd->pw_uid;
+				strncpy(i->owner, pwd->pw_name, LOGIN_NAME_MAX);
+			}
+		}
+		free(name);
+		break;
+	case CMD_CHGRP:
+		name = calloc(LOGIN_NAME_MAX+1, sizeof(utf8));
+		if (!open_prompt(i, name, name, LOGIN_NAME_MAX)) {
+			errno = 0;
+			struct group* grp = getgrnam(name);
+			if (!grp) failed(i, "chgrp", 0,
+					"Such group does not exist");
+			else {
+				i->g = grp->gr_gid;
+				strncpy(i->group, grp->gr_name, LOGIN_NAME_MAX);
+			}
+		}
+		free(name);
+		break;
+	case CMD_TOGGLE_UIOX: i->perm ^= S_ISUID; break;
+	case CMD_TOGGLE_GIOX: i->perm ^= S_ISGID; break;
+	case CMD_TOGGLE_SB: i->perm ^= S_ISVTX; break;
+	case CMD_TOGGLE_UR: i->perm ^= S_IRUSR; break;
+	case CMD_TOGGLE_UW: i->perm ^= S_IWUSR; break;
+	case CMD_TOGGLE_UX: i->perm ^= S_IXUSR; break;
+	case CMD_TOGGLE_GR: i->perm ^= S_IRGRP; break;
+	case CMD_TOGGLE_GW: i->perm ^= S_IWGRP; break;
+	case CMD_TOGGLE_GX: i->perm ^= S_IXGRP; break;
+	case CMD_TOGGLE_OR: i->perm ^= S_IROTH; break;
+	case CMD_TOGGLE_OW: i->perm ^= S_IWOTH; break;
+	case CMD_TOGGLE_OX: i->perm ^= S_IXOTH; break;
+	/* WAIT */
+	case CMD_TASK_QUIT:
+		t->done = true; // TODO
+		break;
+	case CMD_TASK_PAUSE:
+		t->paused = true;
+		break;
+	case CMD_TASK_RESUME:
+		t->paused = false;
+		break;
+	/* MANAGER */
 	case CMD_QUIT:
 		i->run = false;
 		break;
 	case CMD_HELP:
-		help_open(i);
+		i->m = MODE_HELP;
 		break;
 	case CMD_SWITCH_PANEL:
 		tmp = i->pv;
@@ -272,12 +252,30 @@ static void mode_manager(struct ui* i, struct task* t) {
 	case CMD_ENTRY_UP:
 		prev_entry(i->pv);
 		break;
+	case CMD_ENTER_DIR:
+		err = file_view_enter_selected_dir(i->pv);
+		if (err && err != ENOTDIR) failed(i, "enter dir", err, NULL);
+		break;
+	case CMD_UP_DIR:
+		err = file_view_up_dir(i->pv);
+		if (err) failed(i, "up dir", err, NULL);
+		break;
+	case CMD_COPY:
+		prepare_long_task(i, t, TASK_COPY, task_strings[TASK_COPY][NOUN]);
+		break;
+	case CMD_MOVE:
+		prepare_long_task(i, t, TASK_MOVE, task_strings[TASK_MOVE][NOUN]);
+		break;
+	case CMD_REMOVE:
+		prepare_long_task(i, t, TASK_REMOVE, task_strings[TASK_REMOVE][NOUN]);
+		break;
 	case CMD_EDIT_FILE:
 		if ((path = file_view_path_to_selected(i->pv))) {
-			if (is_dir(path)) failed(i->error, "edit", EISDIR, NULL);
+			if (is_dir(path)) failed(i, "edit", EISDIR, NULL);
 			char exeimg[NAME_MAX]; // TODO
 			strcpy(exeimg, "/bin");
-			char* const ed = getenv("EDITOR");
+			char* ed = getenv("VISUAL");
+			if (!ed) ed = getenv("EDITOR");
 			append_dir(exeimg, ed ? ed : "vi");
 			char* const arg[] = { exeimg, path, NULL };
 			spawn(arg);
@@ -286,7 +284,7 @@ static void mode_manager(struct ui* i, struct task* t) {
 		break;
 	case CMD_OPEN_FILE:
 		if ((path = file_view_path_to_selected(i->pv))) {
-			if (is_dir(path)) failed(i->error, "open", EISDIR, NULL);
+			if (is_dir(path)) failed(i, "open", EISDIR, NULL);
 			char exeimg[NAME_MAX]; // TODO
 			strcpy(exeimg, "/bin");
 			char* const pager = getenv("PAGER");
@@ -299,57 +297,63 @@ static void mode_manager(struct ui* i, struct task* t) {
 	case CMD_CD:
 		path = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
 		cdp = calloc(PATH_MAX+1, sizeof(utf8));
-		if (open_prompt(i, cdp, cdp, PATH_MAX) ||
-		   (err = ENAMETOOLONG, enter_dir(path, cdp)) ||
-		   (err = ENOENT, !file_exists(path)) ||
-		   (err = EISDIR, !is_dir(path))) {
-			if (err) failed(i->error, "cd", err, NULL);
+		if ((open_prompt(i, cdp, cdp, PATH_MAX)
+		   || (err = ENAMETOOLONG, enter_dir(path, cdp))
+		   || (err = ENOENT, !file_exists(path))
+		   || (err = ENOTDIR, !is_dir(path)))
+		   && err) {
+			failed(i, "cd", err, NULL);
 		}
 		else {
 			strncpy(i->pv->wd, path, PATH_MAX);
 			if ((err = file_view_scan_dir(i->pv))) { // TODO
-				failed(i->error, "directory scan", err, NULL);
+				failed(i, "directory scan", err, NULL);
 			}
 			else {
-				sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
+				file_view_sort(i->pv);
 				first_entry(i->pv);
 			}
 		}
 		free(path);
 		free(cdp);
 		break;
-	case CMD_ENTER_DIR:
-		err = file_view_enter_selected_dir(i->pv);
-		if (err && err != ENOTDIR) failed(i->error, "enter dir", err, NULL);
-		break;
-	case CMD_UP_DIR:
-		err = file_view_up_dir(i->pv);
-		if (err) failed(i->error, "up dir", err, NULL);
-		break;
-	case CMD_COPY:
-		prepare_long_task(i, t, TASK_COPY, task_strings[TASK_COPY][NOUN]);
-		break;
-	case CMD_MOVE:
-		prepare_long_task(i, t, TASK_MOVE, task_strings[TASK_MOVE][NOUN]);
-		break;
-	case CMD_REMOVE:
-		prepare_long_task(i, t, TASK_REMOVE, task_strings[TASK_REMOVE][NOUN]);
-		break;
 	case CMD_CREATE_DIR:
 		path = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
 		name = calloc(NAME_MAX+1, sizeof(utf8));
-		if (open_prompt(i, name, name, PATH_MAX) ||
-		   (err = EINVAL, contains(name, "/")) || // TODO
-		   (err = append_dir(path, name)) ||
-		   (err = dir_make(path)) ||
-		   (err = file_view_scan_dir(i->pv))) {
-			if (err) failed(i->error, "creating directory", err, NULL);
+		if ((open_prompt(i, name, name, PATH_MAX)
+		   || (err = EINVAL, contains(name, "/"))
+		   || (err = append_dir(path, name))
+		   || (err = dir_make(path))
+		   || (err = file_view_scan_dir(i->pv)))
+		   && err) {
+			failed(i, "creating directory", err, NULL);
 		}
 		else {
 			file_view_sort(i->pv);
 			file_highlight(i->pv, name);
 		}
 		free(path);
+		free(name);
+		break;
+	case CMD_RENAME:
+		opath = file_view_path_to_selected(i->pv);
+		npath = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
+		name = strncpy(malloc(NAME_MAX+1),
+				i->pv->file_list[i->pv->selection]->file_name, NAME_MAX);
+		if ((open_prompt(i, name, name+strnlen(name, NAME_MAX), NAME_MAX)
+		   || (err = EINVAL, contains(name, "/"))
+		   || (err = append_dir(npath, name))
+		   || (err = rename(opath, npath))
+		   || (err = file_view_scan_dir(i->pv)))
+		   && err) {
+			failed(i, "rename", err, NULL);
+		}
+		else {
+			file_view_sort(i->pv);
+			file_highlight(i->pv, name);
+		}
+		free(opath);
+		free(npath);
 		free(name);
 		break;
 	case CMD_FIND:
@@ -363,70 +367,51 @@ static void mode_manager(struct ui* i, struct task* t) {
 		break;
 	case CMD_CHMOD:
 		if (!(path = file_view_path_to_selected(i->pv))) {
-			failed(i->error, "chmod", ENAMETOOLONG, NULL);
+			failed(i, "chmod", ENAMETOOLONG, NULL);
 		}
 		else chmod_open(i, path);
-		break;
-	case CMD_RENAME:
-		opath = file_view_path_to_selected(i->pv);
-		npath = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
-		name = strncpy(malloc(NAME_MAX+1),
-				i->pv->file_list[i->pv->selection]->file_name, NAME_MAX);
-		if (open_prompt(i, name, name+strnlen(name, NAME_MAX), NAME_MAX) ||
-		   (err = EINVAL, contains(name, "/")) || // TODO
-		   (err = append_dir(npath, name)) ||
-		   (err = rename(opath, npath)) ||
-		   (err = file_view_scan_dir(i->pv))) {
-			if (err) failed(i->error, "rename", err, NULL);
-		}
-		else {
-			file_view_sort(i->pv);
-			file_highlight(i->pv, name);
-		}
-		free(opath);
-		free(npath);
-		free(name);
 		break;
 	case CMD_TOGGLE_HIDDEN:
 		file_view_toggle_hidden(i->pv);
 		break;
 	case CMD_REFRESH:
 		if ((err = file_view_scan_dir(i->pv))) {
-			failed(i->error, "refresh", err, NULL);
+			failed(i, "refresh", err, NULL);
 		}
 		else {
-			sort_file_list(i->pv->sorting, i->pv->file_list, i->pv->num_files);
+			file_view_sort(i->pv);
 			file_view_afterdel(i->pv);
 		}
 		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_BY_NAME_ASC:
 		i->pv->sorting = cmp_name_asc;
-		file_view_sort(i->pv);
-		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_BY_NAME_DESC:
 		i->pv->sorting = cmp_name_desc;
-		file_view_sort(i->pv);
-		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_BY_DATE_ASC:
 		i->pv->sorting = cmp_date_asc;
-		file_view_sort(i->pv);
-		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_BY_DATE_DESC:
 		i->pv->sorting = cmp_date_desc;
-		file_view_sort(i->pv);
-		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_BY_SIZE_ASC:
 		i->pv->sorting = cmp_size_asc;
-		file_view_sort(i->pv);
-		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_BY_SIZE_DESC:
 		i->pv->sorting = cmp_size_desc;
+		break;
+	default:
+		break;
+	}
+	switch (cmd) {
+	case CMD_SORT_BY_NAME_ASC:
+	case CMD_SORT_BY_NAME_DESC:
+	case CMD_SORT_BY_DATE_ASC:
+	case CMD_SORT_BY_DATE_DESC:
+	case CMD_SORT_BY_SIZE_ASC:
+	case CMD_SORT_BY_SIZE_DESC:
 		file_view_sort(i->pv);
 		i->ui_needs_refresh = true;
 		break;
@@ -439,16 +424,17 @@ static void mode_manager(struct ui* i, struct task* t) {
 static void task_finish(struct ui* const i, struct task* const t) {
 	wtimeout(stdscr, -1);
 	int err;
-	if ((err =  file_view_scan_dir(i->pv)) ||
-	    (err = file_view_scan_dir(i->sv))) {
-		failed(i->error, task_strings[t->t][NOUN], err, NULL);
+	if ((err = file_view_scan_dir(i->pv))
+	   || (err = file_view_scan_dir(i->sv))) {
+		failed(i, task_strings[t->t][NOUN], err, NULL);
 	}
 	else {
 		file_view_sort(i->pv);
 		file_view_sort(i->sv);
 		if (t->t == TASK_REMOVE) file_view_afterdel(i->pv);
 		else if (t->t == TASK_MOVE) prev_entry(i->pv);
-		snprintf(i->info, MSG_BUFFER_SIZE, "%s %s",
+		i->mt = MSG_INFO;
+		snprintf(i->msg, MSG_BUFFER_SIZE, "%s %s",
 				task_strings[t->t][PAST], t->src);
 	}
 	task_clean(t);
@@ -456,11 +442,11 @@ static void task_finish(struct ui* const i, struct task* const t) {
 	i->m = MODE_MANAGER;
 }
 
-static void task_execute(struct ui* i, struct task* t) {
+static void task_execute(struct ui* const i, struct task* const t) {
 	wtimeout(stdscr, 5);
-	int e = 0;
-	if (!t->paused && (e = do_task(t, 1024))) {
-		failed(i->error, task_strings[t->t][NOUN], e, NULL);
+	int err = 0;
+	if (!t->paused && (err = do_task(t, 1024))) {
+		failed(i, task_strings[t->t][NOUN], err, NULL);
 		task_clean(t); // TODO
 		wtimeout(stdscr, -1);
 	}
@@ -468,7 +454,8 @@ static void task_execute(struct ui* i, struct task* t) {
 	char stota[SIZE_BUF_SIZE];
 	pretty_size(t->size_done, sdone);
 	pretty_size(t->size_total, stota);
-	snprintf(i->info, MSG_BUFFER_SIZE,
+	i->mt = MSG_INFO;
+	snprintf(i->msg, MSG_BUFFER_SIZE,
 		"%s %s %d/%df, %d/%dd, %s / %s",
 		(t->paused ? ">>" : "||"),
 		task_strings[t->t][ING],
@@ -563,22 +550,15 @@ int main(int argc, char* argv[])  {
 	struct task t;
 	memset(&t, 0, sizeof(struct task));
 
-	static const mode_handler mhs[MODE_NUM] = {
-		[MODE_HELP] = mode_help,
-		[MODE_MANAGER] = mode_manager,
-		[MODE_CHMOD] = mode_chmod,
-		[MODE_WAIT] = mode_wait,
-	};
-
-	snprintf(i.info, MSG_BUFFER_SIZE, "Type ? for help and license notice.");
+	i.mt = MSG_INFO;
+	snprintf(i.msg, MSG_BUFFER_SIZE, "Type ? for help and license notice.");
 	while (i.run) {
 		if (i.ui_needs_refresh) {
 			ui_update_geometry(&i);
 		}
 		ui_draw(&i);
 
-		// Execute mode handler
-		mhs[i.m](&i, &t);
+		process_input(&i, &t);
 
 		if (t.t != TASK_NONE) {
 			if (t.done) task_finish(&i, &t);
