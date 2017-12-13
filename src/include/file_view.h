@@ -20,11 +20,11 @@
 #ifndef FILE_VIEW_H
 #define FILE_VIEW_H
 
-#include "file.h"
+#include "fs.h"
 #include "utf8.h"
 
 struct file_view {
-	char wd[PATH_MAX];
+	char wd[PATH_MAX+1];
 	struct file_record** file_list;
 	fnum_t num_files;
 	fnum_t num_hidden;

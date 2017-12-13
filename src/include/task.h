@@ -26,7 +26,7 @@
 
 #include <stdint.h>
 
-#include "file.h"
+#include "fs.h"
 #include "utf8.h"
 
 enum task_type {
