@@ -48,6 +48,7 @@ void task_clean(struct task* const t) {
 /*
  * TODO what about non-{dirs,files,links}?
  * Calculates size of all files and subdirectories in directory
+ * TODO symlinks
  */
 int task_estimate_file_volume(struct task* t, char* path) {
 	int r = 0;
@@ -228,6 +229,7 @@ void tree_walk_start(struct tree_walk* tw, const char* const path) {
 	tw->dt->up = NULL;
 	lstat(path, &tw->cs);
 	tw->tws = AT_INIT;
+	tw->tl = false;
 }
 
 static void tree_walk_down(struct tree_walk* tw) {
@@ -269,6 +271,7 @@ void tree_walk_step(struct tree_walk* tw) {
 			return;
 		}
 		break;
+	case AT_LINK:
 	case AT_FILE:
 		if (!tw->dt->cd) {
 			tw->tws = AT_EXIT;
@@ -302,11 +305,20 @@ void tree_walk_step(struct tree_walk* tw) {
 	strncpy(tw->cpath, tw->wpath, PATH_MAX);
 	append_dir(tw->cpath, tw->dname);
 	lstat(tw->cpath, &tw->cs);
-	if (S_ISDIR(tw->cs.st_mode)) { // entry is directory
-		tw->tws = AT_DIR;
-		return;
+	if (S_ISLNK(tw->cs.st_mode)) {
+		stat(tw->cpath, &tw->cs);
+		if (tw->tl) {
+			if (S_ISDIR(tw->cs.st_mode)) {
+				tw->tws = AT_DIR;
+			}
+			else tw->tws = AT_FILE;
+		}
+		else tw->tws = AT_LINK;
 	}
-	tw->tws = AT_FILE; // entry is file
+	else if (S_ISDIR(tw->cs.st_mode)) { // entry is directory
+		tw->tws = AT_DIR;
+	}
+	else tw->tws = AT_FILE; // entry is file
 }
 
 /*
@@ -317,7 +329,6 @@ int _at_step(struct task* const t, int* const c,
 		char* const npath, char* const buf, const size_t bufsize) {
 	const bool copy = t->t == TASK_COPY || t->t == TASK_MOVE;
 	const bool remove = t->t == TASK_MOVE || t->t == TASK_REMOVE;
-	const bool link = (t->tw.cs.st_mode & S_IFMT) == S_IFLNK;
 	switch (t->tw.tws) {
 	case AT_INIT:
 		if (copy && remove && same_fs(t->src, t->dst)) {
@@ -327,15 +338,24 @@ int _at_step(struct task* const t, int* const c,
 			if (rename(t->src, npath)) return errno;
 		}
 		break;
+	case AT_LINK:
+		if (copy) {
+			build_new_path(t, t->tw.cpath, npath);
+			return link_copy(t->src, t->tw.cpath, npath);
+		}
+		if (remove) {
+			if (unlink(t->tw.cpath)) return errno;
+		}
+		if (remove && !copy) {
+			t->size_done += t->tw.cs.st_size;
+			t->files_done += 1;
+			*c -= 1;
+		}
+		break;
 	case AT_FILE:
 		if (copy) {
 			build_new_path(t, t->tw.cpath, npath);
-			if (link) {
-				return link_copy(t->src, t->tw.cpath, npath);
-			}
-			else {
-				return _copy_some(t, t->tw.cpath, npath, buf, bufsize, c);
-			}
+			return _copy_some(t, t->tw.cpath, npath, buf, bufsize, c);
 		}
 		if (remove) {
 			if (unlink(t->tw.cpath)) return errno;

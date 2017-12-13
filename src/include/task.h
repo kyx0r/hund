@@ -46,11 +46,17 @@ static const char* const task_strings[][3] = {
 	[TASK_MOVE] = { "move", "moving", "moved" },
 };
 
+/*
+ * If link transparency is true in tree_walk,
+ * tree_walk_step will output AT_FILE or AT_DIR,
+ * If LT is false, then AT_LINK is outputted
+ */
 enum tree_walk_state {
 	AT_NOWHERE = 0,
 	AT_EXIT, // finished reading tree
 	AT_INIT,
 	AT_FILE,
+	AT_LINK,
 	AT_DIR, // on dir (will enter this dir)
 	AT_DIR_END, // finished reading dir (will go up)
 };
@@ -60,24 +66,25 @@ struct dirtree {
 	DIR* cd; // Current Directory
 };
 
-/* It's basically an iterative directory tree walker
+/*
+ * It's basically an iterative directory tree walker
  * Reacting to AT_* steps is done in a simple loop and a switch statement.
  *
- * TODO only need st_mode from stat -> mode_t cstat
- * TODO symlinks
- * TODO cpath & wpath: reduce to only one if possible
+ * Iterative; non-recursive
  */
 struct tree_walk {
 	enum tree_walk_state tws;
 	struct dirtree* dt;
 	char* wpath;
+	bool tl; // Transparent Links
 
 	struct stat cs; // Current Stat
 	char* dname;
 	char* cpath; // current path; will contain path of file/dir at current step
 };
 
-/* Requires long disk operations
+/*
+ * Long disk operations
  * Displays state
  */
 struct task {
