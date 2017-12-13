@@ -233,7 +233,7 @@ int link_copy_raw(const char* const src, const char* const dst) {
 	return 0;
 }
 
-int dir_make(const char* path) {
+int dir_make(const char* const path) {
 	if (mkdir(path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)) {
 		return errno;
 	}
@@ -373,7 +373,7 @@ int up_dir(char* const path) {
  * 0 if found home in path and changed
  * -1 if not found home in path; path unchanged
  */
-int prettify_path(char* const path, const char* const home) {
+/*int prettify_path(char* const path, const char* const home) {
 	const int hlen = strnlen(home, PATH_MAX);
 	const int plen = strnlen(path, PATH_MAX);
 	if (!memcmp(path, home, hlen)) {
@@ -382,10 +382,10 @@ int prettify_path(char* const path, const char* const home) {
 		return 0;
 	}
 	return -1;
-}
+}*/
 
 // Places current directory in dir[]
-void current_dir(const char* const path, char* const dir) {
+/*void current_dir(const char* const path, char* const dir) {
 	const int plen = strnlen(path, PATH_MAX);
 	int i = plen-1; // i will point last slash in path
 	while (path[i] != '/' && i >= 0) {
@@ -396,7 +396,7 @@ void current_dir(const char* const path, char* const dir) {
 		return;
 	}
 	memcpy(dir, path+i+1, strlen(path+i));
-}
+}*/
 
 bool path_is_relative(const char* const path) {
 	return (path[0] != '/' && path[0] != '~') ||

@@ -93,7 +93,7 @@ void sort_file_list(int (*)(const void*, const void*),
 int link_copy(const char* const, const char* const, const char* const);
 int link_copy_raw(const char* const, const char* const);
 
-int dir_make(const char*);
+int dir_make(const char* const);
 
 #define SIZE_BUF_SIZE (3+1+2+1+1)
 void pretty_size(off_t, char* buf);
@@ -103,8 +103,8 @@ struct passwd* get_pwd(void);
 int append_dir(char* const, const char* const);
 int enter_dir(char* const, const char* const);
 int up_dir(char* const);
-int prettify_path(char* const, const char* const);
-void current_dir(const char* const, char* const);
+//int prettify_path(char* const, const char* const);
+//void current_dir(const char* const, char* const);
 bool path_is_relative(const char* const);
 
 int prettify_path_i(const char* const, const char* const);
