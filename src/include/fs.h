@@ -17,18 +17,21 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef FILE_H
-#define FILE_H
+#ifndef FS_H
+#define FS_H
 
 #ifndef _DEFAULT_SOURCE
 	#define _DEFAULT_SOURCE
 #endif
 
+#include <pwd.h>
+#include <grp.h>
 #include <limits.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <fcntl.h>
 #include <dirent.h>
@@ -36,7 +39,7 @@
 #include <errno.h>
 #include <syslog.h>
 
-#include "path.h"
+#include "fs.h"
 
 /* From LSB to MSB, by bit index */
 static const char* const mode_bit_meaning[] = {
@@ -72,8 +75,7 @@ bool same_fs(const char* const, const char* const);
 bool executable(const mode_t, const mode_t);
 
 bool file_exists(const char*);
-void file_list_clean(struct file_record*** const,
-		fnum_t* const);
+void file_list_clean(struct file_record*** const, fnum_t* const);
 int scan_dir(const char* const, struct file_record*** const,
 		fnum_t* const, fnum_t* const);
 
@@ -94,5 +96,21 @@ int dir_make(const char*);
 
 #define SIZE_BUF_SIZE (3+1+2+1+1)
 void pretty_size(off_t, char* buf);
+
+struct passwd* get_pwd(void);
+
+int append_dir(char* const, const char* const);
+int enter_dir(char* const, const char* const);
+int up_dir(char* const);
+int prettify_path(char* const, const char* const);
+void current_dir(const char* const, char* const);
+bool path_is_relative(const char* const);
+
+int prettify_path_i(const char* const, const char* const);
+int current_dir_i(const char* const);
+
+bool substitute(char* const, const char* const, const char* const);
+size_t imb(const char*, const char*);
+bool contains(const char* const, const char* const);
 
 #endif
