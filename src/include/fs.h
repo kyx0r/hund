@@ -91,6 +91,7 @@ void sort_file_list(int (*)(const void*, const void*),
 		struct file_record**, const fnum_t);
 
 int link_copy(const char* const, const char* const, const char* const);
+int link_copy_raw(const char* const, const char* const);
 
 int dir_make(const char*);
 

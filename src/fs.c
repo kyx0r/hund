@@ -224,6 +224,15 @@ int link_copy(const char* const wd,
 	return 0;
 }
 
+int link_copy_raw(const char* const src, const char* const dst) {
+	char lpath[PATH_MAX+1];
+	const ssize_t ll = readlink(src, lpath, PATH_MAX);
+	if (ll == -1) return errno;
+	lpath[ll] = 0;
+	if (symlink(lpath, dst)) return errno;
+	return 0;
+}
+
 int dir_make(const char* path) {
 	if (mkdir(path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)) {
 		return errno;
