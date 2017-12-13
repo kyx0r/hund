@@ -47,7 +47,7 @@ static const char* const task_strings[][3] = {
 };
 
 /*
- * If link transparency is true in tree_walk,
+ * If Link Transparency is true in tree_walk,
  * tree_walk_step will output AT_FILE or AT_DIR,
  * If LT is false, then AT_LINK is outputted
  */
@@ -74,9 +74,9 @@ struct dirtree {
  */
 struct tree_walk {
 	enum tree_walk_state tws;
+	bool tl; // Transparent Links
 	struct dirtree* dt;
 	char* wpath;
-	bool tl; // Transparent Links
 
 	struct stat cs; // Current Stat
 	char* dname;
@@ -91,6 +91,7 @@ struct task {
 	enum task_type t;
 	bool paused;
 	bool done;
+	bool rl; // Raw Links
 	char *src, *dst, *newname; // newname is used for name conflicts
 	struct tree_walk tw;
 	int in, out; // when copying, fd of old and new files are held here

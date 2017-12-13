@@ -22,7 +22,7 @@
 void task_new(struct task* const t, const enum task_type tp,
 		char* const src, char* const dst, char* const newname) {
 	t->t = tp;
-	t->paused = t->done = false;
+	t->paused = t->done = t->rl = false;
 	t->src = src;
 	t->dst = dst;
 	t->newname = newname;
@@ -304,9 +304,9 @@ void tree_walk_step(struct tree_walk* tw) {
 	strncpy(tw->dname, ce->d_name, NAME_MAX+1);
 	strncpy(tw->cpath, tw->wpath, PATH_MAX);
 	append_dir(tw->cpath, tw->dname);
-	lstat(tw->cpath, &tw->cs);
+	lstat(tw->cpath, &tw->cs); // TODO errno
 	if (S_ISLNK(tw->cs.st_mode)) {
-		stat(tw->cpath, &tw->cs);
+		stat(tw->cpath, &tw->cs); // TODO errno
 		if (tw->tl) {
 			if (S_ISDIR(tw->cs.st_mode)) {
 				tw->tws = AT_DIR;
@@ -324,6 +324,8 @@ void tree_walk_step(struct tree_walk* tw) {
 /*
  * npath is a buffer to be used by build_new_path()
  * buf is a buffer to be used bu _copy_some()
+ *
+ * TODO error handling
  */
 int _at_step(struct task* const t, int* const c,
 		char* const npath, char* const buf, const size_t bufsize) {
@@ -333,7 +335,7 @@ int _at_step(struct task* const t, int* const c,
 	case AT_INIT:
 		if (copy && remove && same_fs(t->src, t->dst)) {
 			strncpy(npath, t->dst, PATH_MAX);
-			append_dir(npath, t->src+current_dir_i(t->src));
+			append_dir(npath, t->src+current_dir_i(t->src)); // errno
 			t->tw.tws = AT_EXIT;
 			if (rename(t->src, npath)) return errno;
 		}
@@ -341,7 +343,14 @@ int _at_step(struct task* const t, int* const c,
 	case AT_LINK:
 		if (copy) {
 			build_new_path(t, t->tw.cpath, npath);
-			return link_copy(t->src, t->tw.cpath, npath);
+			int err;
+			if (t->rl) {
+				err = link_copy_raw(t->tw.cpath, npath);
+			}
+			else {
+				err = link_copy(t->src, t->tw.cpath, npath);
+			}
+			if (err) return err;
 		}
 		if (remove) {
 			if (unlink(t->tw.cpath)) return errno;
@@ -355,7 +364,8 @@ int _at_step(struct task* const t, int* const c,
 	case AT_FILE:
 		if (copy) {
 			build_new_path(t, t->tw.cpath, npath);
-			return _copy_some(t, t->tw.cpath, npath, buf, bufsize, c);
+			_copy_some(t, t->tw.cpath, npath, buf, bufsize, c); // TODO err
+			if (t->in != -1 || t->out != -1) return 0;
 		}
 		if (remove) {
 			if (unlink(t->tw.cpath)) return errno;
