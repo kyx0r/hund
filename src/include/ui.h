@@ -17,8 +17,6 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-// vim: syntax=c
-
 #ifndef UI_H
 #define UI_H
 
@@ -201,98 +199,98 @@ struct input2cmd {
 
 static const struct input2cmd default_mapping[] = {
 	/* MODE MANGER */
-	{ .i={ UTF8("q"), UTF8("q"), ENDK }, .m=MODE_MANAGER, .c=CMD_QUIT },
+	{ { UTF8("q"), UTF8("q"), ENDK }, MODE_MANAGER, CMD_QUIT },
 
-	{ .i={ UTF8("g"), UTF8("g"), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTRY_FIRST },
-	{ .i={ SPEC(KEY_HOME), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTRY_FIRST },
+	{ { UTF8("g"), UTF8("g"), ENDK }, MODE_MANAGER, CMD_ENTRY_FIRST },
+	{ { SPEC(KEY_HOME), ENDK }, MODE_MANAGER, CMD_ENTRY_FIRST },
 
-	{ .i={ UTF8("G"), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTRY_LAST },
-	{ .i={ SPEC(KEY_END), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTRY_LAST },
+	{ { UTF8("G"), ENDK }, MODE_MANAGER, CMD_ENTRY_LAST },
+	{ { SPEC(KEY_END), ENDK }, MODE_MANAGER, CMD_ENTRY_LAST },
 
-	{ .i={ UTF8("j"), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTRY_DOWN },
-	{ .i={ CTRL('N'), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTRY_DOWN },
-	{ .i={ SPEC(KEY_DOWN), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTRY_DOWN },
+	{ { UTF8("j"), ENDK }, MODE_MANAGER, CMD_ENTRY_DOWN },
+	{ { CTRL('N'), ENDK }, MODE_MANAGER, CMD_ENTRY_DOWN },
+	{ { SPEC(KEY_DOWN), ENDK }, MODE_MANAGER, CMD_ENTRY_DOWN },
 
-	{ .i={ UTF8("k"), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTRY_UP },
-	{ .i={ CTRL('P'), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTRY_UP },
-	{ .i={ SPEC(KEY_UP), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTRY_UP },
+	{ { UTF8("k"), ENDK }, MODE_MANAGER, CMD_ENTRY_UP },
+	{ { CTRL('P'), ENDK }, MODE_MANAGER, CMD_ENTRY_UP },
+	{ { SPEC(KEY_UP), ENDK }, MODE_MANAGER, CMD_ENTRY_UP },
 
-	{ .i={ UTF8("c"), UTF8("p"), ENDK }, .m=MODE_MANAGER, .c=CMD_COPY },
+	{ { UTF8("c"), UTF8("p"), ENDK }, MODE_MANAGER, CMD_COPY },
 
-	{ .i={ UTF8("r"), UTF8("e"), UTF8("m"), ENDK }, .m=MODE_MANAGER, .c=CMD_REMOVE },
+	{ { UTF8("r"), UTF8("e"), UTF8("m"), ENDK }, MODE_MANAGER, CMD_REMOVE },
 
-	{ .i={ UTF8("r"), UTF8("n"), ENDK }, .m=MODE_MANAGER, .c=CMD_RENAME },
+	{ { UTF8("r"), UTF8("n"), ENDK }, MODE_MANAGER, CMD_RENAME },
 
-	{ .i={ UTF8("m"), UTF8("v"), ENDK }, .m=MODE_MANAGER, .c=CMD_MOVE },
+	{ { UTF8("m"), UTF8("v"), ENDK }, MODE_MANAGER, CMD_MOVE },
 
-	{ .i={ CTRL('I'), ENDK }, .m=MODE_MANAGER, .c=CMD_SWITCH_PANEL },
+	{ { CTRL('I'), ENDK }, MODE_MANAGER, CMD_SWITCH_PANEL },
 
-	{ .i={ UTF8("r"), UTF8("r"), ENDK }, .m=MODE_MANAGER, .c=CMD_REFRESH },
-	{ .i={ CTRL('L'), ENDK }, .m=MODE_MANAGER, .c=CMD_REFRESH },
+	{ { UTF8("r"), UTF8("r"), ENDK }, MODE_MANAGER, CMD_REFRESH },
+	{ { CTRL('L'), ENDK }, MODE_MANAGER, CMD_REFRESH },
 
-	{ .i={ UTF8("m"), UTF8("k"), ENDK }, .m=MODE_MANAGER, .c=CMD_CREATE_DIR },
+	{ { UTF8("m"), UTF8("k"), ENDK }, MODE_MANAGER, CMD_CREATE_DIR },
 
-	{ .i={ UTF8("u"), ENDK }, .m=MODE_MANAGER, .c=CMD_UP_DIR },
-	{ .i={ SPEC(KEY_BACKSPACE), ENDK }, .m=MODE_MANAGER, .c=CMD_UP_DIR },
+	{ { UTF8("u"), ENDK }, MODE_MANAGER, CMD_UP_DIR },
+	{ { SPEC(KEY_BACKSPACE), ENDK }, MODE_MANAGER, CMD_UP_DIR },
 
-	{ .i={ UTF8("i"), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTER_DIR },
-	{ .i={ CTRL('J'), ENDK }, .m=MODE_MANAGER, .c=CMD_ENTER_DIR },
+	{ { UTF8("i"), ENDK }, MODE_MANAGER, CMD_ENTER_DIR },
+	{ { CTRL('J'), ENDK }, MODE_MANAGER, CMD_ENTER_DIR },
 
-	{ .i={ UTF8("o"), ENDK }, .m=MODE_MANAGER, .c=CMD_OPEN_FILE },
-	{ .i={ UTF8("e"), UTF8("d"), ENDK }, .m=MODE_MANAGER, .c=CMD_EDIT_FILE },
+	{ { UTF8("o"), ENDK }, MODE_MANAGER, CMD_OPEN_FILE },
+	{ { UTF8("e"), UTF8("d"), ENDK }, MODE_MANAGER, CMD_EDIT_FILE },
 
-	{ .i={ UTF8("/"), ENDK }, .m=MODE_MANAGER, .c=CMD_FIND },
+	{ { UTF8("/"), ENDK }, MODE_MANAGER, CMD_FIND },
 
-	{ .i={ UTF8("x"), ENDK }, .m=MODE_MANAGER, .c=CMD_TOGGLE_HIDDEN },
-	{ .i={ CTRL('H'), ENDK }, .m=MODE_MANAGER, .c=CMD_TOGGLE_HIDDEN },
+	{ { UTF8("x"), ENDK }, MODE_MANAGER, CMD_TOGGLE_HIDDEN },
+	{ { CTRL('H'), ENDK }, MODE_MANAGER, CMD_TOGGLE_HIDDEN },
 
-	{ .i={ UTF8("?"), ENDK }, .m=MODE_MANAGER, .c=CMD_HELP },
+	{ { UTF8("?"), ENDK }, MODE_MANAGER, CMD_HELP },
 
-	{ .i={ UTF8("c"), UTF8("d"), ENDK }, .m=MODE_MANAGER, .c=CMD_CD },
+	{ { UTF8("c"), UTF8("d"), ENDK }, MODE_MANAGER, CMD_CD },
 
-	{ .i={ UTF8("c"), UTF8("h"), ENDK }, .m=MODE_MANAGER, .c=CMD_CHMOD },
+	{ { UTF8("c"), UTF8("h"), ENDK }, MODE_MANAGER, CMD_CHMOD },
 
-	{ .i={ UTF8("s"), UTF8("n"), UTF8("a"), ENDK }, .m=MODE_MANAGER, .c=CMD_SORT_BY_NAME_ASC },
-	{ .i={ UTF8("s"), UTF8("n"), UTF8("d"), ENDK }, .m=MODE_MANAGER, .c=CMD_SORT_BY_NAME_DESC },
-	{ .i={ UTF8("s"), UTF8("d"), UTF8("a"), ENDK }, .m=MODE_MANAGER, .c=CMD_SORT_BY_DATE_ASC },
-	{ .i={ UTF8("s"), UTF8("d"), UTF8("d"), ENDK }, .m=MODE_MANAGER, .c=CMD_SORT_BY_DATE_DESC },
-	{ .i={ UTF8("s"), UTF8("s"), UTF8("a"), ENDK }, .m=MODE_MANAGER, .c=CMD_SORT_BY_SIZE_ASC },
-	{ .i={ UTF8("s"), UTF8("s"), UTF8("d"), ENDK }, .m=MODE_MANAGER, .c=CMD_SORT_BY_SIZE_DESC },
+	{ { UTF8("s"), UTF8("n"), UTF8("a"), ENDK }, MODE_MANAGER, CMD_SORT_BY_NAME_ASC },
+	{ { UTF8("s"), UTF8("n"), UTF8("d"), ENDK }, MODE_MANAGER, CMD_SORT_BY_NAME_DESC },
+	{ { UTF8("s"), UTF8("d"), UTF8("a"), ENDK }, MODE_MANAGER, CMD_SORT_BY_DATE_ASC },
+	{ { UTF8("s"), UTF8("d"), UTF8("d"), ENDK }, MODE_MANAGER, CMD_SORT_BY_DATE_DESC },
+	{ { UTF8("s"), UTF8("s"), UTF8("a"), ENDK }, MODE_MANAGER, CMD_SORT_BY_SIZE_ASC },
+	{ { UTF8("s"), UTF8("s"), UTF8("d"), ENDK }, MODE_MANAGER, CMD_SORT_BY_SIZE_DESC },
 
 	/* MODE CHMOD */
-	{ .i={ UTF8("q"), UTF8("q"), ENDK }, .m=MODE_CHMOD, .c=CMD_RETURN },
-	{ .i={ UTF8("c"), UTF8("h"), ENDK }, .m=MODE_CHMOD, .c=CMD_CHANGE },
-	{ .i={ UTF8("c"), UTF8("o"), ENDK }, .m=MODE_CHMOD, .c=CMD_CHOWN },
-	{ .i={ UTF8("c"), UTF8("g"), ENDK }, .m=MODE_CHMOD, .c=CMD_CHGRP },
-	{ .i={ UTF8("u"), UTF8("i"), ENDK }, .m=MODE_CHMOD, .c=CMD_TOGGLE_UIOX },
-	{ .i={ UTF8("g"), UTF8("i"), ENDK }, .m=MODE_CHMOD, .c=CMD_TOGGLE_GIOX },
-	{ .i={ UTF8("o"), UTF8("s"), ENDK }, .m=MODE_CHMOD, .c=CMD_TOGGLE_SB },
-	{ .i={ UTF8("u"), UTF8("r"), ENDK }, .m=MODE_CHMOD, .c=CMD_TOGGLE_UR },
-	{ .i={ UTF8("u"), UTF8("w"), ENDK }, .m=MODE_CHMOD, .c=CMD_TOGGLE_UW },
-	{ .i={ UTF8("u"), UTF8("x"), ENDK }, .m=MODE_CHMOD, .c=CMD_TOGGLE_UX },
-	{ .i={ UTF8("g"), UTF8("r"), ENDK }, .m=MODE_CHMOD, .c=CMD_TOGGLE_GR },
-	{ .i={ UTF8("g"), UTF8("w"), ENDK }, .m=MODE_CHMOD, .c=CMD_TOGGLE_GW },
-	{ .i={ UTF8("g"), UTF8("x"), ENDK }, .m=MODE_CHMOD, .c=CMD_TOGGLE_GX },
-	{ .i={ UTF8("o"), UTF8("r"), ENDK }, .m=MODE_CHMOD, .c=CMD_TOGGLE_OR },
-	{ .i={ UTF8("o"), UTF8("w"), ENDK }, .m=MODE_CHMOD, .c=CMD_TOGGLE_OW },
-	{ .i={ UTF8("o"), UTF8("x"), ENDK }, .m=MODE_CHMOD, .c=CMD_TOGGLE_OX },
+	{ { UTF8("q"), UTF8("q"), ENDK }, MODE_CHMOD, CMD_RETURN },
+	{ { UTF8("c"), UTF8("h"), ENDK }, MODE_CHMOD, CMD_CHANGE },
+	{ { UTF8("c"), UTF8("o"), ENDK }, MODE_CHMOD, CMD_CHOWN },
+	{ { UTF8("c"), UTF8("g"), ENDK }, MODE_CHMOD, CMD_CHGRP },
+	{ { UTF8("u"), UTF8("i"), ENDK }, MODE_CHMOD, CMD_TOGGLE_UIOX },
+	{ { UTF8("g"), UTF8("i"), ENDK }, MODE_CHMOD, CMD_TOGGLE_GIOX },
+	{ { UTF8("o"), UTF8("s"), ENDK }, MODE_CHMOD, CMD_TOGGLE_SB },
+	{ { UTF8("u"), UTF8("r"), ENDK }, MODE_CHMOD, CMD_TOGGLE_UR },
+	{ { UTF8("u"), UTF8("w"), ENDK }, MODE_CHMOD, CMD_TOGGLE_UW },
+	{ { UTF8("u"), UTF8("x"), ENDK }, MODE_CHMOD, CMD_TOGGLE_UX },
+	{ { UTF8("g"), UTF8("r"), ENDK }, MODE_CHMOD, CMD_TOGGLE_GR },
+	{ { UTF8("g"), UTF8("w"), ENDK }, MODE_CHMOD, CMD_TOGGLE_GW },
+	{ { UTF8("g"), UTF8("x"), ENDK }, MODE_CHMOD, CMD_TOGGLE_GX },
+	{ { UTF8("o"), UTF8("r"), ENDK }, MODE_CHMOD, CMD_TOGGLE_OR },
+	{ { UTF8("o"), UTF8("w"), ENDK }, MODE_CHMOD, CMD_TOGGLE_OW },
+	{ { UTF8("o"), UTF8("x"), ENDK }, MODE_CHMOD, CMD_TOGGLE_OX },
 
 	/* MODE WAIT */
-	{ .i={ UTF8("q"), UTF8("q"), ENDK }, .m=MODE_WAIT, .c=CMD_TASK_QUIT },
-	{ .i={ UTF8("p"), UTF8("p"), ENDK }, .m=MODE_WAIT, .c=CMD_TASK_PAUSE },
-	{ .i={ UTF8("r"), UTF8("r"), ENDK }, .m=MODE_WAIT, .c=CMD_TASK_RESUME },
+	{ { UTF8("q"), UTF8("q"), ENDK }, MODE_WAIT, CMD_TASK_QUIT },
+	{ { UTF8("p"), UTF8("p"), ENDK }, MODE_WAIT, CMD_TASK_PAUSE },
+	{ { UTF8("r"), UTF8("r"), ENDK }, MODE_WAIT, CMD_TASK_RESUME },
 
 
 	/* MODE HELP */
-	{ .i={ UTF8("q"), ENDK }, .m=MODE_HELP, .c=CMD_HELP_QUIT },
+	{ { UTF8("q"), ENDK }, MODE_HELP, CMD_HELP_QUIT },
 
-	{ .i={ UTF8("j"), ENDK }, .m=MODE_HELP, .c=CMD_HELP_DOWN },
-	{ .i={ CTRL('N'), ENDK }, .m=MODE_HELP, .c=CMD_HELP_DOWN },
-	{ .i={ SPEC(KEY_DOWN), ENDK }, .m=MODE_HELP, .c=CMD_HELP_DOWN },
+	{ { UTF8("j"), ENDK }, MODE_HELP, CMD_HELP_DOWN },
+	{ { CTRL('N'), ENDK }, MODE_HELP, CMD_HELP_DOWN },
+	{ { SPEC(KEY_DOWN), ENDK }, MODE_HELP, CMD_HELP_DOWN },
 
-	{ .i={ UTF8("k"), ENDK }, .m=MODE_HELP, .c=CMD_HELP_UP },
-	{ .i={ CTRL('P'), ENDK }, .m=MODE_HELP, .c=CMD_HELP_UP },
-	{ .i={ SPEC(KEY_UP), ENDK }, .m=MODE_HELP, .c=CMD_HELP_UP },
+	{ { UTF8("k"), ENDK }, MODE_HELP, CMD_HELP_UP },
+	{ { CTRL('P'), ENDK }, MODE_HELP, CMD_HELP_UP },
+	{ { SPEC(KEY_UP), ENDK }, MODE_HELP, CMD_HELP_UP },
 };
 
 static const size_t default_mapping_length = (sizeof(default_mapping)/sizeof(struct input2cmd));
@@ -303,59 +301,59 @@ struct cmd2help {
 };
 
 static const struct cmd2help cmd_help[] = {
-	{ .c = CMD_QUIT, .hint = "quit", .help = "Quit hund." },
-	{ .c = CMD_HELP, .hint = "help", .help = "Display help screen." },
-	{ .c = CMD_COPY, .hint = "copy", .help = "Copy selected file to the other directory. May prompt for name if colliding." },
-	{ .c = CMD_MOVE, .hint = "move", .help = "Move selected file to the other directory." },
-	{ .c = CMD_REMOVE, .hint = "remove", .help = "Remove selected file." },
-	{ .c = CMD_SWITCH_PANEL, .hint = "switch", .help = "Switch active panel." },
-	{ .c = CMD_UP_DIR, .hint = "up dir", .help = "Move up in directory tree." },
-	{ .c = CMD_ENTER_DIR, .hint = "enter dir", .help = "Enter selected directory." },
-	{ .c = CMD_REFRESH, .hint = "refresh", .help = "Rescan directories and redraw window." },
-	{ .c = CMD_ENTRY_UP, .hint = "up", .help = "Select previous entry." },
-	{ .c = CMD_ENTRY_DOWN, .hint = "down", .help = "Select next entry." },
-	{ .c = CMD_CREATE_DIR, .hint = "create dir", .help = "Create new directory. Prompts for name." },
-	{ .c = CMD_ENTRY_FIRST, .hint = "top", .help = "Select top file in directory." },
-	{ .c = CMD_ENTRY_LAST, .hint = "bottom", .help = "Select bottom file in directory." },
-	{ .c = CMD_RENAME, .hint = "rename", .help = "Rename selected file. Prompts for new name." },
-	{ .c = CMD_TOGGLE_HIDDEN, .hint = "hide", .help = "Switch between hiding/showing hidden files." },
-	{ .c = CMD_CD, .hint = "change dir", .help = "Jump to some directory. Prompts for path." },
-	{ .c = CMD_OPEN_FILE, .hint = "open", .help = "Open selected file in less." },
-	{ .c = CMD_EDIT_FILE, .hint = "edit", .help = "Open selected file in vi." },
-	{ .c = CMD_FIND, .hint = "find", .help = "Search for files in current directory. Case sensitive." },
+	{ CMD_QUIT, "quit", "Quit hund." },
+	{ CMD_HELP, "help", "Display help screen." },
+	{ CMD_COPY, "copy", "Copy selected file to the other directory. May prompt for name if colliding." },
+	{ CMD_MOVE, "move", "Move selected file to the other directory." },
+	{ CMD_REMOVE, "remove", "Remove selected file." },
+	{ CMD_SWITCH_PANEL, "switch", "Switch active panel." },
+	{ CMD_UP_DIR, "up dir", "Move up in directory tree." },
+	{ CMD_ENTER_DIR, "enter dir", "Enter selected directory." },
+	{ CMD_REFRESH, "refresh", "Rescan directories and redraw window." },
+	{ CMD_ENTRY_UP, "up", "Select previous entry." },
+	{ CMD_ENTRY_DOWN, "down", "Select next entry." },
+	{ CMD_CREATE_DIR, "create dir", "Create new directory. Prompts for name." },
+	{ CMD_ENTRY_FIRST, "top", "Select top file in directory." },
+	{ CMD_ENTRY_LAST, "bottom", "Select bottom file in directory." },
+	{ CMD_RENAME, "rename", "Rename selected file. Prompts for new name." },
+	{ CMD_TOGGLE_HIDDEN, "hide", "Switch between hiding/showing hidden files." },
+	{ CMD_CD, "change dir", "Jump to some directory. Prompts for path." },
+	{ CMD_OPEN_FILE, "open", "Open selected file in less." },
+	{ CMD_EDIT_FILE, "edit", "Open selected file in vi." },
+	{ CMD_FIND, "find", "Search for files in current directory. Case sensitive." },
 
-	{ .c = CMD_CHMOD, .hint = "chmod", .help = "Change permissions of selected file." },
-	{ .c = CMD_RETURN, .hint = "return", .help = "Abort changes and return." },
-	{ .c = CMD_CHOWN, .hint = "change owner", .help = "Change owner of file. Prompts for login." },
-	{ .c = CMD_CHGRP, .hint = "change group", .help = "Change group of file. Prompts for group name." },
-	{ .c = CMD_SORT_BY_NAME_ASC, .hint = "name asc", .help = "Sort by name ascending." },
-	{ .c = CMD_SORT_BY_NAME_DESC, .hint = "name desc", .help = "Sort by name descending." },
-	{ .c = CMD_SORT_BY_DATE_ASC, .hint = "date asc", .help = "Sort by date ascending." },
-	{ .c = CMD_SORT_BY_DATE_DESC, .hint = "date desc", .help = "Sort by date descending." },
-	{ .c = CMD_SORT_BY_SIZE_ASC, .hint = "size asc", .help = "Sort by size ascending." },
-	{ .c = CMD_SORT_BY_SIZE_DESC, .hint = "size desc", .help = "Sort by size descending." },
+	{ CMD_CHMOD, "chmod", "Change permissions of selected file." },
+	{ CMD_RETURN, "return", "Abort changes and return." },
+	{ CMD_CHOWN, "change owner", "Change owner of file. Prompts for login." },
+	{ CMD_CHGRP, "change group", "Change group of file. Prompts for group name." },
+	{ CMD_SORT_BY_NAME_ASC, "name asc", "Sort by name ascending." },
+	{ CMD_SORT_BY_NAME_DESC, "name desc", "Sort by name descending." },
+	{ CMD_SORT_BY_DATE_ASC, "date asc", "Sort by date ascending." },
+	{ CMD_SORT_BY_DATE_DESC, "date desc", "Sort by date descending." },
+	{ CMD_SORT_BY_SIZE_ASC, "size asc", "Sort by size ascending." },
+	{ CMD_SORT_BY_SIZE_DESC, "size desc", "Sort by size descending." },
 
-	{ .c = CMD_CHANGE, .hint = "change ", .help = "Apply changes and return." },
-	{ .c = CMD_TOGGLE_UIOX, .hint = "toggle setuid", .help = "Toggle set user ID on execution." },
-	{ .c = CMD_TOGGLE_GIOX, .hint = "toggle setgid", .help = "Toggle set group ID on execution." },
-	{ .c = CMD_TOGGLE_SB, .hint = "toggle sticky bit", .help = "Toggle sticky bit." },
-	{ .c = CMD_TOGGLE_UR, .hint = "toggle user read", .help = "Toggle user read." },
-	{ .c = CMD_TOGGLE_UW, .hint = "toggle user write", .help = "Toggle user write." },
-	{ .c = CMD_TOGGLE_UX, .hint = "toggle user execute", .help = "Toggle user execute." },
-	{ .c = CMD_TOGGLE_GR, .hint = "toggle group read", .help = "Toggle group read." },
-	{ .c = CMD_TOGGLE_GW, .hint = "toggle group write", .help = "Toggle group write." },
-	{ .c = CMD_TOGGLE_GX, .hint = "toggle group execute", .help = "Toggle group execute." },
-	{ .c = CMD_TOGGLE_OR, .hint = "toggle other read", .help = "Toggle other read." },
-	{ .c = CMD_TOGGLE_OW, .hint = "toggle other write", .help = "Toggle other write." },
-	{ .c = CMD_TOGGLE_OX, .hint = "toggle other execute", .help = "Toggle other execute." },
+	{ CMD_CHANGE, "change ", "Apply changes and return." },
+	{ CMD_TOGGLE_UIOX, "toggle setuid", "Toggle set user ID on execution." },
+	{ CMD_TOGGLE_GIOX, "toggle setgid", "Toggle set group ID on execution." },
+	{ CMD_TOGGLE_SB, "toggle sticky bit", "Toggle sticky bit." },
+	{ CMD_TOGGLE_UR, "toggle user read", "Toggle user read." },
+	{ CMD_TOGGLE_UW, "toggle user write", "Toggle user write." },
+	{ CMD_TOGGLE_UX, "toggle user execute", "Toggle user execute." },
+	{ CMD_TOGGLE_GR, "toggle group read", "Toggle group read." },
+	{ CMD_TOGGLE_GW, "toggle group write", "Toggle group write." },
+	{ CMD_TOGGLE_GX, "toggle group execute", "Toggle group execute." },
+	{ CMD_TOGGLE_OR, "toggle other read", "Toggle other read." },
+	{ CMD_TOGGLE_OW, "toggle other write", "Toggle other write." },
+	{ CMD_TOGGLE_OX, "toggle other execute", "Toggle other execute." },
 
-	{ .c = CMD_TASK_QUIT, .hint = "abort", .help = "Abort task." },
-	{ .c = CMD_TASK_PAUSE, .hint = "pause", .help = "Pause task." },
-	{ .c = CMD_TASK_RESUME, .hint = "resume", .help = "Resume task." },
+	{ CMD_TASK_QUIT, "abort", "Abort task." },
+	{ CMD_TASK_PAUSE, "pause", "Pause task." },
+	{ CMD_TASK_RESUME, "resume", "Resume task." },
 
-	{ .c = CMD_HELP_UP, .hint = "up", .help = "Scroll up." },
-	{ .c = CMD_HELP_DOWN, .hint = "down", .help = "Scroll down." },
-	{ .c = CMD_HELP_QUIT, .hint = "quit", .help = "Quit help screen." },
+	{ CMD_HELP_UP, "up", "Scroll up." },
+	{ CMD_HELP_DOWN, "down", "Scroll down." },
+	{ CMD_HELP_QUIT, "quit", "Quit help screen." },
 };
 
 static const char* const copyright_notice[] = {
