@@ -26,15 +26,6 @@
  * TODO KEY_RESIZE - better handling, less mess
  */
 
-/* get cmd2help coresponding to given command */
-// TODO FIXME
-static const struct cmd2help* get_help_data(const enum command c) {
-	for (size_t i = 0; i < CMD_NUM && i < cmd_help_length; ++i) {
-		if (cmd_help[i].c == c) return &cmd_help[i];
-	}
-	return NULL;
-}
-
 static enum theme_element mode2theme(const mode_t m, const mode_t n) {
 	switch (m & S_IFMT) {
 	case S_IFBLK: return THEME_ENTRY_BLK_UNS;
@@ -340,16 +331,68 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	wrefresh(w);
 }
 
-static void ui_draw_help(struct ui* const i) {
-	// TODO redo
-	WINDOW* const hw = stdscr;
-	const int hheight = i->scrh-1;
-	const int lines = 4*2 + cmd_help_length - 1 + 5; // TODO
-	int dr = -i->helpy;
-	if (dr + lines < hheight) {
-		dr = hheight - lines;
-		i->helpy = -dr;
+void _printw_cmd_and_keyseqs(WINDOW* const w,
+		const int dr, const enum command c,
+		const struct input2cmd* const k[], const size_t ki) {
+	// TODO
+	size_t x = 0;
+	size_t align = 0;
+	const int maxsequences = INPUT_LIST_LENGTH-1;
+	const size_t seqlen = 6; // TODO FIXME may not always be enough (for more complicated inputs)
+	const size_t seqwid = 8;
+	for (size_t s = 0; s < ki; ++s) {
+		const struct input2cmd* const seq = k[s];
+		size_t i = 0;
+		align = 0;
+		while (seq->i[i].t != END) {
+			const struct input* const v = &seq->i[i];
+			size_t wi;
+			attron(A_BOLD);
+			switch (v->t) {
+			case UTF8:
+				mvwprintw(w, dr, x, "%s", v->d.utf);
+				wi = utf8_width(v->d.utf);
+				x += wi;
+				align += wi;
+				break;
+			case CTRL:
+				mvwprintw(w, dr, x, "^%c", v->d.c);
+				x += 2;
+				align += 2;
+				break;
+			case SPECIAL:
+				/* +4 skips "KEY_" in returned string */
+				mvwprintw(w, dr, x, "%.*s",
+						seqlen, keyname(v->d.c)+4);
+				wi = strnlen(keyname(v->d.c)+4, seqlen);
+				x += wi;
+				align += wi;
+				break;
+			default: break;
+			}
+			attroff(A_BOLD);
+			i += 1;
+		}
+		x += seqwid - align;
 	}
+	x += ((maxsequences-ki)*seqwid);
+	mvwprintw(w, dr, x, "%s", cmd_help[c].help);
+}
+
+void _find_all_keyseqs4cmd(const struct ui* const i, const enum command c,
+		const enum mode m, const struct input2cmd* ic[], size_t* const ki) {
+	*ki = 0;
+	for (size_t k = 0; k < i->kml; ++k) {
+		if (i->kmap[k].c != c || i->kmap[k].m != m) continue;
+		ic[*ki] = &i->kmap[k];
+		*ki += 1;
+	}
+}
+
+static void ui_draw_help(struct ui* const i) {
+	WINDOW* const hw = stdscr;
+	wclear(hw);
+	int dr = -i->helpy; // TODO
 	wattron(hw, A_BOLD);
 	int crl = 0; // Copytight Notice Line
 	while (copyright_notice[crl]) {
@@ -361,73 +404,25 @@ static void ui_draw_help(struct ui* const i) {
 	mvwprintw(hw, dr, 0, "%*c", i->scrw, ' ');
     dr += 1;
 	wattroff(hw, A_BOLD);
-
 	for (size_t m = 0; m < MODE_NUM; ++m) {
+		/* MODE TITLE */
 		wattron(hw, A_BOLD);
-		switch (m) {
-		case MODE_HELP:
-			mvwprintw(hw, dr, 0, "HELP%*c", i->scrw-4, ' ');
-			break;
-		case MODE_CHMOD:
-			mvwprintw(hw, dr, 0, "CHMOD%*c", i->scrw-5, ' ');
-			break;
-		case MODE_MANAGER:
-			mvwprintw(hw, dr, 0, "FILE VIEW%*c", i->scrw-9, ' ');
-			break;
-		case MODE_WAIT:
-			mvwprintw(hw, dr, 0, "WAIT%*c", i->scrw-4, ' ');
-			break;
-		default: continue;
-		}
+		mvwprintw(hw, dr, 0, "%s%*c", mode_strings[m],
+				i->scrw-strlen(mode_strings[m]));
 		wattroff(hw, A_BOLD);
 		dr += 1;
-		for (size_t c = 1; c < CMD_NUM; ++c) { // TODO redo
-			size_t w = 0;
-			int last = -1;
-			for (size_t k = 0; k < i->kml; ++k) {
-				if (i->kmap[k].c != c || i->kmap[k].m != m) continue;
-				int ks = 0;
-				last = k;
-				wattron(hw, COLOR_PAIR(THEME_HINT_KEY));
-				wattron(hw, A_BOLD);
-				int ww = 0;
-				while (i->kmap[k].i[ks].t != END) {
-					switch (i->kmap[k].i[ks].t) {
-					case UTF8:
-						mvwprintw(hw, dr, w, "%s", i->kmap[k].i[ks].d.utf);
-						w += utf8_width(i->kmap[k].i[ks].d.utf);
-						ww += utf8_width(i->kmap[k].i[ks].d.utf);
-						break;
-					case CTRL:
-						mvwprintw(hw, dr, w, "^%c", i->kmap[k].i[ks].d.c);
-						w += 2;
-						ww += 2;
-						break;
-					case SPECIAL:
-						mvwprintw(hw, dr, w, "%s",
-								keyname(i->kmap[k].i[ks].d.c)+4);
-						w += strlen(keyname(i->kmap[k].i[ks].d.c)+4);
-						ww += strlen(keyname(i->kmap[k].i[ks].d.c)+4);
-						break;
-					default: break;
-					}
-					ks += 1;
-				}
-				wattroff(hw, COLOR_PAIR(THEME_HINT_KEY));
-				wattroff(hw, A_BOLD);
-				const int tab = INPUT_LIST_LENGTH+2;
-				mvwprintw(hw, dr, w, "%*c", tab-ww, ' ');
-				w += tab-ww;
-			}
-			if (last != -1) { // -1 suggests that there was no matching command
-				const int tab = (INPUT_LIST_LENGTH+2)*(INPUT_LIST_LENGTH-1);
-				utf8* help = get_help_data(i->kmap[last].c)->help;
-				mvwprintw(hw, dr, w, "%*c%s%*c",
-						tab-w+1, ' ', help,
-						i->scrw-w-strlen(help), ' ');
+
+		/* LIST OF AVAILABLE KEYS */
+		const struct input2cmd* k[4];
+		size_t ki = 0;
+		for (size_t c = CMD_NONE+1; c < CMD_NUM; ++c) {
+			_find_all_keyseqs4cmd(i, c, m, k, &ki);
+			if (ki) { // ^^^ may output empty array
+				_printw_cmd_and_keyseqs(hw, dr, c, k, ki);
 				dr += 1;
 			}
 		}
+		/* EMPTY LINE PADDING */
 		mvwprintw(hw, dr, 0, "%*c", i->scrw, ' ');
 		dr += 1;
 	}
@@ -462,9 +457,9 @@ static void ui_draw_hintbar(struct ui* const i, WINDOW* const sw) {
 			c += 1;
 		}
 		wattroff(sw, COLOR_PAIR(THEME_HINT_KEY));
+
 		wattron(sw, COLOR_PAIR(THEME_HINT_DESC));
-		const struct cmd2help* ch = get_help_data(i->kmap[x].c);
-		wprintw(sw, "%s", (ch ? ch->hint : "(no hint)"));
+		wprintw(sw, "%s", cmd_help[i->kmap[x].c].hint);
 		wattroff(sw, COLOR_PAIR(THEME_HINT_DESC));
 	}
 }
@@ -482,7 +477,7 @@ static void ui_draw_chmod(struct ui* const i) {
 
 	int ph, pw;
 	getmaxyx(cw, ph, pw); // TODO
-	(void)(ph);
+	(void)(ph); // FIXME
 
 	_printw_pathbar(i->path, cw, pw);
 	static const char* txt[] = { "permissions: ", "owner: ", "group: " };
@@ -502,45 +497,45 @@ static void ui_draw_chmod(struct ui* const i) {
 }
 
 void ui_draw(struct ui* const i) {
-	switch (i->m) {
-	case MODE_HELP:
+	bool status = false; // TODO FIXME
+	if (i->m == MODE_HELP) {
 		ui_draw_help(i);
-		break;
-	case MODE_CHMOD:
+	}
+	else if (i->m == MODE_CHMOD) {
 		ui_draw_chmod(i);
-		break;
-	case MODE_MANAGER:
+		status = true;
+	}
+	else if (i->m == MODE_MANAGER) {
 		for (int v = 0; v < 2; ++v) {
 			ui_draw_panel(i, v);
 		}
-		break;
-	default:
-		break;
+		status = true;
 	}
-
-	WINDOW* sw = panel_window(i->status);
-	if (i->mt) {
-		int cp = 0;
-		switch (i->mt) {
-		case MSG_INFO: cp = THEME_INFO; break;
-		case MSG_ERROR: cp = THEME_ERROR; break;
-		default: break;
+	if (status) {
+		WINDOW* sw = panel_window(i->status);
+		if (i->mt) {
+			int cp = 0;
+			switch (i->mt) {
+			case MSG_INFO: cp = THEME_INFO; break;
+			case MSG_ERROR: cp = THEME_ERROR; break;
+			default: break;
+			}
+			wattron(sw, COLOR_PAIR(cp));
+			mvwprintw(sw, 0, 0, "%s", i->msg);
+			wattroff(sw, COLOR_PAIR(cp));
+			mvwprintw(sw, 0, strlen(i->msg), "%*c",
+					i->scrw-utf8_width(i->msg), ' ');
+			i->mt = MSG_NONE;
 		}
-		wattron(sw, COLOR_PAIR(cp));
-		mvwprintw(sw, 0, 0, "%s", i->msg);
-		wattroff(sw, COLOR_PAIR(cp));
-		mvwprintw(sw, 0, strlen(i->msg), "%*c",
-				i->scrw-utf8_width(i->msg), ' ');
-		i->mt = MSG_NONE;
+		else if (i->prompt) { // TODO
+			mvwprintw(sw, 0, 0, "%c%s%*c", i->prch, i->prompt,
+					i->scrw-(utf8_width(i->prompt)+2), ' ');
+		}
+		else {
+			ui_draw_hintbar(i, sw);
+		}
+		wrefresh(sw);
 	}
-	else if (i->prompt) { // TODO
-		mvwprintw(sw, 0, 0, "%c%s%*c", i->prch, i->prompt,
-				i->scrw-(utf8_width(i->prompt)+2), ' ');
-	}
-	else {
-		ui_draw_hintbar(i, sw);
-	}
-	wrefresh(sw);
 
 	update_panels();
 	doupdate();

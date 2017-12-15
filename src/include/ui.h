@@ -295,65 +295,71 @@ static const struct input2cmd default_mapping[] = {
 
 static const size_t default_mapping_length = (sizeof(default_mapping)/sizeof(struct input2cmd));
 
-struct cmd2help {
-	enum command c;
+struct hint_and_help {
 	utf8 *hint, *help;
 };
 
-static const struct cmd2help cmd_help[] = {
-	{ CMD_QUIT, "quit", "Quit hund." },
-	{ CMD_HELP, "help", "Display help screen." },
-	{ CMD_COPY, "copy", "Copy selected file to the other directory. May prompt for name if colliding." },
-	{ CMD_MOVE, "move", "Move selected file to the other directory." },
-	{ CMD_REMOVE, "remove", "Remove selected file." },
-	{ CMD_SWITCH_PANEL, "switch", "Switch active panel." },
-	{ CMD_UP_DIR, "up dir", "Move up in directory tree." },
-	{ CMD_ENTER_DIR, "enter dir", "Enter selected directory." },
-	{ CMD_REFRESH, "refresh", "Rescan directories and redraw window." },
-	{ CMD_ENTRY_UP, "up", "Select previous entry." },
-	{ CMD_ENTRY_DOWN, "down", "Select next entry." },
-	{ CMD_CREATE_DIR, "create dir", "Create new directory. Prompts for name." },
-	{ CMD_ENTRY_FIRST, "top", "Select top file in directory." },
-	{ CMD_ENTRY_LAST, "bottom", "Select bottom file in directory." },
-	{ CMD_RENAME, "rename", "Rename selected file. Prompts for new name." },
-	{ CMD_TOGGLE_HIDDEN, "hide", "Switch between hiding/showing hidden files." },
-	{ CMD_CD, "change dir", "Jump to some directory. Prompts for path." },
-	{ CMD_OPEN_FILE, "open", "Open selected file in less." },
-	{ CMD_EDIT_FILE, "edit", "Open selected file in vi." },
-	{ CMD_FIND, "find", "Search for files in current directory. Case sensitive." },
+static const struct hint_and_help cmd_help[] = {
+	[CMD_QUIT] = { "quit", "Quit hund." },
+	[CMD_HELP] = { "help", "Display help screen." },
+	[CMD_COPY] = { "copy", "Copy selected file to the other directory. May prompt on conflict." },
+	[CMD_MOVE] = { "move", "Move selected file to the other directory." },
+	[CMD_REMOVE] = { "remove", "Remove selected file." },
+	[CMD_SWITCH_PANEL] = { "switch", "Switch active panel." },
+	[CMD_UP_DIR] = { "up dir", "Move up in directory tree." },
+	[CMD_ENTER_DIR] = { "enter dir", "Enter selected directory." },
+	[CMD_REFRESH] = { "refresh", "Rescan directories and redraw window." },
+	[CMD_ENTRY_UP] = { "up", "Select previous entry." },
+	[CMD_ENTRY_DOWN] = { "down", "Select next entry." },
+	[CMD_CREATE_DIR] = { "create dir", "Create new directory. Prompts for name." },
+	[CMD_ENTRY_FIRST] = { "top", "Select top file in directory." },
+	[CMD_ENTRY_LAST] = { "bottom", "Select bottom file in directory." },
+	[CMD_RENAME] = { "rename", "Rename selected file. Prompts for new name." },
+	[CMD_TOGGLE_HIDDEN] = { "hide", "Switch between hiding/showing hidden files." },
+	[CMD_CD] = { "change dir", "Jump to some directory. Prompts for path." },
+	[CMD_OPEN_FILE] = { "open", "Open selected file in less." },
+	[CMD_EDIT_FILE] = { "edit", "Open selected file in vi." },
+	[CMD_FIND] = { "find", "Search for files in current directory. Case sensitive." },
 
-	{ CMD_CHMOD, "chmod", "Change permissions of selected file." },
-	{ CMD_RETURN, "return", "Abort changes and return." },
-	{ CMD_CHOWN, "change owner", "Change owner of file. Prompts for login." },
-	{ CMD_CHGRP, "change group", "Change group of file. Prompts for group name." },
-	{ CMD_SORT_BY_NAME_ASC, "name asc", "Sort by name ascending." },
-	{ CMD_SORT_BY_NAME_DESC, "name desc", "Sort by name descending." },
-	{ CMD_SORT_BY_DATE_ASC, "date asc", "Sort by date ascending." },
-	{ CMD_SORT_BY_DATE_DESC, "date desc", "Sort by date descending." },
-	{ CMD_SORT_BY_SIZE_ASC, "size asc", "Sort by size ascending." },
-	{ CMD_SORT_BY_SIZE_DESC, "size desc", "Sort by size descending." },
+	[CMD_CHMOD] = { "chmod", "Change permissions of selected file." },
+	[CMD_RETURN] = { "return", "Abort changes and return." },
+	[CMD_CHOWN] = { "change owner", "Change owner of file. Prompts for login." },
+	[CMD_CHGRP] = { "change group", "Change group of file. Prompts for group name." },
+	[CMD_SORT_BY_NAME_ASC] = { "name asc", "Sort by name ascending." },
+	[CMD_SORT_BY_NAME_DESC] = { "name desc", "Sort by name descending." },
+	[CMD_SORT_BY_DATE_ASC] = { "date asc", "Sort by date ascending." },
+	[CMD_SORT_BY_DATE_DESC] = { "date desc", "Sort by date descending." },
+	[CMD_SORT_BY_SIZE_ASC] = { "size asc", "Sort by size ascending." },
+	[CMD_SORT_BY_SIZE_DESC] = { "size desc", "Sort by size descending." },
 
-	{ CMD_CHANGE, "change ", "Apply changes and return." },
-	{ CMD_TOGGLE_UIOX, "toggle setuid", "Toggle set user ID on execution." },
-	{ CMD_TOGGLE_GIOX, "toggle setgid", "Toggle set group ID on execution." },
-	{ CMD_TOGGLE_SB, "toggle sticky bit", "Toggle sticky bit." },
-	{ CMD_TOGGLE_UR, "toggle user read", "Toggle user read." },
-	{ CMD_TOGGLE_UW, "toggle user write", "Toggle user write." },
-	{ CMD_TOGGLE_UX, "toggle user execute", "Toggle user execute." },
-	{ CMD_TOGGLE_GR, "toggle group read", "Toggle group read." },
-	{ CMD_TOGGLE_GW, "toggle group write", "Toggle group write." },
-	{ CMD_TOGGLE_GX, "toggle group execute", "Toggle group execute." },
-	{ CMD_TOGGLE_OR, "toggle other read", "Toggle other read." },
-	{ CMD_TOGGLE_OW, "toggle other write", "Toggle other write." },
-	{ CMD_TOGGLE_OX, "toggle other execute", "Toggle other execute." },
+	[CMD_CHANGE] = { "change ", "Apply changes and return." },
+	[CMD_TOGGLE_UIOX] = { "toggle setuid", "Toggle set user ID on execution." },
+	[CMD_TOGGLE_GIOX] = { "toggle setgid", "Toggle set group ID on execution." },
+	[CMD_TOGGLE_SB] = { "toggle sticky bit", "Toggle sticky bit." },
+	[CMD_TOGGLE_UR] = { "toggle user read", "Toggle user read." },
+	[CMD_TOGGLE_UW] = { "toggle user write", "Toggle user write." },
+	[CMD_TOGGLE_UX] = { "toggle user execute", "Toggle user execute." },
+	[CMD_TOGGLE_GR] = { "toggle group read", "Toggle group read." },
+	[CMD_TOGGLE_GW] = { "toggle group write", "Toggle group write." },
+	[CMD_TOGGLE_GX] = { "toggle group execute", "Toggle group execute." },
+	[CMD_TOGGLE_OR] = { "toggle other read", "Toggle other read." },
+	[CMD_TOGGLE_OW] = { "toggle other write", "Toggle other write." },
+	[CMD_TOGGLE_OX] = { "toggle other execute", "Toggle other execute." },
 
-	{ CMD_TASK_QUIT, "abort", "Abort task." },
-	{ CMD_TASK_PAUSE, "pause", "Pause task." },
-	{ CMD_TASK_RESUME, "resume", "Resume task." },
+	[CMD_TASK_QUIT] = { "abort", "Abort task." },
+	[CMD_TASK_PAUSE] = { "pause", "Pause task." },
+	[CMD_TASK_RESUME] = { "resume", "Resume task." },
 
-	{ CMD_HELP_UP, "up", "Scroll up." },
-	{ CMD_HELP_DOWN, "down", "Scroll down." },
-	{ CMD_HELP_QUIT, "quit", "Quit help screen." },
+	[CMD_HELP_UP] = { "up", "Scroll up." },
+	[CMD_HELP_DOWN] = { "down", "Scroll down." },
+	[CMD_HELP_QUIT] = { "quit", "Quit help screen." },
+};
+
+static const char* const mode_strings[] = {
+	[MODE_HELP] = "HELP",
+	[MODE_CHMOD] = "CHMOD",
+	[MODE_MANAGER] = "FILE VIEW",
+	[MODE_WAIT] = "WAIT",
 };
 
 static const char* const copyright_notice[] = {
@@ -363,8 +369,6 @@ static const char* const copyright_notice[] = {
 	"redistribute it under terms of GNU General Public License.",
 	NULL,
 };
-
-static const size_t cmd_help_length = sizeof(cmd_help)/sizeof(struct cmd2help);
 
 enum msg_type {
 	MSG_NONE = 0,
