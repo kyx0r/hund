@@ -140,7 +140,7 @@ static const int theme_scheme[THEME_ELEM_NUM][3] = {
 	[THEME_PATHBAR] = { 0, COLOR_BLACK, COLOR_WHITE },
 	[THEME_STATUSBAR] = { 0, COLOR_BLACK, COLOR_WHITE },
 	[THEME_ERROR] = { 0, COLOR_BLACK, COLOR_RED },
-	[THEME_INFO] = { 0, COLOR_BLACK, COLOR_CYAN },
+	[THEME_INFO] = { 0, COLOR_WHITE, COLOR_BLACK },
 	[THEME_HINT_KEY] = { 0, COLOR_WHITE, COLOR_BLACK },
 	[THEME_HINT_DESC] = { 0, COLOR_BLACK, COLOR_WHITE },
 	[THEME_ENTRY_BLK_UNS] = { '+', COLOR_RED, COLOR_BLACK },
@@ -178,7 +178,7 @@ union input_data {
 };
 
 struct input {
-	enum input_type t;
+	enum input_type t : 8;
 	union input_data d;
 };
 
@@ -188,8 +188,8 @@ struct input get_input(WINDOW* const);
 
 struct input2cmd {
 	struct input i[INPUT_LIST_LENGTH];
-	enum mode m;
-	enum command c;
+	enum mode m : 8;
+	enum command c : 8;
 };
 
 #define ENDK { .t = END }
@@ -197,7 +197,7 @@ struct input2cmd {
 #define SPEC(K) { .t = SPECIAL, .d.c = (int)K }
 #define CTRL(K) { .t = CTRL, .d.c = (int)K }
 
-static const struct input2cmd default_mapping[] = {
+static struct input2cmd default_mapping[] = {
 	/* MODE MANGER */
 	{ { UTF8("q"), UTF8("q"), ENDK }, MODE_MANAGER, CMD_QUIT },
 
@@ -295,64 +295,60 @@ static const struct input2cmd default_mapping[] = {
 
 static const size_t default_mapping_length = (sizeof(default_mapping)/sizeof(struct input2cmd));
 
-struct hint_and_help {
-	utf8 *hint, *help;
-};
+static const char* const cmd_help[] = {
+	[CMD_QUIT] = "Quit hund.",
+	[CMD_HELP] = "Display help screen.",
+	[CMD_COPY] = "Copy selected file to the other directory. May prompt on conflict.",
+	[CMD_MOVE] = "Move selected file to the other directory.",
+	[CMD_REMOVE] = "Remove selected file.",
+	[CMD_SWITCH_PANEL] = "Switch active panel.",
+	[CMD_UP_DIR] = "Move up in directory tree.",
+	[CMD_ENTER_DIR] = "Enter selected directory.",
+	[CMD_REFRESH] = "Rescan directories and redraw window.",
+	[CMD_ENTRY_UP] = "Select previous entry.",
+	[CMD_ENTRY_DOWN] = "Select next entry.",
+	[CMD_CREATE_DIR] = "Create new directory. Prompts for name.",
+	[CMD_ENTRY_FIRST] = "Select top file in directory.",
+	[CMD_ENTRY_LAST] = "Select bottom file in directory.",
+	[CMD_RENAME] = "Rename selected file. Prompts for new name.",
+	[CMD_TOGGLE_HIDDEN] = "Switch between hiding/showing hidden files.",
+	[CMD_CD] = "Jump to some directory. Prompts for path.",
+	[CMD_OPEN_FILE] = "Open selected file in less.",
+	[CMD_EDIT_FILE] = "Open selected file in vi.",
+	[CMD_FIND] = "Search for files in current directory. Case sensitive.",
 
-static const struct hint_and_help cmd_help[] = {
-	[CMD_QUIT] = { "quit", "Quit hund." },
-	[CMD_HELP] = { "help", "Display help screen." },
-	[CMD_COPY] = { "copy", "Copy selected file to the other directory. May prompt on conflict." },
-	[CMD_MOVE] = { "move", "Move selected file to the other directory." },
-	[CMD_REMOVE] = { "remove", "Remove selected file." },
-	[CMD_SWITCH_PANEL] = { "switch", "Switch active panel." },
-	[CMD_UP_DIR] = { "up dir", "Move up in directory tree." },
-	[CMD_ENTER_DIR] = { "enter dir", "Enter selected directory." },
-	[CMD_REFRESH] = { "refresh", "Rescan directories and redraw window." },
-	[CMD_ENTRY_UP] = { "up", "Select previous entry." },
-	[CMD_ENTRY_DOWN] = { "down", "Select next entry." },
-	[CMD_CREATE_DIR] = { "create dir", "Create new directory. Prompts for name." },
-	[CMD_ENTRY_FIRST] = { "top", "Select top file in directory." },
-	[CMD_ENTRY_LAST] = { "bottom", "Select bottom file in directory." },
-	[CMD_RENAME] = { "rename", "Rename selected file. Prompts for new name." },
-	[CMD_TOGGLE_HIDDEN] = { "hide", "Switch between hiding/showing hidden files." },
-	[CMD_CD] = { "change dir", "Jump to some directory. Prompts for path." },
-	[CMD_OPEN_FILE] = { "open", "Open selected file in less." },
-	[CMD_EDIT_FILE] = { "edit", "Open selected file in vi." },
-	[CMD_FIND] = { "find", "Search for files in current directory. Case sensitive." },
+	[CMD_CHMOD] = "Change permissions of selected file.",
+	[CMD_RETURN] = "Abort changes and return.",
+	[CMD_CHOWN] = "Change owner of file. Prompts for login.",
+	[CMD_CHGRP] = "Change group of file. Prompts for group name.",
+	[CMD_SORT_BY_NAME_ASC] = "Sort by name ascending.",
+	[CMD_SORT_BY_NAME_DESC] = "Sort by name descending.",
+	[CMD_SORT_BY_DATE_ASC] = "Sort by date ascending.",
+	[CMD_SORT_BY_DATE_DESC] = "Sort by date descending.",
+	[CMD_SORT_BY_SIZE_ASC] = "Sort by size ascending.",
+	[CMD_SORT_BY_SIZE_DESC] = "Sort by size descending.",
 
-	[CMD_CHMOD] = { "chmod", "Change permissions of selected file." },
-	[CMD_RETURN] = { "return", "Abort changes and return." },
-	[CMD_CHOWN] = { "change owner", "Change owner of file. Prompts for login." },
-	[CMD_CHGRP] = { "change group", "Change group of file. Prompts for group name." },
-	[CMD_SORT_BY_NAME_ASC] = { "name asc", "Sort by name ascending." },
-	[CMD_SORT_BY_NAME_DESC] = { "name desc", "Sort by name descending." },
-	[CMD_SORT_BY_DATE_ASC] = { "date asc", "Sort by date ascending." },
-	[CMD_SORT_BY_DATE_DESC] = { "date desc", "Sort by date descending." },
-	[CMD_SORT_BY_SIZE_ASC] = { "size asc", "Sort by size ascending." },
-	[CMD_SORT_BY_SIZE_DESC] = { "size desc", "Sort by size descending." },
+	[CMD_CHANGE] = "Apply changes and return.",
+	[CMD_TOGGLE_UIOX] = "Toggle set user ID on execution.",
+	[CMD_TOGGLE_GIOX] = "Toggle set group ID on execution.",
+	[CMD_TOGGLE_SB] = "Toggle sticky bit.",
+	[CMD_TOGGLE_UR] = "Toggle user read.",
+	[CMD_TOGGLE_UW] = "Toggle user write.",
+	[CMD_TOGGLE_UX] = "Toggle user execute.",
+	[CMD_TOGGLE_GR] = "Toggle group read.",
+	[CMD_TOGGLE_GW] = "Toggle group write.",
+	[CMD_TOGGLE_GX] = "Toggle group execute.",
+	[CMD_TOGGLE_OR] = "Toggle other read.",
+	[CMD_TOGGLE_OW] = "Toggle other write.",
+	[CMD_TOGGLE_OX] = "Toggle other execute.",
 
-	[CMD_CHANGE] = { "change ", "Apply changes and return." },
-	[CMD_TOGGLE_UIOX] = { "toggle setuid", "Toggle set user ID on execution." },
-	[CMD_TOGGLE_GIOX] = { "toggle setgid", "Toggle set group ID on execution." },
-	[CMD_TOGGLE_SB] = { "toggle sticky bit", "Toggle sticky bit." },
-	[CMD_TOGGLE_UR] = { "toggle user read", "Toggle user read." },
-	[CMD_TOGGLE_UW] = { "toggle user write", "Toggle user write." },
-	[CMD_TOGGLE_UX] = { "toggle user execute", "Toggle user execute." },
-	[CMD_TOGGLE_GR] = { "toggle group read", "Toggle group read." },
-	[CMD_TOGGLE_GW] = { "toggle group write", "Toggle group write." },
-	[CMD_TOGGLE_GX] = { "toggle group execute", "Toggle group execute." },
-	[CMD_TOGGLE_OR] = { "toggle other read", "Toggle other read." },
-	[CMD_TOGGLE_OW] = { "toggle other write", "Toggle other write." },
-	[CMD_TOGGLE_OX] = { "toggle other execute", "Toggle other execute." },
+	[CMD_TASK_QUIT] = "Abort task.",
+	[CMD_TASK_PAUSE] = "Pause task.",
+	[CMD_TASK_RESUME] = "Resume task.",
 
-	[CMD_TASK_QUIT] = { "abort", "Abort task." },
-	[CMD_TASK_PAUSE] = { "pause", "Pause task." },
-	[CMD_TASK_RESUME] = { "resume", "Resume task." },
-
-	[CMD_HELP_UP] = { "up", "Scroll up." },
-	[CMD_HELP_DOWN] = { "down", "Scroll down." },
-	[CMD_HELP_QUIT] = { "quit", "Quit help screen." },
+	[CMD_HELP_UP] = "Scroll up.",
+	[CMD_HELP_DOWN] = "Scroll down.",
+	[CMD_HELP_QUIT] = "Quit help screen.",
 };
 
 static const char* const mode_strings[] = {
@@ -403,10 +399,13 @@ struct ui {
 	size_t kml; // Key Mapping Length
 	int* mks; // Matching Key Sequence
 
-	mode_t perm; // permissions of chmodded file
+	struct input il[INPUT_LIST_LENGTH];
+	int ili;
+
 	utf8* path; // path of chmodded file
-	uid_t o; // owner uid
-	gid_t g; // group gid
+	mode_t perm; // permissions of chmodded file
+	uid_t o;
+	gid_t g;
 	/* These are only to limit syscalls.
 	 * Their existence is checked after prompt.
 	 * If correct, updated

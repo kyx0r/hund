@@ -94,27 +94,14 @@ struct ui ui_init(struct file_view* const pv,
 	i.helpy = 0;
 	i.run = true;
 	i.ui_needs_refresh = true;
+	i.ili = 0;
 	i.kml = default_mapping_length;
 	i.mks = calloc(default_mapping_length, sizeof(int));
-	i.kmap = malloc(default_mapping_length*sizeof(struct input2cmd));
-	// TODO
-	for (size_t k = 0; k < default_mapping_length; ++k) {
-		i.kmap[k].m = default_mapping[k].m;
-		i.kmap[k].c = default_mapping[k].c;
-		for (int il = 0; il < INPUT_LIST_LENGTH; ++il) {
-			i.kmap[k].i[il].t = default_mapping[k].i[il].t;
-			switch (i.kmap[k].i[il].t) {
-			case END: break;
-			case UTF8:
-				strncpy(i.kmap[k].i[il].d.utf, default_mapping[k].i[il].d.utf, 5);
-				break;
-			case SPECIAL:
-			case CTRL:
-				i.kmap[k].i[il].d.c = default_mapping[k].i[il].d.c;
-				break;
-			}
-		}
-	}
+	i.kmap = default_mapping; // TODO ???
+	//i.kmap = malloc(default_mapping_length*sizeof(struct input2cmd));
+	/*for (size_t k = 0; k < default_mapping_length; ++k) {
+		memcpy(&i.kmap[k], &default_mapping[k], sizeof(struct input2cmd));
+	}*/
 	WINDOW* sw = newwin(1, 1, 0, 0);
 	keypad(sw, TRUE);
 	//wtimeout(hw, DEFAULT_GETCH_TIMEOUT);
@@ -376,7 +363,7 @@ void _printw_cmd_and_keyseqs(WINDOW* const w,
 		x += seqwid - align;
 	}
 	x += ((maxsequences-ki)*seqwid);
-	mvwprintw(w, dr, x, "%s", cmd_help[c].help);
+	mvwprintw(w, dr, x, "%s", cmd_help[c]);
 }
 
 void _find_all_keyseqs4cmd(const struct ui* const i, const enum command c,
@@ -429,39 +416,32 @@ static void ui_draw_help(struct ui* const i) {
 	wrefresh(hw);
 }
 
+/*
+ * TODO either remove hintbar
+ * (rather not - still needed for errors and infos)
+ * or use for info such as recent keystroke... dunno
+ */
 static void ui_draw_hintbar(struct ui* const i, WINDOW* const sw) {
-	// TODO redo
-	mvwprintw(sw, 0, 0, "%*c", i->scrw-1, ' ');
-	wmove(sw, 0, 0);
-	for (size_t x = 0; x < i->kml; ++x) { // TODO redo
-		if (!i->mks[x]) continue;
-		wprintw(sw, " ");
-		const struct input* const ins = i->kmap[x].i;
-		int c = 0;
-		wattron(sw, COLOR_PAIR(THEME_HINT_KEY));
-		while (ins[c].t != END && c < INPUT_LIST_LENGTH) {
-			switch (ins[c].t) {
-			case END: break;
-			case UTF8:
-				wprintw(sw, "%s", ins[c].d.utf);
-				break;
-			case SPECIAL:
-				wprintw(sw, "%s", keyname(ins[c].d.c)+4);
-				break;
-			case CTRL:
-				wprintw(sw, "^%c", ins[c].d.c);
-				break;
-			default:
-				break;
-			}
-			c += 1;
+	char last[32]; last[0] = 0;
+	char tmp[16];
+	for (int x = 0; x < i->ili && i->il[x].t != END; ++x) {
+		switch (i->il[x].t) {
+		case UTF8:
+			snprintf(tmp, sizeof(tmp), "%s", i->il[x].d.utf);
+			break;
+		case SPECIAL:
+			snprintf(tmp, sizeof(tmp), "%s", keyname(i->il[x].d.c)+4);
+			break;
+		case CTRL:
+			snprintf(tmp, sizeof(tmp), "^%c", i->il[x].d.c);
+			break;
+		case END:
+		default:
+			break;
 		}
-		wattroff(sw, COLOR_PAIR(THEME_HINT_KEY));
-
-		wattron(sw, COLOR_PAIR(THEME_HINT_DESC));
-		wprintw(sw, "%s", cmd_help[i->kmap[x].c].hint);
-		wattroff(sw, COLOR_PAIR(THEME_HINT_DESC));
+		strncat(last, tmp, sizeof(tmp));
 	}
+	mvwprintw(sw, 0, 0, "%*c%s", i->scrw-strlen(last), ' ', last);
 }
 
 static void ui_draw_chmod(struct ui* const i) {
@@ -497,45 +477,41 @@ static void ui_draw_chmod(struct ui* const i) {
 }
 
 void ui_draw(struct ui* const i) {
-	bool status = false; // TODO FIXME
 	if (i->m == MODE_HELP) {
 		ui_draw_help(i);
 	}
 	else if (i->m == MODE_CHMOD) {
 		ui_draw_chmod(i);
-		status = true;
 	}
 	else if (i->m == MODE_MANAGER) {
 		for (int v = 0; v < 2; ++v) {
 			ui_draw_panel(i, v);
 		}
-		status = true;
 	}
-	if (status) {
-		WINDOW* sw = panel_window(i->status);
-		if (i->mt) {
-			int cp = 0;
-			switch (i->mt) {
-			case MSG_INFO: cp = THEME_INFO; break;
-			case MSG_ERROR: cp = THEME_ERROR; break;
-			default: break;
-			}
-			wattron(sw, COLOR_PAIR(cp));
-			mvwprintw(sw, 0, 0, "%s", i->msg);
-			wattroff(sw, COLOR_PAIR(cp));
-			mvwprintw(sw, 0, strlen(i->msg), "%*c",
-					i->scrw-utf8_width(i->msg), ' ');
-			i->mt = MSG_NONE;
+	WINDOW* sw = panel_window(i->status);
+	if (i->mt) {
+		int cp = 0;
+		switch (i->mt) {
+		case MSG_INFO: cp = THEME_INFO; break;
+		case MSG_ERROR: cp = THEME_ERROR; break;
+		default: break;
 		}
-		else if (i->prompt) { // TODO
-			mvwprintw(sw, 0, 0, "%c%s%*c", i->prch, i->prompt,
-					i->scrw-(utf8_width(i->prompt)+2), ' ');
-		}
-		else {
-			ui_draw_hintbar(i, sw);
-		}
-		wrefresh(sw);
+		wattron(sw, COLOR_PAIR(cp));
+		mvwprintw(sw, 0, 0, "%s", i->msg);
+		wattroff(sw, COLOR_PAIR(cp));
+
+		mvwprintw(sw, 0, strlen(i->msg), "%*c",
+				i->scrw-utf8_width(i->msg), ' ');
+		i->mt = MSG_NONE;
 	}
+	else if (i->prompt) { // TODO
+		mvwprintw(sw, 0, 0, "%c%s%*c", i->prch, i->prompt,
+				i->scrw-(utf8_width(i->prompt)+2), ' ');
+	}
+	else {
+		ui_draw_hintbar(i, sw);
+	}
+	wrefresh(sw);
 
 	update_panels();
 	doupdate();
@@ -646,33 +622,31 @@ struct input get_input(WINDOW* const w) {
  */
 enum command get_cmd(struct ui* const i) {
 	memset(i->mks, 0, i->kml*sizeof(int));
-	static struct input il[INPUT_LIST_LENGTH];
-	static int ili = 0;
 	struct input newinput = get_input(stdscr);
 	if (newinput.t == SPECIAL && newinput.d.c == KEY_RESIZE) {
 		ui_update_geometry(i); // TODO TODO FIXME maybe not here
 		ui_draw(i);
-		memset(il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
-		ili = 0;
+		memset(i->il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
+		i->ili = 0;
 		return CMD_NONE;
 	}
 
 	if (newinput.t == END) return CMD_NONE;
 	else if (newinput.t == CTRL && newinput.d.c == '[') { // ESC
-		memset(il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
-		ili = 0;
+		memset(i->il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
+		i->ili = 0;
 		return CMD_NONE;
 	}
-	il[ili] = newinput;
-	ili += 1;
+	i->il[i->ili] = newinput;
+	i->ili += 1;
 
 	for (size_t m = 0; m < i->kml; ++m) {
 		const struct input2cmd* const i2c = &i->kmap[m];
 		if (i2c->m != i->m) continue; // mode mismatch
 		const struct input* const in = i2c->i;
-		for (int s = 0; s < ili; ++s) {
-			if (in[s].t != il[s].t) break;
-			if (!memcmp(&in[s], &il[s], sizeof(struct input))) {
+		for (int s = 0; s < i->ili; ++s) {
+			if (in[s].t != i->il[s].t) break;
+			if (!memcmp(&in[s], &i->il[s], sizeof(struct input))) {
 				i->mks[m] += 1;
 			}
 			else {
@@ -692,17 +666,17 @@ enum command get_cmd(struct ui* const i) {
 	}
 
 	if (!matches) {
-		ili = 0;
-		memset(il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
+		i->ili = 0;
+		memset(i->il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
 		memset(i->mks, 0, i->kml*sizeof(int));
 		return CMD_NONE;
 	}
 	else if (matches == 1) {
-		const bool fullmatch = !memcmp(il,
+		const bool fullmatch = !memcmp(i->il,
 				i->kmap[mi].i, INPUT_LIST_LENGTH*sizeof(struct input));
 		if (fullmatch) {
-			memset(il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
-			ili = 0;
+			memset(i->il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
+			i->ili = 0;
 			// Not clearing mks on full match to preserve this information for hints
 			// Instead, mks is cleared when entered get_cmd()
 			return i->kmap[mi].c;
