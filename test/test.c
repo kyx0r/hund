@@ -3,7 +3,7 @@
 #endif
 
 #include "test.h"
-#include "../src/include/path.h"
+#include "../src/include/fs.h"
 #include "../src/include/file_view.h"
 #include "../src/include/utf8.h"
 
@@ -11,15 +11,16 @@ int main() {
 	SETUP_TESTS;
 
 	SECTION("path");
+	int r;
 
-	char path0[PATH_MAX] = "/home/user/.config/fancyproggie";
+	/*char path0[PATH_MAX] = "/home/user/.config/fancyproggie";
 	char home0[PATH_MAX] = "/home/user";
-	int r = prettify_path(path0, home0);
+	r = prettify_path(path0, home0);
 	TEST(r == 0 && strcpy(path0, "~/.config/fancyproggie"), "path changed");
 
 	char path1[PATH_MAX] = "/etc/X11/xinit/xinitrc.d";
 	r = prettify_path(path1, home0);
-	TEST(r == -1 && strcmp(path1, "/etc/X11/xinit/xinitrc.d") == 0, "path remained unchanged");
+	TEST(r == -1 && strcmp(path1, "/etc/X11/xinit/xinitrc.d") == 0, "path remained unchanged");*/
 
 	char path2[PATH_MAX] = "/";
 	r = enter_dir(path2, "usr");
@@ -46,7 +47,7 @@ int main() {
 	r = append_dir(path3, "end");
 	TEST(r && strlen(path3) == PATH_MAX, "respect PATH_MAX; leave path unchanged");
 
-	char path4[PATH_MAX] = "/bin";
+	/*char path4[PATH_MAX] = "/bin";
 	char cd[NAME_MAX];
 	current_dir(path4, cd);
 	TEST(strcmp(cd, "bin") == 0, "");
@@ -57,7 +58,7 @@ int main() {
 
 	strcpy(path4, "/");
 	current_dir(path4, cd);
-	TEST(strcmp(cd, "/") == 0, "");
+	TEST(strcmp(cd, "/") == 0, "");*/
 
 	TEST(!path_is_relative("/etc/netctl"), "absolute");
 	TEST(!path_is_relative("~/.config"), "absolute");
@@ -191,6 +192,7 @@ int main() {
 	TEST(contains("qłąkąz", "łąką"), "");
 	TEST(!contains("qqloz", "lol"), "");
 	TEST(!contains("qqlooolz", "looool"), "");
+	TEST(contains("/home/user/lols", "/"), "");
 
 	END_SECTION("file");
 
