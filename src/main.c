@@ -457,7 +457,7 @@ static void task_execute(struct ui* const i, struct task* const t) {
 	i->mt = MSG_INFO;
 	snprintf(i->msg, MSG_BUFFER_SIZE,
 		"%s %s %d/%df, %d/%dd, %s / %s",
-		(t->paused ? ">>" : "||"),
+		(t->paused ? "||" : ">>"),
 		task_strings[t->t][ING],
 		t->files_done, t->files_total,
 		t->dirs_done, t->dirs_total,
