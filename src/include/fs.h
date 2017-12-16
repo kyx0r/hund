@@ -56,6 +56,17 @@ static const char* const mode_bit_meaning[] = {
 	"set user ID on execution"
 };
 
+static const char* const perm2rwx[] = {
+	[00] = "---",
+	[01] = "--x",
+	[02] = "-w-",
+	[03] = "-wx",
+	[04] = "r--",
+	[05] = "r-x",
+	[06] = "rw-",
+	[07] = "rwx",
+};
+
 typedef unsigned int fnum_t; // Number of Files
 
 /*
