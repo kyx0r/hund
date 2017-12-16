@@ -29,7 +29,6 @@
 #include <linux/limits.h>
 #include <locale.h>
 #include <time.h>
-#include <syslog.h>
 
 #include "file_view.h"
 #include "utf8.h"
@@ -298,7 +297,7 @@ static const size_t default_mapping_length = (sizeof(default_mapping)/sizeof(str
 static const char* const cmd_help[] = {
 	[CMD_QUIT] = "Quit hund.",
 	[CMD_HELP] = "Display help screen.",
-	[CMD_COPY] = "Copy selected file to the other directory. May prompt on conflict.",
+	[CMD_COPY] = "Copy selected file to the other directory.",
 	[CMD_MOVE] = "Move selected file to the other directory.",
 	[CMD_REMOVE] = "Remove selected file.",
 	[CMD_SWITCH_PANEL] = "Switch active panel.",
@@ -315,7 +314,7 @@ static const char* const cmd_help[] = {
 	[CMD_CD] = "Jump to some directory. Prompts for path.",
 	[CMD_OPEN_FILE] = "Open selected file in less.",
 	[CMD_EDIT_FILE] = "Open selected file in vi.",
-	[CMD_FIND] = "Search for files in current directory. Case sensitive.",
+	[CMD_FIND] = "Search for files in current directory.",
 
 	[CMD_CHMOD] = "Change permissions of selected file.",
 	[CMD_RETURN] = "Abort changes and return.",
@@ -380,6 +379,9 @@ struct ui {
 	bool run;
 
 	enum mode m;
+	enum msg_type mt;
+
+	utf8 msg[MSG_BUFFER_SIZE];
 
 	char prch;
 	utf8* prompt;
@@ -392,12 +394,9 @@ struct ui {
 	PANEL* status;
 	size_t helpy;
 
-	enum msg_type mt;
-	utf8 msg[MSG_BUFFER_SIZE];
-
 	struct input2cmd* kmap;
 	size_t kml; // Key Mapping Length
-	int* mks; // Matching Key Sequence
+	int* mks; // Matching Key Sequence // TODO char would be enough
 
 	struct input il[INPUT_LIST_LENGTH];
 	int ili;

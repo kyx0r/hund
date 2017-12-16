@@ -30,7 +30,6 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <signal.h>
-#include <syslog.h>
 
 #include "include/ui.h"
 #include "include/task.h"
@@ -306,7 +305,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		}
 		else {
 			strncpy(i->pv->wd, path, PATH_MAX);
-			if ((err = file_view_scan_dir(i->pv))) { // TODO
+			if ((err = file_view_scan_dir(i->pv))) {
 				failed(i, "directory scan", err, NULL);
 			}
 			else {
@@ -323,7 +322,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		if ((open_prompt(i, name, name, PATH_MAX)
 		   || (err = EINVAL, contains(name, "/"))
 		   || (err = append_dir(path, name))
-		   || (err = dir_make(path))
+		   || (err = mkdir(path, MKDIR_DEFAULT_PERM))
 		   || (err = file_view_scan_dir(i->pv)))
 		   && err) {
 			failed(i, "creating directory", err, NULL);
@@ -514,9 +513,6 @@ int main(int argc, char* argv[])  {
 		optind += 1;
 	}
 
-	openlog(argv[0], LOG_PID, LOG_USER);
-	syslog(LOG_NOTICE, "%s started", argv[0]+2);
-
 	struct file_view fvs[2];
 	memset(fvs, 0, sizeof(fvs));
 	fvs[0].sorting = fvs[1].sorting = cmp_name_asc;
@@ -571,6 +567,5 @@ int main(int argc, char* argv[])  {
 	}
 	task_clean(&t);
 	ui_end(&i);
-	closelog();
 	exit(EXIT_SUCCESS);
 }
