@@ -62,7 +62,7 @@ int task_estimate_file_volume(struct task* t, char* path) {
 				!strncmp(de->d_name, "..", 3)) {
 				continue;
 			}
-			static char fpath[PATH_MAX+1];
+			char fpath[PATH_MAX+1];
 			strncpy(fpath, path, PATH_MAX);
 			append_dir(fpath, de->d_name); // TODO handle error
 			struct stat ss;
@@ -200,15 +200,20 @@ static int _copy_some(struct task* const t,
  *      copying = copy checklist -> new_path
  *		moving = copy checklist -> new_path + remove checklist
  */
-
 char* build_new_path(const struct task* const t,
 		const char* const cp, char* const buf) {
 	strncpy(buf, cp, PATH_MAX);
 	if (t->newname) { // name colission; using new name
-		static char _dst[PATH_MAX+1];
+		const size_t dst_len = strnlen(t->dst, PATH_MAX);
+		const size_t newname_len = strnlen(t->newname, NAME_MAX);
+		char* _dst = malloc(dst_len+newname_len+1);
 		strncpy(_dst, t->dst, PATH_MAX);
-		if (append_dir(_dst, t->newname)) return NULL;
+		if (append_dir(_dst, t->newname)) {
+			free(_dst);
+			return NULL;
+		}
 		substitute(buf, t->src, _dst);
+		free(_dst);
 	}
 	else { // name stays the same
 		const size_t repll = current_dir_i(t->src)-1;
@@ -400,9 +405,10 @@ int _at_step(struct task* const t, int* const c,
 int do_task(struct task* t, int c) {
 	if (t->tw.tws == AT_NOWHERE) tree_walk_start(&t->tw, t->src);
 	char npath[PATH_MAX+1];
-	char buf[BUFSIZ];
+	const size_t buf_size = BUFSIZ;
+	char buf[buf_size];
 	while (t->tw.tws != AT_EXIT && c > 0) {
-		_at_step(t, &c, npath, buf, BUFSIZ); // TODO error
+		_at_step(t, &c, npath, buf, buf_size); // TODO error
 		if (t->in == -1 && t->out == -1) tree_walk_step(&t->tw);
 	}
 	if (t->tw.tws == AT_EXIT) {
