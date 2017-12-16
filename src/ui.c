@@ -150,45 +150,43 @@ static void _printw_pathbar(const char* const path,
 static void _printw_entry(WINDOW* const w, const fnum_t dr,
 		const struct file_record* const cfr,
 		const fnum_t width, const bool highlight) {
-	static const char* const corrupted = "(error)"; // TODO display errno or something
+	// TODO scroll filenames that are too long to fit in the panel width
 	const enum theme_element te = mode2theme(cfr->s.st_mode,
 			(cfr->l ? cfr->l->st_mode : 0)) + (highlight ? 1 : 0);
-
-	wattron(w, COLOR_PAIR(te));
-	fnum_t space = width;
-	fnum_t begin = 0;
-
-	char invname[NAME_MAX+1];
+	char* invname = NULL;
 	const bool valid = utf8_validate(cfr->file_name);
 	const utf8* const fn = (valid ? cfr->file_name : invname);
-	const utf8* const lp = (cfr->l ? cfr->link_path : corrupted);
-	if (!valid) cut_non_ascii(cfr->file_name, invname, NAME_MAX);
+	if (!valid) {
+		invname = malloc(NAME_MAX+1);
+		cut_non_ascii(cfr->file_name, invname, NAME_MAX);
+	}
+
+	char sbuf[SIZE_BUF_SIZE];
+	size_t slen = 0;
+	sbuf[0] = 0;
+	if (!S_ISDIR(cfr->s.st_mode) && !S_ISDIR(cfr->l->st_mode)) {
+		pretty_size(cfr->l->st_size, sbuf);
+		slen = strnlen(sbuf, SIZE_BUF_SIZE);
+	}
 
 	const size_t fnw = utf8_width(fn);
-	const size_t printfn = (space > fnw ? fnw : space);
-	mvwprintw(w, dr, begin, "%c%.*s",
-			theme_scheme[te][0], utf8_slice_length(fn, printfn), fn);
-	space -= printfn+1;
-	begin += printfn+1;
+	size_t fn_slice = fnw;
+	size_t space = 0;
+	if (width < 1+fnw+1+slen+1) {
+		fn_slice = width - (1+1+slen+1);
+		space = 1;
+	}
+	else {
+		space = width - (1+fnw+1+slen);
+	}
+	wattron(w, COLOR_PAIR(te));
+	mvwprintw(w, dr, 0, "%c%.*s%*c%s ",
+			theme_scheme[te][0],
+			utf8_slice_length(fn, fn_slice), fn,
+			space, ' ', sbuf);
 
-	if (!highlight) {
-		if (cfr->l) wattron(w, COLOR_PAIR(THEME_ENTRY_LNK_PATH));
-		else wattron(w, COLOR_PAIR(THEME_ENTRY_LNK_PATH_INV));
-	}
-	if ((cfr->s.st_mode & S_IFMT) == S_IFLNK) {
-		const size_t lpw = utf8_width(lp);
-		const size_t printlp = (space > 4+lpw ? 4+lpw : space);
-		mvwprintw(w, dr, begin, " -> %.*s",
-				utf8_slice_length(lp, printlp), lp);
-		space -= printlp;
-		begin += printlp;
-	}
-	if (!highlight) {
-		if (cfr->l) wattroff(w, COLOR_PAIR(THEME_ENTRY_LNK_PATH));
-		else wattron(w, COLOR_PAIR(THEME_ENTRY_LNK_PATH_INV));
-	}
-	mvwprintw(w, dr, begin, "%*c", space, ' ');
 	wattroff(w, COLOR_PAIR(te));
+	if (!valid) free(invname);
 }
 
 /* - Max Entries = how many entries I need to fill
@@ -275,36 +273,33 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	/* Statusbar */
 	/* Padded on both sides with space */
 	wattron(w, COLOR_PAIR(THEME_STATUSBAR));
-	const size_t status_size = pw*4; // TODO
-	char* const status = malloc(status_size);
-	static const char* const timefmt = "%Y-%m-%d %H:%M";
-	const size_t time_size = 4+1+2+1+2+1+2+1+2+1;
-	char time[time_size]; // TODO
-	memset(time, 0, time_size);
+	static const char* const timefmt = "%Y-%m-%d %H:%M:%S";
+	const size_t time_size = 4+1+2+1+2+1+2+1+2+1+2+1;
+	char time[time_size];
+	time[0] = 0;
 
-	off_t fsize = 0;
+	const size_t status_size = 10+1+1+10+1+1+9+1;
+	char* const status = malloc(status_size);
+
 	if (hfr && hfr->l) {
-		fsize = (s->selection < s->num_files ? hfr->l->st_size : 0);
 		const time_t lt = hfr->l->st_mtim.tv_sec;
 		const struct tm* const tt = localtime(&lt);
 		strftime(time, time_size, timefmt, tt);
 	}
-	char sbuf[SIZE_BUF_SIZE];
-	pretty_size(fsize, sbuf);
-	// TODO FIXME does not always fit 80x24
+	mode_t m = (hfr ? hfr->l->st_mode : 0);
 	snprintf(status, status_size,
-			"%uf %u%c %03o %s",
+			"%uf %u%c %s%s%s",
 			s->num_files-(sh ? 0 : nhf),
 			nhf, (sh ? 'H' : 'h'),
-			(hfr && hfr->l ? (hfr->l->st_mode & 0xfff) : 0),
-			sbuf);
+			perm2rwx[(m>>6) & 07],
+			perm2rwx[(m>>3) & 07],
+			perm2rwx[(m>>0) & 07]);
+
 	/* BTW chmod man page says chmod
 	 * cannot change symlink permissions.
 	 * ...but that is not and issue since
 	 * symlinks permissions are never used.
 	 */
-
-	// TODO glitches when padding is <0 (screen too small)
 	mvwprintw(w, dr, 0, " %s%*c%s ", status,
 			pw-utf8_width(status)-strnlen(time, time_size)-2, ' ', time);
 	wattroff(w, COLOR_PAIR(THEME_STATUSBAR));
@@ -389,7 +384,7 @@ static void ui_draw_help(struct ui* const i) {
 		/* MODE TITLE */
 		wattron(hw, A_BOLD);
 		mvwprintw(hw, dr, 0, "%s%*c", mode_strings[m],
-				i->scrw-strlen(mode_strings[m]));
+				i->scrw-strlen(mode_strings[m]), ' ');
 		wattroff(hw, A_BOLD);
 		dr += 1;
 
@@ -411,6 +406,7 @@ static void ui_draw_help(struct ui* const i) {
 }
 
 /*
+ * TODO TODO TODO FIXME
  * TODO either remove hintbar
  * (rather not - still needed for errors and infos)
  * or use for info such as recent keystroke... dunno
