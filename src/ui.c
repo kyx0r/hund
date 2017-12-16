@@ -131,7 +131,7 @@ void ui_end(struct ui* const i) {
 static void _printw_pathbar(const char* const path,
 		WINDOW* const w, const fnum_t width) {
 	// TODO
-	const struct passwd* const pwd = get_pwd();
+	const struct passwd* const pwd = getpwuid(geteuid());
 	const int pi = prettify_path_i(path, pwd->pw_dir);
 	const size_t path_width = utf8_width(path+pi) + (pi ? 1 : 0);
 	wattron(w, COLOR_PAIR(THEME_PATHBAR));
@@ -582,7 +582,6 @@ struct input get_input(WINDOW* const w) {
 	int init = wgetch(w);
 	const utf8 u = (utf8)init;
 	const char* kn = keyname(init);
-	//syslog(LOG_DEBUG, "get_input: %s (%d), %d", kn, init, has_key(init));
 	if (init == -1) {
 		r.t = END;
 	}

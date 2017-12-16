@@ -37,7 +37,6 @@
 #include <dirent.h>
 #include <string.h>
 #include <errno.h>
-#include <syslog.h>
 
 #include "fs.h"
 
@@ -59,7 +58,8 @@ static const char* const mode_bit_meaning[] = {
 
 typedef unsigned int fnum_t; // Number of Files
 
-/* If file is a symlink, l will point heap-allocated stat of the pointed file.
+/*
+ * If file is a symlink, l will point heap-allocated stat of the pointed file.
  * Otherwise it will point &s.
  */
 struct file_record {
@@ -93,12 +93,10 @@ void sort_file_list(int (*)(const void*, const void*),
 int link_copy(const char* const, const char* const, const char* const);
 int link_copy_raw(const char* const, const char* const);
 
-int dir_make(const char* const);
-
 #define SIZE_BUF_SIZE (3+1+2+1+1)
 void pretty_size(off_t, char* buf);
 
-struct passwd* get_pwd(void);
+#define MKDIR_DEFAULT_PERM (S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
 
 int append_dir(char* const, const char* const);
 int enter_dir(char* const, const char* const);

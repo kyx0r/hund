@@ -21,8 +21,7 @@
 
 bool is_lnk(const char* path) {
 	struct stat s;
-	int r = lstat(path, &s);
-	return (!r && S_ISLNK(s.st_mode));
+	return (!lstat(path, &s) && S_ISLNK(s.st_mode));
 }
 
 /* Checks if that thing pointed by path is a directory
@@ -30,8 +29,7 @@ bool is_lnk(const char* path) {
  */
 bool is_dir(const char* path) {
 	struct stat s;
-	int r = stat(path, &s);
-	return (!r && S_ISDIR(s.st_mode));
+	return (!stat(path, &s) && S_ISDIR(s.st_mode));
 }
 
 /* Checks of two files are on the same filesystem.
@@ -40,8 +38,7 @@ bool is_dir(const char* path) {
  */
 bool same_fs(const char* const a, const char* const b) {
 	struct stat sa, sb;
-	if (stat(a, &sa)) return errno;
-	if (stat(b, &sb)) return errno;
+	if (stat(a, &sa) || stat(b, &sb)) return errno;
 	return sa.st_dev == sb.st_dev;
 }
 
@@ -58,7 +55,9 @@ void file_list_clean(struct file_record*** const fl, fnum_t* const nf) {
 	for (fnum_t i = 0; i < *nf; ++i) {
 		free((*fl)[i]->file_name);
 		free((*fl)[i]->link_path);
-		if ((*fl)[i]->l != &(*fl)[i]->s) free((*fl)[i]->l);
+		if ((*fl)[i]->l != &(*fl)[i]->s) {
+			free((*fl)[i]->l);
+		}
 		free((*fl)[i]);
 	}
 	free(*fl);
@@ -72,6 +71,7 @@ void file_list_clean(struct file_record*** const fl, fnum_t* const nf) {
  * On ENOMEM: cleans everything
  * On stat/lstat errors: zeroes failed fields
  * TODO test
+ * TODO scan for the number of entries first and then allocate the array
  */
 int scan_dir(const char* const wd, struct file_record*** const fl,
 		fnum_t* const nf, fnum_t* const nhf) {
@@ -85,8 +85,12 @@ int scan_dir(const char* const wd, struct file_record*** const fl,
 	struct dirent* de;
 	while ((de = readdir(dir)) != NULL) {
 		if (!strncmp(de->d_name, ".", 2) ||
-		    !strncmp(de->d_name, "..", 3)) continue;
-		if (de->d_name[0] == '.') *nhf += 1;
+		    !strncmp(de->d_name, "..", 3)) {
+			continue;
+		}
+		if (de->d_name[0] == '.') {
+			*nhf += 1;
+		}
 		void* tmp = realloc(*fl, sizeof(struct file_record*) * ((*nf)+1));
 		if (!tmp) {
 			r = ENOMEM;
@@ -169,59 +173,76 @@ int cmp_date_desc(const void* p1, const void* p2) {
 
 void sort_file_list(int (*cmp)(const void*, const void*),
 		struct file_record** fl, const fnum_t nf) {
+	// TODO merge sort, because it would respect previous order
 	qsort(fl, nf, sizeof(struct file_record*), cmp);
 }
 
-/* Copies link from src to dst, relative to wd
+/*
+ * Copies link from src to dst, relative to wd
  * all paths must be absolute.
  * There are two instances, when symlink path is copied raw:
  * - when it is absolute
  * - when target is within copy operation
  *
- * TODO detect/handle invalid links
  * TODO detect loops/recursion
  * TODO lots of testing
- * FIXME 4*PATH_MAX ~= 32786B - a lot
+ * FIXME 2*PATH_MAX
  *
  * Working Directory - root of the operation
- * Source, Destination */
+ * Source, Destination
+ */
 int link_copy(const char* const wd,
 		const char* const src, const char* const dst) {
-	if (!wd || !src || !dst) return EINVAL;
 	struct stat src_s;
+	if (!wd || !src || !dst) return EINVAL;
 	if (lstat(src, &src_s)) return errno;
 	if (!S_ISLNK(src_s.st_mode)) return EINVAL;
+
 	char lpath[PATH_MAX+1];
-	const ssize_t ll = readlink(src, lpath, PATH_MAX);
-	if (ll == -1) return errno;
-	lpath[ll] = 0;
+	const ssize_t lpath_len = readlink(src, lpath, PATH_MAX);
+	if (lpath_len == -1) return errno;
+	lpath[lpath_len] = 0;
+	if (!file_exists(lpath)) return ENOENT;
 	if (!path_is_relative(lpath)) {
-		if (symlink(lpath, dst)) return errno;
+		return (symlink(lpath, dst) ? errno : 0);
 	}
 	else {
-		char target[PATH_MAX+1];
-		const size_t sl = current_dir_i(src)-1;
-		strncpy(target, src, sl); target[sl] = 0;
-		enter_dir(target, lpath);
+		const size_t src_dir_off = current_dir_i(src)-1;
+		const size_t src_dir_len = strnlen(src+src_dir_off, PATH_MAX);
+		char* target = malloc(src_dir_len+lpath_len+1);
+		strncpy(target, src, src_dir_len);
+		target[src_dir_off] = 0;
+
+		int err;
+		if ((err = enter_dir(target, lpath))) {
+			free(target);
+			return err;
+		}
 
 		if (contains(target, wd)) {
-			if (symlink(lpath, dst)) return errno;
-			return 0;
+			free(target);
+			return (symlink(lpath, dst) ? errno : 0);
 		}
 
-		char _dst[PATH_MAX+1];
-		const size_t pl = current_dir_i(dst)-1;
-		strncpy(_dst, dst, pl); _dst[pl] = 0;
+		const size_t dst_dir_off = current_dir_i(dst)-1;
+		const size_t dst_dir_len = strnlen(dst+dst_dir_off, PATH_MAX);
+		char* _dst = malloc(dst_dir_len+1);
+		strncpy(_dst, dst, dst_dir_off);
+		_dst[dst_dir_off] = 0;
 
-		char newlpath[PATH_MAX+1] = { 0 };
+		char newlpath[PATH_MAX+1];
+		newlpath[0] = 0;
+
 		while (!contains(target, _dst)) {
 			up_dir(_dst);
-			strcat(newlpath, "../");
+			strncat(newlpath, "../", 4);
 		}
 		strcat(newlpath, target+strnlen(_dst, PATH_MAX)+1); // TODO
-		if (symlink(newlpath, dst)) return errno;
+		free(_dst);
+		free(target);
+		return (symlink(newlpath, dst) ? errno : 0);
 	}
-	return 0;
+	//return 0; // unreachable
 }
 
 int link_copy_raw(const char* const src, const char* const dst) {
@@ -229,15 +250,7 @@ int link_copy_raw(const char* const src, const char* const dst) {
 	const ssize_t ll = readlink(src, lpath, PATH_MAX);
 	if (ll == -1) return errno;
 	lpath[ll] = 0;
-	if (symlink(lpath, dst)) return errno;
-	return 0;
-}
-
-int dir_make(const char* const path) {
-	if (mkdir(path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)) {
-		return errno;
-	}
-	return 0;
+	return (symlink(lpath, dst) ? errno : 0);
 }
 
 void pretty_size(off_t s, char* const buf) {
@@ -257,11 +270,8 @@ void pretty_size(off_t s, char* const buf) {
 	else snprintf(buf, SIZE_BUF_SIZE, "%u%c", (unsigned)s, *unit);
 }
 
-struct passwd* get_pwd(void) {
-	return getpwuid(geteuid());
-}
-
-/* Appends dir to path.
+/*
+ * Appends dir to path.
  * Expects path to be PATH_MAX+1 long
  * and dir to be NAME_MAX long.
  *
@@ -278,7 +288,8 @@ int append_dir(char* const path, const char* const dir) {
 	return 0;
 }
 
-/* path[] must be absolute and not prettified
+/*
+ * path[] must be absolute and not prettified
  * dir[] does not have to be single file, can be a path
  * Returns ENAMETOOLONG if PATH_MAX would be exceeded; leaves path unchanged
  *
@@ -287,7 +298,7 @@ int append_dir(char* const path, const char* const dir) {
 int enter_dir(char* const path, const char* const dir) {
 	if (!path_is_relative(dir)) {
 		if (dir[0] == '~') {
-			struct passwd* pwd = get_pwd();
+			struct passwd* pwd = getpwuid(geteuid());
 			strncpy(path, pwd->pw_dir, PATH_MAX);
 			strncat(path, dir+1, PATH_MAX-strnlen(pwd->pw_dir, PATH_MAX));
 		}
@@ -348,7 +359,8 @@ int enter_dir(char* const path, const char* const dir) {
 	return 0;
 }
 
-/* Basically removes everything after last '/', including that '/'
+/*
+ * Basically removes everything after last '/', including that '/'
  * Return values:
  * 0 if operation succesful
  * -1 if path == '/'
@@ -403,7 +415,8 @@ bool path_is_relative(const char* const path) {
 		(path[0] == '.' && path[1] == '/');
 }
 
-/* Same as current_dir_i()
+/*
+ * Same as current_dir_i()
  * Returns place in buffer, where path after ~ starts
  * So that pretty path is just
  * printf("~%s", path+prettify_path_i(path));
@@ -417,12 +430,13 @@ int prettify_path_i(const char* const path, const char* const home) {
 	return 0;
 }
 
-/* Instead of populating another buffer,
+/*
+ * Instead of populating another buffer,
  * it just points to place in buffer,
  * where current dir's name starts
  */
 int current_dir_i(const char* const path) {
-	const int plen = strlen(path);
+	const int plen = strnlen(path, PATH_MAX);
 	int i = plen-1; // i will point last slash in path
 	while (path[i] != '/' && i >= 0) {
 		i -= 1;
@@ -430,7 +444,9 @@ int current_dir_i(const char* const path) {
 	return i+1; // i will point last slash in path
 }
 
-/* Finds SUBString at the begining of STRing and changes it ti REPLacement */
+/*
+ * Finds SUBString at the begining of STRing and changes it ti REPLacement
+ */
 bool substitute(char* const str,
 		const char* const subs, const char* const repl) {
 	const size_t subs_l = strnlen(subs, PATH_MAX);
