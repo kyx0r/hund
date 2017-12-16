@@ -150,14 +150,9 @@ static void _printw_pathbar(const char* const path,
 static void _printw_entry(WINDOW* const w, const fnum_t dr,
 		const struct file_record* const cfr,
 		const fnum_t width, const bool highlight) {
-	static const char* corrupted = "(error)"; // TODO display errno or something
+	static const char* const corrupted = "(error)"; // TODO display errno or something
 	const enum theme_element te = mode2theme(cfr->s.st_mode,
 			(cfr->l ? cfr->l->st_mode : 0)) + (highlight ? 1 : 0);
-	const size_t bufl = width*4;
-	char* const buf = malloc(bufl);
-	memset(buf, ' ', bufl);
-	buf[bufl-1] = 0;
-	buf[strnlen(buf, bufl)] = ' ';
 
 	wattron(w, COLOR_PAIR(te));
 	fnum_t space = width;
@@ -194,7 +189,6 @@ static void _printw_entry(WINDOW* const w, const fnum_t dr,
 	}
 	mvwprintw(w, dr, begin, "%*c", space, ' ');
 	wattroff(w, COLOR_PAIR(te));
-	free(buf);
 }
 
 /* - Max Entries = how many entries I need to fill
