@@ -24,7 +24,8 @@ bool is_lnk(const char* path) {
 	return (!lstat(path, &s) && S_ISLNK(s.st_mode));
 }
 
-/* Checks if that thing pointed by path is a directory
+/*
+ * Checks if that thing pointed by path is a directory
  * If path points to link, then pointed file is checked
  */
 bool is_dir(const char* path) {
@@ -32,14 +33,14 @@ bool is_dir(const char* path) {
 	return (!stat(path, &s) && S_ISDIR(s.st_mode));
 }
 
-/* Checks of two files are on the same filesystem.
+/*
+ * Checks of two files are on the same filesystem.
  * If they are, moving files (and even whole directories)
  * can be done with just rename() function.
  */
 bool same_fs(const char* const a, const char* const b) {
 	struct stat sa, sb;
-	if (stat(a, &sa) || stat(b, &sb)) return errno;
-	return sa.st_dev == sb.st_dev;
+	return !stat(a, &sa) && !stat(b, &sb) && (sa.st_dev == sb.st_dev);
 }
 
 bool executable(const mode_t m, const mode_t n) {
@@ -79,10 +80,30 @@ int scan_dir(const char* const wd, struct file_record*** const fl,
 	*nhf = 0;
 	int r = 0;
 	DIR* dir = opendir(wd);
-	if (!dir) return errno;
-	static char fpath[PATH_MAX+1];
-	static char lpath[PATH_MAX+1];
+	if (!dir) {
+		//closedir(dir); // TODO ???
+		return errno;
+	}
+	char fpath[PATH_MAX+1];
+	char lpath[PATH_MAX+1];
 	struct dirent* de;
+	while ((de = readdir(dir)) != NULL) {
+		*nf += 1;
+	}
+	*nf -= 2; // skip . and ..
+	if (!*nf) {
+		*fl = NULL;
+		closedir(dir);
+		return r;
+	}
+	rewinddir(dir);
+	void* tmp = calloc(*nf, sizeof(struct file_record*));
+	if (!tmp) {
+		closedir(dir);
+		return ENOMEM;
+	}
+	*fl = tmp;
+	fnum_t gf = 0;
 	while ((de = readdir(dir)) != NULL) {
 		if (!strncmp(de->d_name, ".", 2) ||
 		    !strncmp(de->d_name, "..", 3)) {
@@ -91,27 +112,29 @@ int scan_dir(const char* const wd, struct file_record*** const fl,
 		if (de->d_name[0] == '.') {
 			*nhf += 1;
 		}
-		void* tmp = realloc(*fl, sizeof(struct file_record*) * ((*nf)+1));
-		if (!tmp) {
-			r = ENOMEM;
-			*nhf = 0;
-			file_list_clean(fl, nf);
-			break;
-		}
-		*nf += 1;
-		*fl = tmp;
-		(*fl)[(*nf)-1] = malloc(sizeof(struct file_record));
-		struct file_record* nfr = (*fl)[(*nf)-1];
+		struct file_record* nfr = malloc(sizeof(struct file_record));
 		if (!nfr) {
 			r = ENOMEM;
 			*nhf = 0;
 			file_list_clean(fl, nf);
 			break;
 		}
-		nfr->file_name = strndup(de->d_name, NAME_MAX);
+		(*fl)[gf] = nfr;
+		gf += 1;
+		const size_t namelen = strnlen(de->d_name, NAME_MAX);
+		nfr->file_name = malloc(namelen+1);
+		if (!nfr->file_name) {
+			r = ENOMEM;
+			*nhf = 0;
+			file_list_clean(fl, nf);
+			break;
+		}
+		strncpy(nfr->file_name, de->d_name, namelen+1);
 		nfr->link_path = NULL;
-		if (append_dir(strncpy(fpath, wd, PATH_MAX), de->d_name));
-		else if (lstat(fpath, &nfr->s)) memset(&nfr->s, 0, sizeof(struct stat));
+		if (append_dir(strncpy(fpath, wd, PATH_MAX), nfr->file_name));
+		else if (lstat(fpath, &nfr->s)) {
+			memset(&nfr->s, 0, sizeof(struct stat));
+		}
 		else if (S_ISLNK(nfr->s.st_mode)) {
 			nfr->l = malloc(sizeof(struct stat));
 			if (!nfr->l);
@@ -262,7 +285,7 @@ void pretty_size(off_t s, char* const buf) {
 		s /= 1024;
 		unit += 1;
 	}
-	if (rest > 100) rest /= 10;
+	if (rest > 100) rest /= 10; // TODO FIXME
 	if (!(rest % 10)) rest /= 10;
 	if (rest > 100) rest /= 10;
 	if (!(rest % 10)) rest /= 10;
@@ -283,8 +306,8 @@ int append_dir(char* const path, const char* const dir) {
 	if (!dl) return 0;
 	const size_t pl = strnlen(path, PATH_MAX);
 	if (pl+2+dl > PATH_MAX) return ENAMETOOLONG;
-	strncat(path, "/", 2);
-	strncat(path, dir, dl+1); // null-terminator
+	strcat(path, "/");
+	strncat(path, dir, dl+1);
 	return 0;
 }
 
@@ -292,8 +315,6 @@ int append_dir(char* const path, const char* const dir) {
  * path[] must be absolute and not prettified
  * dir[] does not have to be single file, can be a path
  * Returns ENAMETOOLONG if PATH_MAX would be exceeded; leaves path unchanged
- *
- * I couldn't find any standard function that would parse path and shorten it.
  */
 int enter_dir(char* const path, const char* const dir) {
 	if (!path_is_relative(dir)) {
@@ -451,8 +472,7 @@ bool substitute(char* const str,
 		const char* const subs, const char* const repl) {
 	const size_t subs_l = strnlen(subs, PATH_MAX);
 	const size_t str_l = strnlen(str, PATH_MAX);
-	if (subs_l > str_l) return false;
-	if (memcmp(str, subs, subs_l)) return false;
+	if (subs_l > str_l || memcmp(str, subs, subs_l)) return false;
 	const size_t repl_l = strnlen(repl, PATH_MAX);
 	memmove(str+repl_l, str+subs_l, str_l-subs_l+1);
 	memcpy(str, repl, repl_l);
