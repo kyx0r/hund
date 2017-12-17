@@ -104,7 +104,7 @@ void task_new(struct task* const, const enum task_type,
 		char* const, char* const, char* const);
 void task_clean(struct task* const);
 
-int task_estimate_file_volume(struct task*, char*);
+int estimate_volume(char*, ssize_t* const, int* const, int* const, const bool);
 
 char* build_new_path(const struct task* const,
 		const char* const, char* const);

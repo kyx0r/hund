@@ -46,14 +46,13 @@ void task_clean(struct task* const t) {
 }
 
 /*
- * TODO what about non-{dirs,files,links}?
  * Calculates size of all files and subdirectories in directory
- * TODO symlinks
  */
-int task_estimate_file_volume(struct task* t, char* path) {
+int estimate_volume(char* path, ssize_t* const size_total,
+		int* const files_total, int* const dirs_total, const bool tl) {
 	int r = 0;
 	struct stat s;
-	if (lstat(path, &s)) return errno;
+	if ((tl && stat(path, &s)) || (!tl && lstat(path, &s))) return errno;
 	if (S_ISDIR(s.st_mode)) {
 		DIR* dir = opendir(path);
 		struct dirent* de;
@@ -64,26 +63,28 @@ int task_estimate_file_volume(struct task* t, char* path) {
 			}
 			char fpath[PATH_MAX+1];
 			strncpy(fpath, path, PATH_MAX);
-			append_dir(fpath, de->d_name); // TODO handle error
+			if ((r = append_dir(fpath, de->d_name))) return r;
 			struct stat ss;
-			if (lstat(fpath, &ss)) return errno;
+			if ((tl && stat(fpath, &ss))
+			   || (!tl && lstat(fpath, &ss))) return errno;
 			if (S_ISDIR(ss.st_mode)) {
-				t->dirs_total += 1;
-				r |= task_estimate_file_volume(t, fpath);
+				*dirs_total += 1;
+				r |= estimate_volume(fpath, size_total,
+						files_total, dirs_total, tl);
 			}
-			else {
-				t->size_total += ss.st_size;
-				t->files_total += 1;
+			else if (S_ISREG(ss.st_mode)) {
+				*size_total += ss.st_size;
+				*files_total += 1;
 			}
 			up_dir(fpath);
 		}
-		t->size_total += s.st_size;
-		t->dirs_total += 1;
+		*size_total += s.st_size;
+		*dirs_total += 1;
 		closedir(dir);
 	}
-	else {
-		t->size_total += s.st_size;
-		t->files_total += 1;
+	else if (S_ISREG(s.st_mode)) {
+		*size_total += s.st_size;
+		*files_total += 1;
 	}
 	return r;
 }
@@ -206,8 +207,8 @@ char* build_new_path(const struct task* const t,
 	if (t->newname) { // name colission; using new name
 		const size_t dst_len = strnlen(t->dst, PATH_MAX);
 		const size_t newname_len = strnlen(t->newname, NAME_MAX);
-		char* _dst = malloc(dst_len+newname_len+1);
-		strncpy(_dst, t->dst, PATH_MAX);
+		char* _dst = malloc(dst_len+1+newname_len+1);
+		strncpy(_dst, t->dst, dst_len+1);
 		if (append_dir(_dst, t->newname)) {
 			free(_dst);
 			return NULL;
@@ -226,8 +227,10 @@ char* build_new_path(const struct task* const t,
 }
 
 void tree_walk_start(struct tree_walk* tw, const char* const path) {
-	tw->cpath = strncpy(malloc(PATH_MAX+1), path, PATH_MAX);
-	tw->wpath = strncpy(malloc(PATH_MAX+1), path, PATH_MAX);
+	tw->cpath = malloc(PATH_MAX+1);
+	strncpy(tw->cpath, path, PATH_MAX);
+	tw->wpath = malloc(PATH_MAX+1);
+	strncpy(tw->wpath, path, PATH_MAX);
 	tw->dname = calloc(NAME_MAX+1, 1);
 	tw->dt = malloc(sizeof(struct dirtree));
 	tw->dt->cd = NULL;

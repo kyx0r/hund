@@ -105,7 +105,8 @@ static void open_find(struct ui* const i) {
 				e = 0;
 			}
 			if (!file_find(i->pv, t, s, e)) {
-				// TODO info: no more matching entries
+				//i->mt = MSG_INFO;
+				//snprintf(i->msg, MSG_BUFFER_SIZE, "no more matching entries");
 			}
 		}
 		ui_draw(i);
@@ -128,7 +129,8 @@ static void prepare_long_task(struct ui* const i, struct task* const t,
 	if (tt == TASK_MOVE || tt == TASK_COPY) {
 		dst = strncpy(malloc(PATH_MAX+1), i->sv->wd, PATH_MAX);
 		if (file_on_list(i->sv, fn)) {
-			nn = strncpy(calloc(NAME_MAX+1, sizeof(char)), fn, NAME_MAX);
+			nn = calloc(NAME_MAX+1, sizeof(char));
+			strncpy(nn, fn, NAME_MAX);
 			const size_t nnlen = strnlen(nn, NAME_MAX);
 			if (open_prompt(i, nn, nn+nnlen, NAME_MAX)) {
 				free(src);
@@ -140,7 +142,9 @@ static void prepare_long_task(struct ui* const i, struct task* const t,
 	}
 	int r; // TODO
 	task_new(t, tt, src, dst, nn);
-	if ((r = task_estimate_file_volume(t, t->src))) {
+	if ((r = estimate_volume(t->src,
+					&(t->size_total), &(t->files_total),
+					&(t->dirs_total), false))) {
 		failed(i, "build file list", r, NULL);
 		task_clean(t);
 		return;
@@ -188,8 +192,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		if (!open_prompt(i, name, name, LOGIN_NAME_MAX)) {
 			errno = 0;
 			struct passwd* pwd = getpwnam(name);
-			if (!pwd) failed(i, "chown", 0,
-					"Such user does not exist");
+			if (!pwd) failed(i, "chown", 0, "Such user does not exist");
 			else {
 				i->o = pwd->pw_uid;
 				strncpy(i->owner, pwd->pw_name, LOGIN_NAME_MAX);
@@ -202,8 +205,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		if (!open_prompt(i, name, name, LOGIN_NAME_MAX)) {
 			errno = 0;
 			struct group* grp = getgrnam(name);
-			if (!grp) failed(i, "chgrp", 0,
-					"Such group does not exist");
+			if (!grp) failed(i, "chgrp", 0, "Such group does not exist");
 			else {
 				i->g = grp->gr_gid;
 				strncpy(i->group, grp->gr_name, LOGIN_NAME_MAX);
@@ -383,6 +385,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		}
 		i->ui_needs_refresh = true;
 		break;
+	// TODO when changing sorting, highlight entry that was highlighted before change
 	case CMD_SORT_BY_NAME_ASC:
 		i->pv->sorting = cmp_name_asc;
 		break;
@@ -518,7 +521,6 @@ int main(int argc, char* argv[])  {
 	fvs[0].sorting = fvs[1].sorting = cmp_name_asc;
 
 	struct ui i = ui_init(&fvs[0], &fvs[1]);
-	// TODO is jumping to / a good practice?
 	for (int v = 0; v < 2; ++v) {
 		if (!getcwd(fvs[v].wd, PATH_MAX)) {
 			fprintf(stderr, "could not read cwd; jumping to /\n");
@@ -567,5 +569,7 @@ int main(int argc, char* argv[])  {
 	}
 	task_clean(&t);
 	ui_end(&i);
+	memset(fvs, 0, sizeof(fvs));
+	memset(&t, 0, sizeof(struct task));
 	exit(EXIT_SUCCESS);
 }
