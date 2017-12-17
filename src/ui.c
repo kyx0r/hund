@@ -95,6 +95,7 @@ struct ui ui_init(struct file_view* const pv,
 	i.run = true;
 	i.ui_needs_refresh = true;
 	i.ili = 0;
+	memset(i.il, 0, INPUT_LIST_LENGTH*sizeof(struct input));
 	i.kml = default_mapping_length;
 	i.mks = calloc(default_mapping_length, sizeof(int));
 	i.kmap = default_mapping; // TODO ???
@@ -109,12 +110,6 @@ struct ui ui_init(struct file_view* const pv,
 	return i;
 }
 
-/* Delete panel first, THEN it's window.
- * If you resize the terminal window at least once and then quit (q)
- * then the program will hang in infinite loop
- * (I attached to it via gdb and it was stuck either on del_panel or poll.)
- * or segfault/double free/corrupted unsorted chunks.
- */
 void ui_end(struct ui* const i) {
 	for (int x = 0; x < 2; x++) {
 		PANEL* p = i->fvp[x];
@@ -127,6 +122,7 @@ void ui_end(struct ui* const i) {
 	delwin(sw);
 	free(i->mks);
 	endwin();
+	memset(i, 0, sizeof(struct ui));
 }
 static void _printw_pathbar(const char* const path,
 		WINDOW* const w, const fnum_t width) {
@@ -164,7 +160,7 @@ static void _printw_entry(WINDOW* const w, const fnum_t dr,
 	char sbuf[SIZE_BUF_SIZE];
 	size_t slen = 0;
 	sbuf[0] = 0;
-	if (!S_ISDIR(cfr->s.st_mode) && !S_ISDIR(cfr->l->st_mode)) {
+	if (S_ISREG(cfr->l->st_mode)) {
 		pretty_size(cfr->l->st_size, sbuf);
 		slen = strnlen(sbuf, SIZE_BUF_SIZE);
 	}
@@ -184,7 +180,6 @@ static void _printw_entry(WINDOW* const w, const fnum_t dr,
 			theme_scheme[te][0],
 			utf8_slice_length(fn, fn_slice), fn,
 			space, ' ', sbuf);
-
 	wattroff(w, COLOR_PAIR(te));
 	if (!valid) free(invname);
 }
@@ -479,6 +474,7 @@ void ui_draw(struct ui* const i) {
 		}
 	}
 	WINDOW* sw = panel_window(i->status);
+	// TODO
 	if (i->mt) {
 		int cp = 0;
 		switch (i->mt) {
@@ -508,15 +504,6 @@ void ui_draw(struct ui* const i) {
 	refresh();
 }
 
-/* Sometimes it's better to create a new window
- * instead of resizing existing one.
- * If you just resize window (to bigger size),
- * borders stay in buffer and the only thing
- * you can do about them is explicitly overwrite them by
- * mvwprintw or something.
- * I do overwrite all buffer with spaces, so I dont have to.
- * ...but if you do, delete old window AFTER you assign new one to panel.
- */
 void ui_update_geometry(struct ui* const i) {
 	getmaxyx(stdscr, i->scrh, i->scrw);
 	const int w[2] = { i->scrw/2, i->scrw - w[0] };
