@@ -123,6 +123,8 @@ int scan_dir(const char* const wd, struct file_record*** const fl,
 		gf += 1;
 		const size_t namelen = strnlen(de->d_name, NAME_MAX);
 		nfr->file_name = malloc(namelen+1);
+		nfr->dir_volume = -1;
+		nfr->selected = false;
 		if (!nfr->file_name) {
 			r = ENOMEM;
 			*nhf = 0;
@@ -170,16 +172,26 @@ int cmp_name_desc(const void* p1, const void* p2) {
 	return strcmp(fr2->file_name, fr1->file_name);
 }
 
+// TODO how to sort non-dirs?
 int cmp_size_asc(const void* p1, const void* p2) {
 	const struct file_record* const fr1 = *((struct file_record**) p1);
 	const struct file_record* const fr2 = *((struct file_record**) p2);
-	return fr1->s.st_size > fr2->s.st_size;
+	const ssize_t s1 = (fr1->dir_volume != -1 ?
+			fr1->dir_volume : fr1->s.st_size);
+	const ssize_t s2 = (fr2->dir_volume != -1 ?
+			fr2->dir_volume : fr2->s.st_size);
+	return s1 > s2;
 }
 
+// TODO
 int cmp_size_desc(const void* p1, const void* p2) {
 	const struct file_record* const fr1 = *((struct file_record**) p1);
 	const struct file_record* const fr2 = *((struct file_record**) p2);
-	return fr1->s.st_size < fr2->s.st_size;
+	const ssize_t s1 = (fr1->dir_volume != -1 ?
+			fr1->dir_volume : fr1->s.st_size);
+	const ssize_t s2 = (fr2->dir_volume != -1 ?
+			fr2->dir_volume : fr2->s.st_size);
+	return s1 < s2;
 }
 
 int cmp_date_asc(const void* p1, const void* p2) {

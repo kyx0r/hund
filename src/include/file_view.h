@@ -29,6 +29,7 @@ struct file_view {
 	fnum_t num_files;
 	fnum_t num_hidden;
 	fnum_t selection;
+	fnum_t num_selected;
 	sorting_foo sorting;
 	bool show_hidden;
 };

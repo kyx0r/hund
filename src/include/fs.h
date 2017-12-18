@@ -78,6 +78,8 @@ struct file_record {
 	char* link_path;
 	struct stat s;
 	struct stat* l;
+	ssize_t dir_volume;
+	bool selected;
 };
 
 bool is_lnk(const char*);

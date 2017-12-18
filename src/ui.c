@@ -26,6 +26,16 @@
  * TODO KEY_RESIZE - better handling, less mess
  */
 
+/*
+ * UI TODO NOTES
+ * terimnal should be assumed to be at least 80x24
+ * infobar does not fit
+ * 1. TODO? merge infobars and pathbars and only show information of the primary panel
+ *     - then add user/group to infobar
+ * 2. TODO selection is not very visible
+ * 3. TODO scroll too long filenames
+ * 4. TODO redesign chmod (if 1 is fully done, then all changes can be seen on infobar)
+ */
 static enum theme_element mode2theme(const mode_t m, const mode_t n) {
 	switch (m & S_IFMT) {
 	case S_IFBLK: return THEME_ENTRY_BLK_UNS;
@@ -164,6 +174,10 @@ static void _printw_entry(WINDOW* const w, const fnum_t dr,
 		pretty_size(cfr->l->st_size, sbuf);
 		slen = strnlen(sbuf, SIZE_BUF_SIZE);
 	}
+	else if (S_ISDIR(cfr->l->st_mode) && cfr->dir_volume != -1) {
+		pretty_size(cfr->dir_volume, sbuf);
+		slen = strnlen(sbuf, SIZE_BUF_SIZE);
+	}
 
 	const size_t fnw = utf8_width(fn);
 	size_t fn_slice = fnw;
@@ -175,11 +189,16 @@ static void _printw_entry(WINDOW* const w, const fnum_t dr,
 	else {
 		space = width - (1+fnw+1+slen);
 	}
+	char open = theme_scheme[te][0];
+	char close = ' ';
+	if (cfr->selected) { // TODO not very visible
+		open = '[';
+		close = ']';
+	}
 	wattron(w, COLOR_PAIR(te));
-	mvwprintw(w, dr, 0, "%c%.*s%*c%s ",
-			theme_scheme[te][0],
-			utf8_slice_length(fn, fn_slice), fn,
-			space, ' ', sbuf);
+	mvwprintw(w, dr, 0, "%c%.*s%*c%s%c",
+			open, utf8_slice_length(fn, fn_slice), fn,
+			space, ' ', sbuf, close);
 	wattroff(w, COLOR_PAIR(te));
 	if (!valid) free(invname);
 }
@@ -283,9 +302,10 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	}
 	mode_t m = (hfr ? hfr->l->st_mode : 0);
 	snprintf(status, status_size,
-			"%uf %u%c %s%s%s",
+			"%uf %u%c %us %s%s%s",
 			s->num_files-(sh ? 0 : nhf),
 			nhf, (sh ? 'H' : 'h'),
+			s->num_selected,
 			perm2rwx[(m>>6) & 07],
 			perm2rwx[(m>>3) & 07],
 			perm2rwx[(m>>0) & 07]);
@@ -306,6 +326,7 @@ void _printw_cmd_and_keyseqs(WINDOW* const w,
 		const int dr, const enum command c,
 		const struct input2cmd* const k[], const size_t ki) {
 	// TODO
+	// TODO what if SPACE (ascii 32) is set?
 	size_t x = 0;
 	size_t align = 0;
 	const int maxsequences = INPUT_LIST_LENGTH-1;

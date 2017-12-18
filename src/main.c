@@ -152,11 +152,20 @@ static void prepare_long_task(struct ui* const i, struct task* const t,
 	i->m = MODE_WAIT;
 }
 
+/*
+ * TODO NOTES
+ * maybe on operation, just select highlighted entry
+ * and loop on file list?
+ * That would simplify multiple-file operations
+ * but would be expensive for large directories.
+ */
 static void process_input(struct ui* const i, struct task* const t) {
 	struct file_view* tmp = NULL;
 	utf8 *path = NULL, *cdp = NULL, *name = NULL,
 	     *opath = NULL, *npath = NULL;
 	int err = 0;
+	int sink_fc, sink_dc; // TODO FIXME
+	bool s;
 	const enum command cmd = get_cmd(i);
 	switch (cmd) {
 	/* HELP */
@@ -164,7 +173,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		i->m = MODE_MANAGER;
 		break;
 	case CMD_HELP_DOWN:
-		i->helpy += 1;
+		i->helpy += 1; // TODO
 		break;
 	case CMD_HELP_UP:
 		if (i->helpy > 0) {
@@ -176,6 +185,8 @@ static void process_input(struct ui* const i, struct task* const t) {
 		chmod_close(i);
 		break;
 	case CMD_CHANGE:
+		// TODO multiple selection
+		// TODO recursive
 		if (chmod(i->path, i->perm)) {
 			failed(i, "chmod", errno, NULL);
 		}
@@ -262,12 +273,15 @@ static void process_input(struct ui* const i, struct task* const t) {
 		if (err) failed(i, "up dir", err, NULL);
 		break;
 	case CMD_COPY:
+		// TODO multiple selection
 		prepare_long_task(i, t, TASK_COPY, task_strings[TASK_COPY][NOUN]);
 		break;
 	case CMD_MOVE:
+		// TODO multiple selection
 		prepare_long_task(i, t, TASK_MOVE, task_strings[TASK_MOVE][NOUN]);
 		break;
 	case CMD_REMOVE:
+		// TODO multiple selection
 		prepare_long_task(i, t, TASK_REMOVE, task_strings[TASK_REMOVE][NOUN]);
 		break;
 	case CMD_EDIT_FILE:
@@ -337,6 +351,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		free(name);
 		break;
 	case CMD_RENAME:
+		// TODO multiple selection
 		opath = file_view_path_to_selected(i->pv);
 		npath = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
 		name = strncpy(malloc(NAME_MAX+1),
@@ -357,6 +372,30 @@ static void process_input(struct ui* const i, struct task* const t) {
 		free(npath);
 		free(name);
 		break;
+	case CMD_DIR_VOLUME:
+		// TODO don't perform on non-dirs
+		// TODO
+		// TODO multiple selection
+		if (i->pv->file_list[i->pv->selection]->dir_volume == -1) {
+			opath = file_view_path_to_selected(i->pv);
+			i->pv->file_list[i->pv->selection]->dir_volume = 0;
+			estimate_volume(opath, &i->pv->file_list[i->pv->selection]->dir_volume,
+					&sink_fc, &sink_dc, true); // TODO
+			free(opath);
+		}
+		next_entry(i->pv);
+		break;
+	case CMD_SELECT_FILE:
+		s = i->pv->file_list[i->pv->selection]->selected =
+			!i->pv->file_list[i->pv->selection]->selected;
+		if (s) {
+			i->pv->num_selected += 1;
+		}
+		else {
+			i->pv->num_selected -= 1;
+		}
+		next_entry(i->pv);
+		break;
 	case CMD_FIND:
 		open_find(i);
 		break;
@@ -367,6 +406,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		last_entry(i->pv);
 		break;
 	case CMD_CHMOD:
+		// TODO multiple selection
 		if (!(path = file_view_path_to_selected(i->pv))) {
 			failed(i, "chmod", ENAMETOOLONG, NULL);
 		}

@@ -60,10 +60,12 @@ enum command {
 	CMD_ENTRY_FIRST,
 	CMD_ENTRY_LAST,
 	CMD_RENAME,
+	CMD_DIR_VOLUME,
 	CMD_TOGGLE_HIDDEN,
 	CMD_CD,
 	CMD_OPEN_FILE,
 	CMD_EDIT_FILE,
+	CMD_SELECT_FILE,
 	CMD_HELP,
 	CMD_FIND,
 	CMD_CHMOD,
@@ -129,8 +131,8 @@ enum theme_element {
 	THEME_ENTRY_LNK_DIR_SEL,
 	THEME_ENTRY_LNK_OTH_UNS,
 	THEME_ENTRY_LNK_OTH_SEL,
-	THEME_ENTRY_LNK_PATH,
-	THEME_ENTRY_LNK_PATH_INV,
+	//THEME_ENTRY_LNK_PATH,
+	//THEME_ENTRY_LNK_PATH_INV,
 	THEME_ELEM_NUM
 };
 
@@ -160,8 +162,8 @@ static const int theme_scheme[THEME_ELEM_NUM][3] = {
 	[THEME_ENTRY_LNK_DIR_SEL] = { '~', COLOR_BLACK, COLOR_CYAN },
 	[THEME_ENTRY_LNK_OTH_UNS] = { '@', COLOR_WHITE, COLOR_BLACK },
 	[THEME_ENTRY_LNK_OTH_SEL] = { '@', COLOR_BLACK, COLOR_WHITE },
-	[THEME_ENTRY_LNK_PATH] = { 0, COLOR_WHITE, COLOR_BLACK },
-	[THEME_ENTRY_LNK_PATH_INV] = { 0, COLOR_RED, COLOR_BLACK },
+	//[THEME_ENTRY_LNK_PATH] = { 0, COLOR_WHITE, COLOR_BLACK },
+	//[THEME_ENTRY_LNK_PATH_INV] = { 0, COLOR_RED, COLOR_BLACK },
 };
 
 enum input_type {
@@ -237,8 +239,10 @@ static struct input2cmd default_mapping[] = {
 
 	{ { UTF8("o"), ENDK }, MODE_MANAGER, CMD_OPEN_FILE },
 	{ { UTF8("e"), UTF8("d"), ENDK }, MODE_MANAGER, CMD_EDIT_FILE },
+	{ { UTF8(" "), ENDK }, MODE_MANAGER, CMD_SELECT_FILE },
 
 	{ { UTF8("/"), ENDK }, MODE_MANAGER, CMD_FIND },
+	{ { CTRL('V'), ENDK }, MODE_MANAGER, CMD_DIR_VOLUME },
 
 	{ { UTF8("x"), ENDK }, MODE_MANAGER, CMD_TOGGLE_HIDDEN },
 	{ { CTRL('H'), ENDK }, MODE_MANAGER, CMD_TOGGLE_HIDDEN },
@@ -310,10 +314,12 @@ static const char* const cmd_help[] = {
 	[CMD_ENTRY_FIRST] = "Select top file in directory.",
 	[CMD_ENTRY_LAST] = "Select bottom file in directory.",
 	[CMD_RENAME] = "Rename selected file. Prompts for new name.",
+	[CMD_DIR_VOLUME] = "Calcualte volume of highlighted directory.",
 	[CMD_TOGGLE_HIDDEN] = "Switch between hiding/showing hidden files.",
 	[CMD_CD] = "Jump to some directory. Prompts for path.",
 	[CMD_OPEN_FILE] = "Open selected file in less.",
 	[CMD_EDIT_FILE] = "Open selected file in vi.",
+	[CMD_SELECT_FILE] = "Select file.",
 	[CMD_FIND] = "Search for files in current directory.",
 
 	[CMD_CHMOD] = "Change permissions of selected file.",
