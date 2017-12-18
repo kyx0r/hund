@@ -251,7 +251,6 @@ static fnum_t _start_search_index(const struct file_view* const s,
 static void ui_draw_panel(struct ui* const i, const int v) {
 	// TODO make readable
 	const struct file_view* const s = i->fvs[v];
-	const bool sh = s->show_hidden;
 	const fnum_t nhf = i->fvs[v]->num_hidden;
 	WINDOW* const w = panel_window(i->fvp[v]);
 
@@ -263,14 +262,9 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	/* Top pathbar */
 	_printw_pathbar(s->wd, w, pw);
 
-	/* Entry list */
-	const struct file_record* const hfr =
-		(s->selection < s->num_files ?
-		 s->file_list[s->selection] : NULL);
-
 	fnum_t dr = 1; // Drawing Row
-	fnum_t e = _start_search_index(s, nhf, ph - 3);
-	while (s->num_files-nhf && e < s->num_files && dr < ph-1) {
+	fnum_t e = _start_search_index(s, nhf, ph - 2);
+	while (s->num_files-nhf && e < s->num_files && dr < ph) {
 		if (!visible(s, e)) {
 			e += 1;
 			continue;
@@ -280,46 +274,88 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 		dr += 1;
 		e += 1;
 	}
-	for (; dr < ph-1; ++dr) {
+	for (; dr < ph; ++dr) {
+		attron(COLOR_PAIR(THEME_ERROR));
 		mvwprintw(w, dr, 0, "%*c", pw, ' ');
+		attroff(COLOR_PAIR(THEME_ERROR));
 	}
+	wrefresh(w);
+}
 
-	/* Statusbar */
-	/* Padded on both sides with space */
+static void _printw_statusbar(WINDOW* const w,
+		const int pw, const int dr,
+		const struct file_view* const s) {
+	// TODO redo
+	const struct file_record* hfr = (s->num_files ?
+			s->file_list[s->selection] : NULL);
 	wattron(w, COLOR_PAIR(THEME_STATUSBAR));
 	static const char* const timefmt = "%Y-%m-%d %H:%M:%S";
 	const size_t time_size = 4+1+2+1+2+1+2+1+2+1+2+1;
 	char time[time_size];
 	time[0] = 0;
 
-	const size_t status_size = 10+1+1+10+1+1+9+1;
-	char* const status = malloc(status_size);
-
 	if (hfr && hfr->l) {
 		const time_t lt = hfr->l->st_mtim.tv_sec;
 		const struct tm* const tt = localtime(&lt);
-		strftime(time, time_size, timefmt, tt);
+		strftime(time, time_size, timefmt, tt); // TODO
 	}
-	mode_t m = (hfr ? hfr->l->st_mode : 0);
-	snprintf(status, status_size,
-			"%uf %u%c %us %s%s%s",
-			s->num_files-(sh ? 0 : nhf),
-			nhf, (sh ? 'H' : 'h'),
-			s->num_selected,
-			perm2rwx[(m>>6) & 07],
-			perm2rwx[(m>>3) & 07],
-			perm2rwx[(m>>0) & 07]);
+	mode_t m = (hfr ? hfr->s.st_mode : 0);
+	// TODO check errors
+	char perms[10];
+	perms[0] = 0;
+	const char* user = perms;
+	const char* group = perms;
+	if (hfr) {
+		struct passwd* pwd = getpwuid(hfr->s.st_uid);
+		struct group* grp = getgrgid(hfr->s.st_gid);
+		user = pwd->pw_name;
+		group = grp->gr_name;
 
-	/* BTW chmod man page says chmod
-	 * cannot change symlink permissions.
-	 * ...but that is not and issue since
-	 * symlinks permissions are never used.
-	 */
+		switch (m & S_IFMT) {
+		case S_IFBLK: perms[0] = 'b'; break;
+		case S_IFCHR: perms[0] = 'c'; break;
+		case S_IFDIR: perms[0] = 'd'; break;
+		case S_IFIFO: perms[0] = 'p'; break;
+		case S_IFLNK: perms[0] = 'l'; break;
+		case S_IFREG: perms[0] = '-'; break;
+		case S_IFSOCK: perms[0] = 's'; break;
+		default: perms[0] = '-'; break;
+		}
+		memcpy(perms+1, perm2rwx[(m>>6) & 07], 3);
+		memcpy(perms+1+3, perm2rwx[(m>>3) & 07], 3);
+		memcpy(perms+1+3+3, perm2rwx[(m>>0) & 07], 3);
+		if (m & S_ISUID) {
+			perms[3] = 's';
+			if (!(m & S_IXUSR)) perms[3] ^= 0x20;
+		}
+		if (m & S_ISGID) {
+			perms[6] = 's';
+			if (!(m & S_IXGRP)) perms[6] ^= 0x20;
+		}
+		if (m & S_ISVTX) {
+			perms[9] = 't';
+			if (!(m & S_IXOTH)) perms[9] ^= 0x20;
+		}
+	}
+	// TODO
+	const size_t stat_data_size = LOGIN_NAME_MAX*2+2+10+1+time_size;
+	char stat_data[stat_data_size];
+	snprintf(stat_data, sizeof(stat_data),
+			"%s %s %.10s %s",
+			user, group, perms, time);
+	const size_t stat_len = strnlen(stat_data, sizeof(stat_data));
+
+	const size_t status_size = 32; // TODO
+	char status[status_size];
+	snprintf(status, status_size,
+			"%uf %u%c %us",
+			s->num_files-(s->show_hidden ? 0 : s->num_hidden),
+			s->num_hidden, (s->show_hidden ? 'H' : 'h'),
+			s->num_selected);
+
 	mvwprintw(w, dr, 0, " %s%*c%s ", status,
-			pw-utf8_width(status)-strnlen(time, time_size)-2, ' ', time);
+			pw-utf8_width(status)-stat_len-2, ' ', stat_data);
 	wattroff(w, COLOR_PAIR(THEME_STATUSBAR));
-	free(status);
-	wrefresh(w);
 }
 
 void _printw_cmd_and_keyseqs(WINDOW* const w,
@@ -493,6 +529,7 @@ void ui_draw(struct ui* const i) {
 		for (int v = 0; v < 2; ++v) {
 			ui_draw_panel(i, v);
 		}
+		_printw_statusbar(stdscr, i->scrw, i->scrh-2, i->pv);
 	}
 	WINDOW* sw = panel_window(i->status);
 	// TODO
@@ -532,7 +569,7 @@ void ui_update_geometry(struct ui* const i) {
 	for (int x = 0; x < 2; ++x) {
 		PANEL* p = i->fvp[x];
 		WINDOW* ow = panel_window(p);
-		wresize(ow, i->scrh-1, w[x]);
+		wresize(ow, i->scrh-2, w[x]);
 		move_panel(p, 0, px[x]);
 	}
 
@@ -544,6 +581,7 @@ void ui_update_geometry(struct ui* const i) {
 }
 
 int chmod_open(struct ui* const i, utf8* const path) {
+	// TODO now that statusbar shows complete information, operate on them
 	struct stat s;
 	if (stat(path, &s)) return errno;
 	errno = 0;
