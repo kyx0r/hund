@@ -47,6 +47,8 @@ void task_clean(struct task* const t) {
 
 /*
  * Calculates size of all files and subdirectories in directory
+ * TODO more testing
+ * TODO errors
  */
 int estimate_volume(char* path, ssize_t* const size_total,
 		int* const files_total, int* const dirs_total, const bool tl) {
@@ -55,6 +57,7 @@ int estimate_volume(char* path, ssize_t* const size_total,
 	if ((tl && stat(path, &s)) || (!tl && lstat(path, &s))) return errno;
 	if (S_ISDIR(s.st_mode)) {
 		DIR* dir = opendir(path);
+		if (!dir) return errno;
 		struct dirent* de;
 		while ((de = readdir(dir)) != NULL) {
 			if (!strncmp(de->d_name, ".", 2) ||
