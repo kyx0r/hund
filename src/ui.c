@@ -282,67 +282,77 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	wrefresh(w);
 }
 
+/* PUG = Permissions User Group */
+static void stringify_pug(mode_t m, uid_t u, gid_t g,
+		char perms[10],
+		char user[LOGIN_NAME_MAX+1],
+		char group[LOGIN_NAME_MAX+1]) {
+	perms[0] = 0;
+	user[0] = 0;
+	group[0] = 0;
+	const struct passwd* const pwd = getpwuid(u);
+	const struct group* const grp = getgrgid(g);
+
+	if (pwd) strncpy(user, pwd->pw_name, LOGIN_NAME_MAX+1);
+	else snprintf(user, LOGIN_NAME_MAX+1, "uid:%u", u);
+
+	if (grp) strncpy(group, grp->gr_name, LOGIN_NAME_MAX+1);
+	else snprintf(group, LOGIN_NAME_MAX+1, "gid:%u", g);
+
+	switch (m & S_IFMT) {
+	case S_IFBLK: perms[0] = 'b'; break;
+	case S_IFCHR: perms[0] = 'c'; break;
+	case S_IFDIR: perms[0] = 'd'; break;
+	case S_IFIFO: perms[0] = 'p'; break;
+	case S_IFLNK: perms[0] = 'l'; break;
+	case S_IFREG: perms[0] = '-'; break;
+	case S_IFSOCK: perms[0] = 's'; break;
+	default: perms[0] = '-'; break;
+	}
+	memcpy(perms+1, perm2rwx[(m>>6) & 07], 3);
+	memcpy(perms+1+3, perm2rwx[(m>>3) & 07], 3);
+	memcpy(perms+1+3+3, perm2rwx[(m>>0) & 07], 3);
+	if (m & S_ISUID) {
+		perms[3] = 's';
+		if (!(m & S_IXUSR)) perms[3] ^= 0x20;
+	}
+	if (m & S_ISGID) {
+		perms[6] = 's';
+		if (!(m & S_IXGRP)) perms[6] ^= 0x20;
+	}
+	if (m & S_ISVTX) {
+		perms[9] = 't';
+		if (!(m & S_IXOTH)) perms[9] ^= 0x20;
+	}
+}
+
 static void _printw_statusbar(WINDOW* const w,
 		const int pw, const int dr,
 		const struct file_view* const s) {
 	// TODO redo
 	const struct file_record* hfr = (s->num_files ?
 			s->file_list[s->selection] : NULL);
-	wattron(w, COLOR_PAIR(THEME_STATUSBAR));
+
 	static const char* const timefmt = "%Y-%m-%d %H:%M:%S";
 	const size_t time_size = 4+1+2+1+2+1+2+1+2+1+2+1;
 	char time[time_size];
 	time[0] = 0;
-
-	if (hfr && hfr->l) {
-		const time_t lt = hfr->l->st_mtim.tv_sec;
-		const struct tm* const tt = localtime(&lt);
-		strftime(time, time_size, timefmt, tt); // TODO
-	}
-	mode_t m = (hfr ? hfr->s.st_mode : 0);
-	// TODO check errors
 	char perms[10];
-	perms[0] = 0;
-	const char* user = perms;
-	const char* group = perms;
+	char user[LOGIN_NAME_MAX+1];
+	char group[LOGIN_NAME_MAX+1];
 	if (hfr) {
-		struct passwd* pwd = getpwuid(hfr->s.st_uid);
-		struct group* grp = getgrgid(hfr->s.st_gid);
-		user = pwd->pw_name;
-		group = grp->gr_name;
-
-		switch (m & S_IFMT) {
-		case S_IFBLK: perms[0] = 'b'; break;
-		case S_IFCHR: perms[0] = 'c'; break;
-		case S_IFDIR: perms[0] = 'd'; break;
-		case S_IFIFO: perms[0] = 'p'; break;
-		case S_IFLNK: perms[0] = 'l'; break;
-		case S_IFREG: perms[0] = '-'; break;
-		case S_IFSOCK: perms[0] = 's'; break;
-		default: perms[0] = '-'; break;
-		}
-		memcpy(perms+1, perm2rwx[(m>>6) & 07], 3);
-		memcpy(perms+1+3, perm2rwx[(m>>3) & 07], 3);
-		memcpy(perms+1+3+3, perm2rwx[(m>>0) & 07], 3);
-		if (m & S_ISUID) {
-			perms[3] = 's';
-			if (!(m & S_IXUSR)) perms[3] ^= 0x20;
-		}
-		if (m & S_ISGID) {
-			perms[6] = 's';
-			if (!(m & S_IXGRP)) perms[6] ^= 0x20;
-		}
-		if (m & S_ISVTX) {
-			perms[9] = 't';
-			if (!(m & S_IXOTH)) perms[9] ^= 0x20;
-		}
+		const time_t lt = hfr->s.st_mtim.tv_sec;
+		const struct tm* const tt = localtime(&lt);
+		strftime(time, time_size, timefmt, tt);
+		stringify_pug(hfr->s.st_mode, hfr->s.st_uid,
+				hfr->s.st_gid, perms, user, group);
 	}
 	// TODO
 	const size_t stat_data_size = LOGIN_NAME_MAX*2+2+10+1+time_size;
 	char stat_data[stat_data_size];
 	snprintf(stat_data, sizeof(stat_data),
-			"%s %s %.10s %s",
-			user, group, perms, time);
+			"%s %s %.*s %s",
+			user, group, (int)sizeof(perms), perms, time);
 	const size_t stat_len = strnlen(stat_data, sizeof(stat_data));
 
 	const size_t status_size = 32; // TODO
@@ -353,6 +363,7 @@ static void _printw_statusbar(WINDOW* const w,
 			s->num_hidden, (s->show_hidden ? 'H' : 'h'),
 			s->num_selected);
 
+	wattron(w, COLOR_PAIR(THEME_STATUSBAR));
 	mvwprintw(w, dr, 0, " %s%*c%s ", status,
 			pw-utf8_width(status)-stat_len-2, ' ', stat_data);
 	wattroff(w, COLOR_PAIR(THEME_STATUSBAR));
@@ -422,12 +433,12 @@ static void ui_draw_help(struct ui* const i) {
 	wclear(hw);
 	int dr = -i->helpy; // TODO
 	wattron(hw, A_BOLD);
-	int crl = 0; // Copytight Notice Line
-	while (copyright_notice[crl]) {
-		const char* const cr = copyright_notice[crl];
+	int cnl = 0; // Copytight Notice Line
+	while (copyright_notice[cnl]) {
+		const char* const cr = copyright_notice[cnl];
 		mvwprintw(hw, dr, 0, "%s%*c", cr, i->scrw-utf8_width(cr), ' ');
 		dr += 1;
-		crl += 1;
+		cnl += 1;
 	}
 	mvwprintw(hw, dr, 0, "%*c", i->scrw, ' ');
     dr += 1;
@@ -581,7 +592,7 @@ void ui_update_geometry(struct ui* const i) {
 }
 
 int chmod_open(struct ui* const i, utf8* const path) {
-	// TODO now that statusbar shows complete information, operate on them
+	// TODO
 	struct stat s;
 	if (stat(path, &s)) return errno;
 	errno = 0;
