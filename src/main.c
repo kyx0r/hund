@@ -34,6 +34,11 @@
 #include "include/ui.h"
 #include "include/task.h"
 
+/*
+ * GENERAL TODO NOTES
+ * 1. Likes to segfault while doing anything on root's/special files.
+ * 2. Messages may be blocked by other messages
+ */
 static void failed(struct ui* const i, const utf8* const f,
 		const int reason, const utf8* const custom) {
 	i->mt = MSG_ERROR;
@@ -44,6 +49,35 @@ static void failed(struct ui* const i, const utf8* const f,
 		snprintf(i->msg, MSG_BUFFER_SIZE, "%s failed: %s (%d)",
 				f, strerror(reason), reason);
 	}
+}
+
+static void change_sorting(struct ui* const i, const enum command c) {
+	char before[NAME_MAX+1];
+	strncpy(before, i->pv->file_list[i->pv->selection]->file_name, NAME_MAX+1);
+	switch (c) {
+	case CMD_SORT_BY_NAME_ASC:
+		i->pv->sorting = cmp_name_asc;
+		break;
+	case CMD_SORT_BY_NAME_DESC:
+		i->pv->sorting = cmp_name_desc;
+		break;
+	case CMD_SORT_BY_DATE_ASC:
+		i->pv->sorting = cmp_date_asc;
+		break;
+	case CMD_SORT_BY_DATE_DESC:
+		i->pv->sorting = cmp_date_desc;
+		break;
+	case CMD_SORT_BY_SIZE_ASC:
+		i->pv->sorting = cmp_size_asc;
+		break;
+	case CMD_SORT_BY_SIZE_DESC:
+		i->pv->sorting = cmp_size_desc;
+		break;
+	default: break;
+	}
+	file_view_sort(i->pv);
+	file_highlight(i->pv, before);
+	i->ui_needs_refresh = true;
 }
 
 extern char** environ;
@@ -425,37 +459,13 @@ static void process_input(struct ui* const i, struct task* const t) {
 		}
 		i->ui_needs_refresh = true;
 		break;
-	// TODO when changing sorting, highlight entry that was highlighted before change
-	case CMD_SORT_BY_NAME_ASC:
-		i->pv->sorting = cmp_name_asc;
-		break;
-	case CMD_SORT_BY_NAME_DESC:
-		i->pv->sorting = cmp_name_desc;
-		break;
-	case CMD_SORT_BY_DATE_ASC:
-		i->pv->sorting = cmp_date_asc;
-		break;
-	case CMD_SORT_BY_DATE_DESC:
-		i->pv->sorting = cmp_date_desc;
-		break;
-	case CMD_SORT_BY_SIZE_ASC:
-		i->pv->sorting = cmp_size_asc;
-		break;
-	case CMD_SORT_BY_SIZE_DESC:
-		i->pv->sorting = cmp_size_desc;
-		break;
-	default:
-		break;
-	}
-	switch (cmd) {
 	case CMD_SORT_BY_NAME_ASC:
 	case CMD_SORT_BY_NAME_DESC:
 	case CMD_SORT_BY_DATE_ASC:
 	case CMD_SORT_BY_DATE_DESC:
 	case CMD_SORT_BY_SIZE_ASC:
 	case CMD_SORT_BY_SIZE_DESC:
-		file_view_sort(i->pv);
-		i->ui_needs_refresh = true;
+		change_sorting(i, cmd);
 		break;
 	default:
 		break;
