@@ -378,6 +378,9 @@ enum msg_type {
 	MSG_ERROR,
 };
 
+static const char* const timefmt = "%Y-%m-%d %H:%M:%S";
+#define TIME_SIZE (4+1+2+1+2+1+2+1+2+1+2+1)
+
 struct ui {
 	int scrh, scrw; // Last window dimensions
 
@@ -411,13 +414,10 @@ struct ui {
 	mode_t perm; // permissions of chmodded file
 	uid_t o;
 	gid_t g;
-	/* These are only to limit syscalls.
-	 * Their existence is checked after prompt.
-	 * If correct, updated
-	 * If incorrect, stay as they are
-	 */
-	utf8 owner[LOGIN_NAME_MAX];
-	utf8 group[LOGIN_NAME_MAX];
+	char perms[10];
+	char time[TIME_SIZE];
+	char user[LOGIN_NAME_MAX+1];
+	char group[LOGIN_NAME_MAX+1];
 };
 
 struct ui ui_init(struct file_view* const, struct file_view* const);
@@ -432,4 +432,5 @@ struct input get_input(WINDOW* const);
 enum command get_cmd(struct ui* const);
 int fill_textbox(utf8* const, utf8** const, const size_t, WINDOW* const);
 
+struct file_record* hfr(const struct ui* const);
 #endif

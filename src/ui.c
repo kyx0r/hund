@@ -326,33 +326,16 @@ static void stringify_pug(mode_t m, uid_t u, gid_t g,
 	}
 }
 
-static void _printw_statusbar(WINDOW* const w,
-		const int pw, const int dr,
-		const struct file_view* const s) {
-	// TODO redo
-	const struct file_record* hfr = (s->num_files ?
-			s->file_list[s->selection] : NULL);
+static void _printw_statusbar(struct ui* const i, const int dr) {
+	struct file_view* const s = i->pv;
+	const int pw = i->scrw;
+	WINDOW* const w = stdscr;
 
-	static const char* const timefmt = "%Y-%m-%d %H:%M:%S";
-	const size_t time_size = 4+1+2+1+2+1+2+1+2+1+2+1;
-	char time[time_size];
-	time[0] = 0;
-	char perms[10];
-	char user[LOGIN_NAME_MAX+1];
-	char group[LOGIN_NAME_MAX+1];
-	if (hfr) {
-		const time_t lt = hfr->s.st_mtim.tv_sec;
-		const struct tm* const tt = localtime(&lt);
-		strftime(time, time_size, timefmt, tt);
-		stringify_pug(hfr->s.st_mode, hfr->s.st_uid,
-				hfr->s.st_gid, perms, user, group);
-	}
 	// TODO
-	const size_t stat_data_size = LOGIN_NAME_MAX*2+2+10+1+time_size;
+	const size_t stat_data_size = LOGIN_NAME_MAX*2+2+10+1+TIME_SIZE;
 	char stat_data[stat_data_size];
 	snprintf(stat_data, sizeof(stat_data),
-			"%s %s %.*s %s",
-			user, group, (int)sizeof(perms), perms, time);
+			"%s %s %.10s %s", i->user, i->group, i->perms, i->time);
 	const size_t stat_len = strnlen(stat_data, sizeof(stat_data));
 
 	const size_t status_size = 32; // TODO
@@ -468,79 +451,36 @@ static void ui_draw_help(struct ui* const i) {
 	wrefresh(hw);
 }
 
-/*
- * TODO TODO TODO FIXME
- * TODO either remove hintbar
- * (rather not - still needed for errors and infos)
- * or use for info such as recent keystroke... dunno
- */
-static void ui_draw_hintbar(struct ui* const i, WINDOW* const sw) {
-	char last[32]; last[0] = 0;
-	char tmp[16];
-	for (int x = 0; x < i->ili && i->il[x].t != END; ++x) {
-		switch (i->il[x].t) {
-		case UTF8:
-			snprintf(tmp, sizeof(tmp), "%s", i->il[x].d.utf);
-			break;
-		case SPECIAL:
-			snprintf(tmp, sizeof(tmp), "%s", keyname(i->il[x].d.c)+4);
-			break;
-		case CTRL:
-			snprintf(tmp, sizeof(tmp), "^%c", i->il[x].d.c);
-			break;
-		case END:
-		default:
-			break;
-		}
-		strncat(last, tmp, sizeof(tmp));
-	}
-	mvwprintw(sw, 0, 0, "%*c%s", i->scrw-strlen(last), ' ', last);
-}
-
-static void ui_draw_chmod(struct ui* const i) {
-	WINDOW* cw;
-	for (int p = 0; p < 2; ++p) {
-		if (i->fvs[p] == i->sv) {
-			cw = panel_window(i->fvp[p]);
-		}
-	}
-	wclear(cw);
-	mode_t m = i->perm;
-	int dr = 1;
-
-	int ph, pw;
-	getmaxyx(cw, ph, pw); // TODO
-	(void)(ph); // FIXME
-
-	_printw_pathbar(i->path, cw, pw);
-	static const char* txt[] = { "permissions: ", "owner: ", "group: " };
-	mvwprintw(cw, dr++, 2, "%s%06o", txt[0], m,
-			pw-(strlen(txt[0])+6), ' ');
-	mvwprintw(cw, dr++, 2, "%s%s%*c", txt[1], i->owner,
-			pw-(strlen(txt[1])+strnlen(i->owner, LOGIN_NAME_MAX)), ' ');
-	mvwprintw(cw, dr++, 2, "%s%s%*c", txt[2], i->group,
-			pw-(strlen(txt[2])+strnlen(i->group, LOGIN_NAME_MAX)), ' ');
-
-	for (int b = 0; b < 12; ++b) {
-		const char s = (m & (mode_t)1 ? 'x' : ' ');
-		mvwprintw(cw, dr+11-b, 2, "[%c] %s", s, mode_bit_meaning[b]);
-		m >>= 1;
-	}
-	wrefresh(cw);
-}
-
 void ui_draw(struct ui* const i) {
+	// TODO redo
 	if (i->m == MODE_HELP) {
 		ui_draw_help(i);
 	}
 	else if (i->m == MODE_CHMOD) {
-		ui_draw_chmod(i);
+		// TODO highlight modified fields
+		const struct file_record* const _hfr = hfr(i);
+		if (_hfr) {
+			const time_t lt = _hfr->s.st_mtim.tv_sec;
+			const struct tm* const tt = localtime(&lt);
+			strftime(i->time, TIME_SIZE, timefmt, tt); // TODO
+		}
+		stringify_pug(i->perm, i->o, i->g,
+				i->perms, i->user, i->group);
+		_printw_statusbar(i, i->scrh-2);
 	}
 	else if (i->m == MODE_MANAGER) {
 		for (int v = 0; v < 2; ++v) {
 			ui_draw_panel(i, v);
 		}
-		_printw_statusbar(stdscr, i->scrw, i->scrh-2, i->pv);
+		const struct file_record* _hfr = hfr(i);
+		if (_hfr) {
+			const time_t lt = _hfr->s.st_mtim.tv_sec;
+			const struct tm* const tt = localtime(&lt);
+			strftime(i->time, TIME_SIZE, timefmt, tt);
+			stringify_pug(_hfr->s.st_mode, _hfr->s.st_uid,
+					_hfr->s.st_gid, i->perms, i->user, i->group);
+		}
+		_printw_statusbar(i, i->scrh-2);
 	}
 	WINDOW* sw = panel_window(i->status);
 	// TODO
@@ -561,10 +501,10 @@ void ui_draw(struct ui* const i) {
 	}
 	else if (i->prompt) { // TODO
 		mvwprintw(sw, 0, 0, "%c%s%*c", i->prch, i->prompt,
-				i->scrw-(utf8_width(i->prompt)+2), ' ');
+				i->scrw-(utf8_width(i->prompt)+1), ' ');
 	}
 	else {
-		ui_draw_hintbar(i, sw);
+		mvwprintw(sw, 0, 0, "%*c", i->scrw, ' ');
 	}
 	wrefresh(sw);
 
@@ -587,27 +527,26 @@ void ui_update_geometry(struct ui* const i) {
 	WINDOW* sw = panel_window(i->status);
 	wresize(sw, 1, i->scrw);
 	move_panel(i->status, i->scrh-1, 0);
-
 	i->ui_needs_refresh = false;
 }
 
 int chmod_open(struct ui* const i, utf8* const path) {
-	// TODO
 	struct stat s;
 	if (stat(path, &s)) return errno;
 	errno = 0;
 	struct passwd* pwd = getpwuid(s.st_uid);
 	if (!pwd) return errno;
+	errno = 0;
 	struct group* grp = getgrgid(s.st_gid);
 	if (!grp) return errno;
 
 	i->o = s.st_uid;
 	i->g = s.st_gid;
-	i->m = MODE_CHMOD;
-	i->path = path;
 	i->perm = s.st_mode;
-	strncpy(i->owner, pwd->pw_name, LOGIN_NAME_MAX);
-	strncpy(i->group, grp->gr_name, LOGIN_NAME_MAX);
+	i->path = path;
+	i->m = MODE_CHMOD;
+	strncpy(i->user, pwd->pw_name, LOGIN_NAME_MAX+1);
+	strncpy(i->group, grp->gr_name, LOGIN_NAME_MAX+1);
 	i->ui_needs_refresh = true;
 	return 0;
 }
@@ -809,4 +748,10 @@ int fill_textbox(utf8* const buf, utf8** const buftop,
 		}
 	}
 	return 1;
+}
+
+/* Highlighted File Record */
+struct file_record* hfr(const struct ui* const i) {
+	return (i->pv->num_files ?
+			i->pv->file_list[i->pv->selection] : NULL);
 }

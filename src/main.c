@@ -101,7 +101,7 @@ static int spawn(char* const arg[]) { // TODO
 
 static int open_prompt(struct ui* const i, utf8* const t,
 		utf8* t_top, const size_t t_size) {
-	i->prch = ' ';
+	i->prch = '>';
 	i->prompt = t;
 	ui_draw(i);
 	int r = 1;
@@ -230,6 +230,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		if ((err = file_view_scan_dir(i->pv))) {
 			failed(i, "directory scan", err, NULL);
 		}
+		file_view_sort(i->pv);
 		chmod_close(i);
 		break;
 	case CMD_CHOWN:
@@ -240,7 +241,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 			if (!pwd) failed(i, "chown", 0, "Such user does not exist");
 			else {
 				i->o = pwd->pw_uid;
-				strncpy(i->owner, pwd->pw_name, LOGIN_NAME_MAX);
+				strncpy(i->user, pwd->pw_name, LOGIN_NAME_MAX);
 			}
 		}
 		free(name);
