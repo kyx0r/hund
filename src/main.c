@@ -39,6 +39,7 @@
  * 1. Likes to segfault while doing anything on root's/special files.
  * 2. Messages may be blocked by other messages
  */
+
 static void failed(struct ui* const i, const utf8* const f,
 		const int reason, const utf8* const custom) {
 	i->mt = MSG_ERROR;
@@ -51,45 +52,18 @@ static void failed(struct ui* const i, const utf8* const f,
 	}
 }
 
-static void change_sorting(struct ui* const i, const enum command c) {
-	char before[NAME_MAX+1];
-	strncpy(before, i->pv->file_list[i->pv->selection]->file_name, NAME_MAX+1);
-	switch (c) {
-	case CMD_SORT_BY_NAME_ASC:
-		i->pv->sorting = cmp_name_asc;
-		break;
-	case CMD_SORT_BY_NAME_DESC:
-		i->pv->sorting = cmp_name_desc;
-		break;
-	case CMD_SORT_BY_DATE_ASC:
-		i->pv->sorting = cmp_date_asc;
-		break;
-	case CMD_SORT_BY_DATE_DESC:
-		i->pv->sorting = cmp_date_desc;
-		break;
-	case CMD_SORT_BY_SIZE_ASC:
-		i->pv->sorting = cmp_size_asc;
-		break;
-	case CMD_SORT_BY_SIZE_DESC:
-		i->pv->sorting = cmp_size_desc;
-		break;
-	default: break;
-	}
-	file_view_sort(i->pv);
-	file_highlight(i->pv, before);
-	i->ui_needs_refresh = true;
-}
-
 extern char** environ;
 
-static int spawn(char* const arg[]) { // TODO
+static int spawn(char* const arg[]) {
 	def_prog_mode();
 	endwin();
-	int ret = 0;
-	int status;
+	int ret = 0, status, nullfd;
 	pid_t pid = fork();
 	if (pid == 0) {
-		// TODO what about std{in,out,err}?
+		nullfd = open("/dev/null", O_WRONLY, 0200);
+		if (dup2(nullfd, STDERR_FILENO) == -1) ret = errno;
+		// TODO ???
+		close(nullfd);
 		if (execve(arg[0], arg, environ)) ret = errno;
 	}
 	else {
@@ -201,6 +175,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 	int sink_fc, sink_dc; // TODO FIXME
 	bool s;
 	const enum command cmd = get_cmd(i);
+	struct file_record* fr = NULL;
 	switch (cmd) {
 	/* HELP */
 	case CMD_HELP_QUIT:
@@ -234,6 +209,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		chmod_close(i);
 		break;
 	case CMD_CHOWN:
+		/* TODO in $VISUAL */
 		name = calloc(LOGIN_NAME_MAX+1, sizeof(utf8));
 		if (!open_prompt(i, name, name, LOGIN_NAME_MAX)) {
 			errno = 0;
@@ -247,6 +223,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		free(name);
 		break;
 	case CMD_CHGRP:
+		/* TODO in $VISUAL */
 		name = calloc(LOGIN_NAME_MAX+1, sizeof(utf8));
 		if (!open_prompt(i, name, name, LOGIN_NAME_MAX)) {
 			errno = 0;
@@ -368,6 +345,10 @@ static void process_input(struct ui* const i, struct task* const t) {
 		free(cdp);
 		break;
 	case CMD_CREATE_DIR:
+		/* TODO mass operation
+		 * can create multiple dirs
+		 * 1 line = 1 new dir
+		 */
 		path = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
 		name = calloc(NAME_MAX+1, sizeof(utf8));
 		if ((open_prompt(i, name, name, PATH_MAX)
@@ -386,7 +367,9 @@ static void process_input(struct ui* const i, struct task* const t) {
 		free(name);
 		break;
 	case CMD_RENAME:
-		// TODO multiple selection
+		/*
+		 * TODO multiple selection
+		 */
 		opath = file_view_path_to_selected(i->pv);
 		npath = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
 		name = strncpy(malloc(NAME_MAX+1),
@@ -421,8 +404,8 @@ static void process_input(struct ui* const i, struct task* const t) {
 		next_entry(i->pv);
 		break;
 	case CMD_SELECT_FILE:
-		s = i->pv->file_list[i->pv->selection]->selected =
-			!i->pv->file_list[i->pv->selection]->selected;
+		fr = hfr(i);
+		s = fr->selected = !fr->selected;
 		if (s) {
 			i->pv->num_selected += 1;
 		}
@@ -461,15 +444,30 @@ static void process_input(struct ui* const i, struct task* const t) {
 		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_BY_NAME_ASC:
+		file_view_change_sorting(i->pv, cmp_name_asc);
+		i->ui_needs_refresh = true;
+		break;
 	case CMD_SORT_BY_NAME_DESC:
+		file_view_change_sorting(i->pv, cmp_name_desc);
+		i->ui_needs_refresh = true;
+		break;
 	case CMD_SORT_BY_DATE_ASC:
+		file_view_change_sorting(i->pv, cmp_date_asc);
+		i->ui_needs_refresh = true;
+		break;
 	case CMD_SORT_BY_DATE_DESC:
+		file_view_change_sorting(i->pv, cmp_date_desc);
+		i->ui_needs_refresh = true;
+		break;
 	case CMD_SORT_BY_SIZE_ASC:
+		file_view_change_sorting(i->pv, cmp_size_asc);
+		i->ui_needs_refresh = true;
+		break;
 	case CMD_SORT_BY_SIZE_DESC:
-		change_sorting(i, cmd);
+		file_view_change_sorting(i->pv, cmp_size_desc);
+		i->ui_needs_refresh = true;
 		break;
-	default:
-		break;
+	default: break;
 	}
 }
 
