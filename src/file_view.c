@@ -293,3 +293,17 @@ void file_view_change_sorting(struct file_view* const fv, sorting_foo sorting) {
 	file_view_sort(fv);
 	file_highlight(fv, before);
 }
+
+int file_view_dump_selected_to_file(struct file_view* const fv, const int fd) {
+	if (lseek(fd, 0, SEEK_SET)) return errno;
+	char name[NAME_MAX+1];
+	for (fnum_t i = 0; i < fv->num_files; ++i) {
+		if (!fv->file_list[i]->selected) continue;
+		const char* const fn = fv->file_list[i]->file_name;
+		const size_t fnl = strnlen(fn, NAME_MAX);
+		memcpy(name, fn, fnl);
+		name[fnl] = '\n';
+		write(fd, name, fnl+1); // TODO
+	}
+	return 0;
+}
