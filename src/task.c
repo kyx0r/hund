@@ -428,40 +428,43 @@ int do_task(struct task* t, int c) {
  * Reads file from fd and forms a list of lines
  * \n is turned into \0
  *
+ * returns number of lines read
+ *
  * TODO flexible buffer length
  * TODO errors
  */
-int file_lines_to_list(const fnum_t lines, const int fd, char*** const arr) {
-	*arr = calloc(lines, sizeof(char*));
+fnum_t file_lines_to_list(const int fd, char*** const arr) {
+	*arr = NULL;
+	fnum_t lines = 0;
 	char name[NAME_MAX+1];
 	size_t nlen = 0, top = 0;
 	ssize_t rd = 0;
 	char* nl;
-	int e = 0;
-	if (lseek(fd, 0, SEEK_SET) == -1) {
-		e = errno;
-		free(*arr);
-		return -1;
-	}
+	if (lseek(fd, 0, SEEK_SET) == -1) return 0;
 	memset(name, 0, sizeof(name));
-	for (fnum_t i = 0; i < lines; ++i) {
+	while (1) {
 		rd = read(fd, name+top, NAME_MAX+1-top);
-		if (rd == -1) e = errno;
-		if (!rd && lines > i && !*name) {
-			for (fnum_t j = 0; j < i; ++j) {
-				free((*arr)[j]);
-			}
-			free(*arr);
-			return -1;
+		if (rd == -1) {
+			//return lines;
+			// TODO
+			//e = errno;
 		}
+		if (!rd && !*name) break;
 		nl = memchr(name, '\n', sizeof(name));
-		*nl = 0;
-		nlen = nl-name;
-		(*arr)[i] = strncpy(malloc(nlen+1), name, nlen+1);
+		if (nl) {
+			*nl = 0;
+			nlen = nl-name;
+		}
+		else {
+			nlen = strnlen(name, NAME_MAX);
+		}
+		*arr = realloc(*arr, (lines+1) * sizeof(char*));
+		(*arr)[lines] = strncpy(malloc(nlen+1), name, nlen+1);
 		top = NAME_MAX+1-nlen+1;
 		memmove(name, name+nlen+1, top);
+		lines += 1;
 	}
-	return e;
+	return lines;
 }
 
 void free_line_list(const fnum_t lines, char** const arr) {

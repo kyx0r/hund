@@ -115,6 +115,6 @@ void tree_walk_step(struct tree_walk*);
 
 int do_task(struct task*, int);
 
-int file_lines_to_list(const fnum_t, const int, char*** const);
+fnum_t file_lines_to_list(const int, char*** const);
 void free_line_list(const fnum_t, char** const);
 #endif
