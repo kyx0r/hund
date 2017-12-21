@@ -285,3 +285,11 @@ utf8* file_view_path_to_selected(struct file_view* const fv) {
 	}
 	return p;
 }
+
+void file_view_change_sorting(struct file_view* const fv, sorting_foo sorting) {
+	char before[NAME_MAX+1];
+	strncpy(before, fv->file_list[fv->selection]->file_name, NAME_MAX+1);
+	fv->sorting = sorting;
+	file_view_sort(fv);
+	file_highlight(fv, before);
+}

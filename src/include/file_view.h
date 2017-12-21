@@ -59,4 +59,5 @@ void file_view_sort(struct file_view* const);
 
 utf8* file_view_path_to_selected(struct file_view* const);
 
+void file_view_change_sorting(struct file_view* const, sorting_foo);
 #endif
