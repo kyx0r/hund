@@ -400,7 +400,7 @@ struct ui {
 	struct file_view* pv;
 	struct file_view* sv;
 
-	PANEL* status;
+	PANEL* status; // TODO stdscr
 	size_t helpy;
 
 	struct input2cmd* kmap;
@@ -432,5 +432,4 @@ struct input get_input(WINDOW* const);
 enum command get_cmd(struct ui* const);
 int fill_textbox(utf8* const, utf8** const, const size_t, WINDOW* const);
 
-struct file_record* hfr(const struct ui* const);
 #endif

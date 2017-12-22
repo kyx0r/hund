@@ -62,4 +62,5 @@ utf8* file_view_path_to_selected(struct file_view* const);
 void file_view_change_sorting(struct file_view* const, sorting_foo);
 
 int file_view_dump_selected_to_file(struct file_view* const, const int);
+struct file_record* hfr(const struct file_view* const);
 #endif

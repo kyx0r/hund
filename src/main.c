@@ -73,6 +73,17 @@ static int spawn(char* const arg[]) {
 	return ret;
 }
 
+static int editor(char* const path) {
+	char exeimg[PATH_MAX+1];
+	strcpy(exeimg, "/bin");
+	const char* ed = getenv("VISUAL");
+	if (!ed) ed = getenv("EDITOR");
+	append_dir(exeimg, ed ? ed : "vi");
+	char* const arg[] = { exeimg, path, NULL };
+	spawn(arg);
+	return 0;
+}
+
 static int open_prompt(struct ui* const i, utf8* const t,
 		utf8* t_top, const size_t t_size) {
 	i->prch = '>';
@@ -176,6 +187,10 @@ static void process_input(struct ui* const i, struct task* const t) {
 	bool s;
 	const enum command cmd = get_cmd(i);
 	struct file_record* fr = NULL;
+	char tmpn[] = "/tmp/hund.XXXXXXXX";
+	int tmpfd;
+	char** list;
+	fnum_t n;
 	switch (cmd) {
 	/* HELP */
 	case CMD_HELP_QUIT:
@@ -299,13 +314,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 	case CMD_EDIT_FILE:
 		if ((path = file_view_path_to_selected(i->pv))) {
 			if (is_dir(path)) failed(i, "edit", EISDIR, NULL);
-			char exeimg[NAME_MAX]; // TODO
-			strcpy(exeimg, "/bin");
-			char* ed = getenv("VISUAL");
-			if (!ed) ed = getenv("EDITOR");
-			append_dir(exeimg, ed ? ed : "vi");
-			char* const arg[] = { exeimg, path, NULL };
-			spawn(arg);
+			editor(path);
 			free(path);
 		}
 		break;
@@ -345,50 +354,69 @@ static void process_input(struct ui* const i, struct task* const t) {
 		free(cdp);
 		break;
 	case CMD_CREATE_DIR:
-		/* TODO mass operation
-		 * can create multiple dirs
-		 * 1 line = 1 new dir
-		 */
-		path = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
-		name = calloc(NAME_MAX+1, sizeof(utf8));
-		if ((open_prompt(i, name, name, PATH_MAX)
-		   || (err = EINVAL, contains(name, "/"))
-		   || (err = append_dir(path, name))
-		   || (err = mkdir(path, MKDIR_DEFAULT_PERM))
-		   || (err = file_view_scan_dir(i->pv)))
-		   && err) {
-			failed(i, "creating directory", err, NULL);
+		tmpfd = mkstemp(tmpn);
+		editor(tmpn);
+		n = file_lines_to_list(tmpfd, &list);
+		for (fnum_t f = 0; f < n; ++f) {
+			if (!strnlen(list[f], NAME_MAX)) continue; // Blank lines are ignored
+			path = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
+			if (((err = EINVAL, contains(list[f], "/"))
+			   || (err = append_dir(path, list[f]))
+			   || (mkdir(path, MKDIR_DEFAULT_PERM) ? (err = errno) : 0))
+			   && err) {
+				failed(i, "creating directory", err, NULL);
+			}
+			free(path);
 		}
-		else {
-			file_view_sort(i->pv);
-			file_highlight(i->pv, name);
-		}
-		free(path);
-		free(name);
+		free_line_list(n, list);
+		close(tmpfd);
+		unlink(tmpn);
+		file_view_scan_dir(i->pv);
+		file_view_sort(i->pv);
 		break;
 	case CMD_RENAME:
-		/*
-		 * TODO multiple selection
-		 */
-		opath = file_view_path_to_selected(i->pv);
-		npath = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
-		name = strncpy(malloc(NAME_MAX+1),
-				i->pv->file_list[i->pv->selection]->file_name, NAME_MAX);
-		if ((open_prompt(i, name, name+strnlen(name, NAME_MAX), NAME_MAX)
-		   || (err = EINVAL, contains(name, "/"))
-		   || (err = append_dir(npath, name))
-		   || (err = rename(opath, npath))
-		   || (err = file_view_scan_dir(i->pv)))
-		   && err) {
-			failed(i, "rename", err, NULL);
+		// TODO select renamed files
+		// TODO dont allow blank lines
+		// TODO clearer error messages
+		if (!i->pv->num_selected) {
+			struct file_record* const fr = hfr(i->pv);
+			fr->selected = true;
+			i->pv->num_selected += 1;
 		}
-		else {
-			file_view_sort(i->pv);
-			file_highlight(i->pv, name);
+		tmpfd = mkstemp(tmpn);
+		err = file_view_dump_selected_to_file(i->pv, tmpfd);
+		editor(tmpn);
+		n = file_lines_to_list(tmpfd, &list);
+		if (n == i->pv->num_selected) {
+			fnum_t a = 0, f = 0;
+			for (; a < i->pv->num_files; ++a) {
+				if (!i->pv->file_list[a]->selected) continue;
+				const char* const fn = i->pv->file_list[a]->file_name;
+				if (!strcmp(fn, list[f])) {
+					f += 1;
+					continue;
+				}
+				//const size_t fnlen = strnlen(fn, NAME_MAX);
+				opath = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
+				npath = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
+				if (((err = EINVAL, !strnlen(list[f], NAME_MAX))
+				   || (err = EINVAL, contains(list[f], "/"))
+				   || (err = append_dir(opath, fn))
+				   || (err = append_dir(npath, list[f]))
+				   || (rename(opath, npath) ? (err = errno) : 0))
+				   && err) {
+					failed(i, "rename", err, NULL);
+				}
+				f += 1;
+				free(npath); // TODO
+				free(opath);
+			}
 		}
-		free(opath);
-		free(npath);
-		free(name);
+		close(tmpfd);
+		unlink(tmpn);
+		free_line_list(n, list);
+		file_view_scan_dir(i->pv);
+		file_view_sort(i->pv);
 		break;
 	case CMD_DIR_VOLUME:
 		// TODO don't perform on non-dirs
@@ -404,7 +432,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		next_entry(i->pv);
 		break;
 	case CMD_SELECT_FILE:
-		fr = hfr(i);
+		fr = hfr(i->pv);
 		s = fr->selected = !fr->selected;
 		if (s) {
 			i->pv->num_selected += 1;
@@ -515,7 +543,7 @@ static void task_execute(struct ui* const i, struct task* const t) {
 		sdone, stota);
 }
 
-int main(int argc, char* argv[])  {
+int main(int argc, char* argv[]) {
 	static const char* const help = \
 	"Usage: hund [OPTION] [left panel] [right panel]\n"
 	"Options:\n"

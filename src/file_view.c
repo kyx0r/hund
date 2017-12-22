@@ -268,6 +268,7 @@ void file_view_toggle_hidden(struct file_view* const fv) {
 }
 
 int file_view_scan_dir(struct file_view* const fv) {
+	fv->num_selected = 0;
 	return scan_dir(fv->wd, &fv->file_list, &fv->num_files, &fv->num_hidden);
 }
 
@@ -303,7 +304,13 @@ int file_view_dump_selected_to_file(struct file_view* const fv, const int fd) {
 		const size_t fnl = strnlen(fn, NAME_MAX);
 		memcpy(name, fn, fnl);
 		name[fnl] = '\n';
-		write(fd, name, fnl+1); // TODO
+		if (write(fd, name, fnl+1) <= 0) return errno;
 	}
 	return 0;
+}
+
+/* Highlighted File Record */
+struct file_record* hfr(const struct file_view* const fv) {
+	return (fv->num_files ?
+			fv->file_list[fv->selection] : NULL);
 }

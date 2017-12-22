@@ -102,8 +102,7 @@ struct ui ui_init(struct file_view* const pv,
 	i.prompt = NULL;
 	i.mt = MSG_NONE;
 	i.helpy = 0;
-	i.run = true;
-	i.ui_needs_refresh = true;
+	i.run = i.ui_needs_refresh = true;
 	i.ili = 0;
 	memset(i.il, 0, INPUT_LIST_LENGTH*sizeof(struct input));
 	i.kml = default_mapping_length;
@@ -327,10 +326,6 @@ static void stringify_pug(mode_t m, uid_t u, gid_t g,
 }
 
 static void _printw_statusbar(struct ui* const i, const int dr) {
-	struct file_view* const s = i->pv;
-	const int pw = i->scrw;
-	WINDOW* const w = stdscr;
-
 	// TODO
 	const size_t stat_data_size = LOGIN_NAME_MAX*2+2+10+1+TIME_SIZE;
 	char stat_data[stat_data_size];
@@ -342,14 +337,14 @@ static void _printw_statusbar(struct ui* const i, const int dr) {
 	char status[status_size];
 	snprintf(status, status_size,
 			"%uf %u%c %us",
-			s->num_files-(s->show_hidden ? 0 : s->num_hidden),
-			s->num_hidden, (s->show_hidden ? 'H' : 'h'),
-			s->num_selected);
+			i->pv->num_files-(i->pv->show_hidden ? 0 : i->pv->num_hidden),
+			i->pv->num_hidden, (i->pv->show_hidden ? 'H' : 'h'),
+			i->pv->num_selected);
 
-	wattron(w, COLOR_PAIR(THEME_STATUSBAR));
-	mvwprintw(w, dr, 0, " %s%*c%s ", status,
-			pw-utf8_width(status)-stat_len-2, ' ', stat_data);
-	wattroff(w, COLOR_PAIR(THEME_STATUSBAR));
+	wattron(stdscr, COLOR_PAIR(THEME_STATUSBAR));
+	mvwprintw(stdscr, dr, 0, " %s%*c%s ", status,
+			i->scrw-utf8_width(status)-stat_len-2, ' ', stat_data);
+	wattroff(stdscr, COLOR_PAIR(THEME_STATUSBAR));
 }
 
 void _printw_cmd_and_keyseqs(WINDOW* const w,
@@ -458,7 +453,7 @@ void ui_draw(struct ui* const i) {
 	}
 	else if (i->m == MODE_CHMOD) {
 		// TODO highlight modified fields
-		const struct file_record* const _hfr = hfr(i);
+		const struct file_record* const _hfr = hfr(i->pv);
 		if (_hfr) {
 			const time_t lt = _hfr->s.st_mtim.tv_sec;
 			const struct tm* const tt = localtime(&lt);
@@ -472,7 +467,7 @@ void ui_draw(struct ui* const i) {
 		for (int v = 0; v < 2; ++v) {
 			ui_draw_panel(i, v);
 		}
-		const struct file_record* _hfr = hfr(i);
+		const struct file_record* _hfr = hfr(i->pv);
 		if (_hfr) {
 			const time_t lt = _hfr->s.st_mtim.tv_sec;
 			const struct tm* const tt = localtime(&lt);
@@ -748,10 +743,4 @@ int fill_textbox(utf8* const buf, utf8** const buftop,
 		}
 	}
 	return 1;
-}
-
-/* Highlighted File Record */
-struct file_record* hfr(const struct ui* const i) {
-	return (i->pv->num_files ?
-			i->pv->file_list[i->pv->selection] : NULL);
 }
