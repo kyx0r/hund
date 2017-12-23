@@ -428,26 +428,28 @@ int do_task(struct task* t, int c) {
  * Reads file from fd and forms a list of lines
  * \n is turned into \0
  *
- * returns number of lines read
- *
  * TODO flexible buffer length
  * TODO errors
  */
-fnum_t file_lines_to_list(const int fd, char*** const arr) {
+int file_lines_to_list(const int fd, char*** const arr, fnum_t* const lines) {
 	*arr = NULL;
-	fnum_t lines = 0;
+	*lines = 0;
 	char name[NAME_MAX+1];
 	size_t nlen = 0, top = 0;
 	ssize_t rd = 0;
 	char* nl;
-	if (lseek(fd, 0, SEEK_SET) == -1) return 0;
+	if (lseek(fd, 0, SEEK_SET) == -1) return errno;
 	memset(name, 0, sizeof(name));
-	while (1) {
+	for (;;) {
 		rd = read(fd, name+top, NAME_MAX+1-top);
 		if (rd == -1) {
-			//return lines;
-			// TODO
-			//e = errno;
+			int e = errno;
+			for (fnum_t f = 0; f < *lines; ++f) {
+				free((*arr)[f]);
+			}
+			free(*arr);
+			*lines = 0;
+			return e;
 		}
 		if (!rd && !*name) break;
 		nl = memchr(name, '\n', sizeof(name));
@@ -458,13 +460,24 @@ fnum_t file_lines_to_list(const int fd, char*** const arr) {
 		else {
 			nlen = strnlen(name, NAME_MAX);
 		}
-		*arr = realloc(*arr, (lines+1) * sizeof(char*));
-		(*arr)[lines] = strncpy(malloc(nlen+1), name, nlen+1);
+		*arr = realloc(*arr, ((*lines)+1) * sizeof(char*));
+		(*arr)[*lines] = strncpy(malloc(nlen+1), name, nlen+1);
 		top = NAME_MAX+1-nlen+1;
 		memmove(name, name+nlen+1, top);
-		lines += 1;
+		*lines += 1;
 	}
-	return lines;
+	return 0;
+}
+
+/* Tells if there are duplicates on list */
+bool duplicates_on_list(char** const list, const fnum_t listlen) {
+	for (fnum_t f = 0; f < listlen; ++f) {
+		for (fnum_t g = 0; g < listlen; ++g) {
+			if (f == g) continue;
+			if (!strcmp(list[f], list[g])) return true;
+		}
+	}
+	return false;
 }
 
 void free_line_list(const fnum_t lines, char** const arr) {

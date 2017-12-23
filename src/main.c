@@ -38,6 +38,11 @@
  * GENERAL TODO NOTES
  * 1. Likes to segfault while doing anything on root's/special files.
  * 2. Messages may be blocked by other messages
+ * 3. Okay,
+ *    - PATH_MAX includes null-terminator
+ *    - NAME_MAX does not
+ *    - LOGIN_NAME_MAXA does not say, so I should add 1
+ * 4. Selected files that became invisible (switched visibility) should be unselected
  */
 
 static void failed(struct ui* const i, const utf8* const f,
@@ -137,6 +142,8 @@ static void prepare_long_task(struct ui* const i, struct task* const t,
 		enum task_type tt, const utf8* const err) {
 	// TODO OOM proof
 	// TODO cleanup
+	// TODO collision -> add to conflict file (repeat until there are no collisions)
+	// TODO estimate volume for selection
 	if (!i->pv->num_files) return;
 	utf8* src = NULL, *dst = NULL, *nn = NULL;
 	if (!(src = file_view_path_to_selected(i->pv))) {
@@ -171,13 +178,6 @@ static void prepare_long_task(struct ui* const i, struct task* const t,
 	i->m = MODE_WAIT;
 }
 
-/*
- * TODO NOTES
- * maybe on operation, just select highlighted entry
- * and loop on file list?
- * That would simplify multiple-file operations
- * but would be expensive for large directories.
- */
 static void process_input(struct ui* const i, struct task* const t) {
 	struct file_view* tmp = NULL;
 	utf8 *path = NULL, *cdp = NULL, *name = NULL,
@@ -356,7 +356,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 	case CMD_CREATE_DIR:
 		tmpfd = mkstemp(tmpn);
 		editor(tmpn);
-		n = file_lines_to_list(tmpfd, &list);
+		file_lines_to_list(tmpfd, &list, &n);
 		for (fnum_t f = 0; f < n; ++f) {
 			if (!strnlen(list[f], NAME_MAX)) continue; // Blank lines are ignored
 			path = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
@@ -378,26 +378,30 @@ static void process_input(struct ui* const i, struct task* const t) {
 		// TODO dont allow blank lines
 		// TODO clearer error messages
 		if (!i->pv->num_selected) {
-			struct file_record* const fr = hfr(i->pv);
-			fr->selected = true;
+			hfr(i->pv)->selected = true;
 			i->pv->num_selected += 1;
 		}
 		tmpfd = mkstemp(tmpn);
 		err = file_view_dump_selected_to_file(i->pv, tmpfd);
-		editor(tmpn);
-		n = file_lines_to_list(tmpfd, &list);
+		do {
+			editor(tmpn);
+			file_lines_to_list(tmpfd, &list, &n);
+		} while (duplicates_on_list(list, n));
+		// TODO but there still may be conflicts with existing files
+		opath = malloc(PATH_MAX+1);
+		npath = malloc(PATH_MAX+1);
 		if (n == i->pv->num_selected) {
 			fnum_t a = 0, f = 0;
 			for (; a < i->pv->num_files; ++a) {
 				if (!i->pv->file_list[a]->selected) continue;
 				const char* const fn = i->pv->file_list[a]->file_name;
-				if (!strcmp(fn, list[f])) {
+				if (!strcmp(fn, list[f])) { // Ignore unchanged
 					f += 1;
 					continue;
 				}
 				//const size_t fnlen = strnlen(fn, NAME_MAX);
-				opath = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
-				npath = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
+				strncpy(opath, i->pv->wd, PATH_MAX);
+				strncpy(npath, i->pv->wd, PATH_MAX);
 				if (((err = EINVAL, !strnlen(list[f], NAME_MAX))
 				   || (err = EINVAL, contains(list[f], "/"))
 				   || (err = append_dir(opath, fn))
@@ -407,22 +411,14 @@ static void process_input(struct ui* const i, struct task* const t) {
 					failed(i, "rename", err, NULL);
 				}
 				f += 1;
-				free(npath); // TODO
-				free(opath);
 			}
 		}
+		free(npath);
+		free(opath);
 		close(tmpfd);
 		unlink(tmpn);
 		file_view_scan_dir(i->pv);
-		for (fnum_t f = 0; f < n; ++f) {
-			for (fnum_t h = 0; h < i->pv->num_files; ++h) {
-				if (!strcmp(list[f], i->pv->file_list[h]->file_name)) {
-					i->pv->file_list[h]->selected = true;
-					i->pv->num_selected += 1;
-					break;
-				}
-			}
-		}
+		select_from_list(i->pv, list, n);
 		free_line_list(n, list);
 		file_view_sort(i->pv);
 		break;

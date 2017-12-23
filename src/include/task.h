@@ -31,9 +31,9 @@
 
 enum task_type {
 	TASK_NONE = 0,
-	TASK_REMOVE,
-	TASK_COPY,
-	TASK_MOVE,
+	TASK_REMOVE = 1<<0,
+	TASK_COPY = 1<<1,
+	TASK_MOVE = 1<<2,
 };
 
 #define NOUN 0
@@ -115,6 +115,7 @@ void tree_walk_step(struct tree_walk*);
 
 int do_task(struct task*, int);
 
-fnum_t file_lines_to_list(const int, char*** const);
+int file_lines_to_list(const int, char*** const, fnum_t* const);
+bool duplicates_on_list(char** const, const fnum_t);
 void free_line_list(const fnum_t, char** const);
 #endif
