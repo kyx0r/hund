@@ -66,6 +66,8 @@ enum command {
 	CMD_OPEN_FILE,
 	CMD_EDIT_FILE,
 	CMD_SELECT_FILE,
+	CMD_SELECT_ALL,
+	CMD_SELECT_NONE,
 	CMD_HELP,
 	CMD_FIND,
 	CMD_CHMOD,
@@ -239,7 +241,11 @@ static struct input2cmd default_mapping[] = {
 
 	{ { UTF8("o"), ENDK }, MODE_MANAGER, CMD_OPEN_FILE },
 	{ { UTF8("e"), UTF8("d"), ENDK }, MODE_MANAGER, CMD_EDIT_FILE },
-	{ { UTF8(" "), ENDK }, MODE_MANAGER, CMD_SELECT_FILE },
+
+	// TODO select block
+	{ { UTF8("v"), ENDK }, MODE_MANAGER, CMD_SELECT_FILE },
+	{ { UTF8("V"), UTF8("a"), ENDK }, MODE_MANAGER, CMD_SELECT_ALL },
+	{ { UTF8("V"), UTF8("0"), ENDK }, MODE_MANAGER, CMD_SELECT_NONE },
 
 	{ { UTF8("/"), ENDK }, MODE_MANAGER, CMD_FIND },
 	{ { CTRL('V'), ENDK }, MODE_MANAGER, CMD_DIR_VOLUME },
@@ -319,13 +325,18 @@ static const char* const cmd_help[] = {
 	[CMD_CD] = "Jump to some directory. Prompts for path.",
 	[CMD_OPEN_FILE] = "Open selected file in less.",
 	[CMD_EDIT_FILE] = "Open selected file in vi.",
+
 	[CMD_SELECT_FILE] = "Select file.",
+	[CMD_SELECT_ALL] = "Select all visible files.",
+	[CMD_SELECT_NONE] = "Unselect all files.",
+
 	[CMD_FIND] = "Search for files in current directory.",
 
 	[CMD_CHMOD] = "Change permissions of selected file.",
 	[CMD_RETURN] = "Abort changes and return.",
 	[CMD_CHOWN] = "Change owner of file. Prompts for login.",
 	[CMD_CHGRP] = "Change group of file. Prompts for group name.",
+
 	[CMD_SORT_BY_NAME_ASC] = "Sort by name ascending.",
 	[CMD_SORT_BY_NAME_DESC] = "Sort by name descending.",
 	[CMD_SORT_BY_DATE_ASC] = "Sort by date ascending.",

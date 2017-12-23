@@ -375,7 +375,6 @@ static void process_input(struct ui* const i, struct task* const t) {
 		file_view_sort(i->pv);
 		break;
 	case CMD_RENAME:
-		// TODO select renamed files
 		// TODO dont allow blank lines
 		// TODO clearer error messages
 		if (!i->pv->num_selected) {
@@ -414,8 +413,17 @@ static void process_input(struct ui* const i, struct task* const t) {
 		}
 		close(tmpfd);
 		unlink(tmpn);
-		free_line_list(n, list);
 		file_view_scan_dir(i->pv);
+		for (fnum_t f = 0; f < n; ++f) {
+			for (fnum_t h = 0; h < i->pv->num_files; ++h) {
+				if (!strcmp(list[f], i->pv->file_list[h]->file_name)) {
+					i->pv->file_list[h]->selected = true;
+					i->pv->num_selected += 1;
+					break;
+				}
+			}
+		}
+		free_line_list(n, list);
 		file_view_sort(i->pv);
 		break;
 	case CMD_DIR_VOLUME:
@@ -441,6 +449,21 @@ static void process_input(struct ui* const i, struct task* const t) {
 			i->pv->num_selected -= 1;
 		}
 		next_entry(i->pv);
+		break;
+	case CMD_SELECT_ALL:
+		i->pv->num_selected = 0;
+		for (fnum_t f = 0; f < i->pv->num_files; ++f) {
+			if (visible(i->pv, f)) {
+				i->pv->file_list[f]->selected = true;
+				i->pv->num_selected += 1;
+			}
+		}
+		break;
+	case CMD_SELECT_NONE:
+		i->pv->num_selected = 0;
+		for (fnum_t f = 0; f < i->pv->num_files; ++f) {
+			i->pv->file_list[f]->selected = false;
+		}
 		break;
 	case CMD_FIND:
 		open_find(i);
