@@ -295,6 +295,19 @@ void file_view_change_sorting(struct file_view* const fv, sorting_foo sorting) {
 	file_highlight(fv, before);
 }
 
+void file_view_selected_to_list(struct file_view* const fv,
+		char*** const list, size_t* const listlen) {
+	*listlen = 0;
+	for (fnum_t f = 0, s = 0;
+	     f < fv->num_files && s < fv->num_selected; ++f) {
+		if (!fv->file_list[f]->selected) continue;
+		*listlen += 1;
+		*list = realloc(*list, (*listlen) * sizeof(char*));
+		(*list)[(*listlen)-1] = strdup(fv->file_list[f]->file_name);
+		s += 1;
+	}
+}
+
 int file_view_dump_selected_to_file(struct file_view* const fv, const int fd) {
 	if (lseek(fd, 0, SEEK_SET)) return errno;
 	char name[NAME_MAX+1];
@@ -307,6 +320,19 @@ int file_view_dump_selected_to_file(struct file_view* const fv, const int fd) {
 		if (write(fd, name, fnl+1) <= 0) return errno;
 	}
 	return 0;
+}
+
+void select_from_list(struct file_view* const fv,
+		char** const list, const fnum_t listlen) {
+	for (fnum_t li = 0; li < listlen; ++li) {
+		for (fnum_t s = 0; s < fv->num_files; ++s) {
+			if (!strcmp(list[li], fv->file_list[s]->file_name)) {
+				fv->file_list[s]->selected = true;
+				fv->num_selected += 1;
+				break;
+			}
+		}
+	}
 }
 
 /* Highlighted File Record */
