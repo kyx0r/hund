@@ -265,6 +265,14 @@ void file_view_toggle_hidden(struct file_view* const fv) {
 	if (!fv->num_files || !visible(fv, fv->selection)) {
 		first_entry(fv);
 	}
+	if (!fv->show_hidden) {
+		for (fnum_t f = 0; f < fv->num_files; ++f) {
+			if (fv->file_list[f]->selected && !visible(fv, f)) {
+				fv->file_list[f]->selected = false;
+				fv->num_selected -= 1;
+			}
+		}
+	}
 }
 
 int file_view_scan_dir(struct file_view* const fv) {
@@ -296,7 +304,7 @@ void file_view_change_sorting(struct file_view* const fv, sorting_foo sorting) {
 }
 
 void file_view_selected_to_list(struct file_view* const fv,
-		char*** const list, size_t* const listlen) {
+		char*** const list, fnum_t* const listlen) {
 	*listlen = 0;
 	for (fnum_t f = 0, s = 0;
 	     f < fv->num_files && s < fv->num_selected; ++f) {
@@ -306,20 +314,6 @@ void file_view_selected_to_list(struct file_view* const fv,
 		(*list)[(*listlen)-1] = strdup(fv->file_list[f]->file_name);
 		s += 1;
 	}
-}
-
-int file_view_dump_selected_to_file(struct file_view* const fv, const int fd) {
-	if (lseek(fd, 0, SEEK_SET)) return errno;
-	char name[NAME_MAX+1];
-	for (fnum_t i = 0; i < fv->num_files; ++i) {
-		if (!fv->file_list[i]->selected) continue;
-		const char* const fn = fv->file_list[i]->file_name;
-		const size_t fnl = strnlen(fn, NAME_MAX);
-		memcpy(name, fn, fnl);
-		name[fnl] = '\n';
-		if (write(fd, name, fnl+1) <= 0) return errno;
-	}
-	return 0;
 }
 
 void select_from_list(struct file_view* const fv,
@@ -333,6 +327,14 @@ void select_from_list(struct file_view* const fv,
 			}
 		}
 	}
+}
+
+bool conflicts_with_existing(struct file_view* const fv,
+		char** const list, const fnum_t listlen) {
+	for (fnum_t f = 0; f < listlen; ++f) {
+		if (file_on_list(fv, list[f])) return true;
+	}
+	return false;
 }
 
 /* Highlighted File Record */

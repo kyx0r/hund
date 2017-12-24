@@ -115,7 +115,9 @@ void tree_walk_step(struct tree_walk*);
 
 int do_task(struct task*, int);
 
-int file_lines_to_list(const int, char*** const, fnum_t* const);
+int file_to_list(const int, char*** const, fnum_t* const);
+int list_to_file(char** const, const fnum_t, int);
+void free_list(char*** const, fnum_t* const);
+
 bool duplicates_on_list(char** const, const fnum_t);
-void free_line_list(const fnum_t, char** const);
 #endif

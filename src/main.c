@@ -38,11 +38,13 @@
  * GENERAL TODO NOTES
  * 1. Likes to segfault while doing anything on root's/special files.
  * 2. Messages may be blocked by other messages
- * 3. Okay,
- *    - PATH_MAX includes null-terminator
- *    - NAME_MAX does not
- *    - LOGIN_NAME_MAXA does not say, so I should add 1
+ * 3. Okay, TODO:
+ *    - PATH_MAX (4096) includes null-terminator
+ *    - NAME_MAX (255) does not
+ *    - LOGIN_NAME_MAX (32) does not
  * 4. Selected files that became invisible (switched visibility) should be unselected
+ * 5. TODO get rid of utf8 typedef
+ * 6. file-list conversion should detect too long filenames
  */
 
 static void failed(struct ui* const i, const utf8* const f,
@@ -189,8 +191,12 @@ static void process_input(struct ui* const i, struct task* const t) {
 	struct file_record* fr = NULL;
 	char tmpn[] = "/tmp/hund.XXXXXXXX";
 	int tmpfd;
-	char** list;
-	fnum_t n;
+	char** list = NULL;
+	fnum_t list_len = 0;
+	char** sel_list = NULL;
+	fnum_t sel_list_len = 0;
+	char** ren_list = NULL;
+	fnum_t ren_list_len = 0;
 	switch (cmd) {
 	/* HELP */
 	case CMD_HELP_QUIT:
@@ -356,8 +362,8 @@ static void process_input(struct ui* const i, struct task* const t) {
 	case CMD_CREATE_DIR:
 		tmpfd = mkstemp(tmpn);
 		editor(tmpn);
-		file_lines_to_list(tmpfd, &list, &n);
-		for (fnum_t f = 0; f < n; ++f) {
+		file_to_list(tmpfd, &list, &list_len);
+		for (fnum_t f = 0; f < list_len; ++f) {
 			if (!strnlen(list[f], NAME_MAX)) continue; // Blank lines are ignored
 			path = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
 			if (((err = EINVAL, contains(list[f], "/"))
@@ -368,7 +374,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 			}
 			free(path);
 		}
-		free_line_list(n, list);
+		free_list(&list, &list_len);
 		close(tmpfd);
 		unlink(tmpn);
 		file_view_scan_dir(i->pv);
@@ -382,45 +388,43 @@ static void process_input(struct ui* const i, struct task* const t) {
 			i->pv->num_selected += 1;
 		}
 		tmpfd = mkstemp(tmpn);
-		err = file_view_dump_selected_to_file(i->pv, tmpfd);
+		file_view_selected_to_list(i->pv, &sel_list, &sel_list_len);
+		err = list_to_file(sel_list, sel_list_len, tmpfd);
 		do {
+			free_list(&ren_list, &ren_list_len);
 			editor(tmpn);
-			file_lines_to_list(tmpfd, &list, &n);
-		} while (duplicates_on_list(list, n));
-		// TODO but there still may be conflicts with existing files
+			file_to_list(tmpfd, &ren_list, &ren_list_len);
+		} while (duplicates_on_list(ren_list, ren_list_len)
+		         || conflicts_with_existing(i->pv, ren_list, ren_list_len));
 		opath = malloc(PATH_MAX+1);
 		npath = malloc(PATH_MAX+1);
-		if (n == i->pv->num_selected) {
-			fnum_t a = 0, f = 0;
-			for (; a < i->pv->num_files; ++a) {
-				if (!i->pv->file_list[a]->selected) continue;
-				const char* const fn = i->pv->file_list[a]->file_name;
-				if (!strcmp(fn, list[f])) { // Ignore unchanged
-					f += 1;
-					continue;
-				}
-				//const size_t fnlen = strnlen(fn, NAME_MAX);
+		if (sel_list_len == ren_list_len) {
+			for (fnum_t f = 0; f < sel_list_len; ++f) {
+				if (!strcmp(sel_list[f], ren_list[f])) continue;
 				strncpy(opath, i->pv->wd, PATH_MAX);
 				strncpy(npath, i->pv->wd, PATH_MAX);
-				if (((err = EINVAL, !strnlen(list[f], NAME_MAX))
-				   || (err = EINVAL, contains(list[f], "/"))
-				   || (err = append_dir(opath, fn))
-				   || (err = append_dir(npath, list[f]))
+				if (((err = EINVAL, contains(ren_list[f], "/"))
+				   || (err = append_dir(opath, sel_list[f]))
+				   || (err = append_dir(npath, ren_list[f]))
 				   || (rename(opath, npath) ? (err = errno) : 0))
 				   && err) {
 					failed(i, "rename", err, NULL);
 				}
-				f += 1;
 			}
+			file_view_scan_dir(i->pv);
+			file_view_sort(i->pv);
+			select_from_list(i->pv, ren_list, ren_list_len);
+		}
+		else {
+			failed(i, "rename", 0, "number of lines does not"
+					" match number of files");
 		}
 		free(npath);
 		free(opath);
 		close(tmpfd);
 		unlink(tmpn);
-		file_view_scan_dir(i->pv);
-		select_from_list(i->pv, list, n);
-		free_line_list(n, list);
-		file_view_sort(i->pv);
+		free_list(&sel_list, &sel_list_len);
+		free_list(&ren_list, &ren_list_len);
 		break;
 	case CMD_DIR_VOLUME:
 		// TODO don't perform on non-dirs

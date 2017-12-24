@@ -431,7 +431,7 @@ int do_task(struct task* t, int c) {
  * TODO flexible buffer length
  * TODO errors
  */
-int file_lines_to_list(const int fd, char*** const arr, fnum_t* const lines) {
+int file_to_list(const int fd, char*** const arr, fnum_t* const lines) {
 	*arr = NULL;
 	*lines = 0;
 	char name[NAME_MAX+1];
@@ -469,6 +469,28 @@ int file_lines_to_list(const int fd, char*** const arr, fnum_t* const lines) {
 	return 0;
 }
 
+int list_to_file(char** const list, const fnum_t listlen, int fd) {
+	if (lseek(fd, 0, SEEK_SET)) return errno;
+	char name[NAME_MAX+1];
+	for (fnum_t i = 0; i < listlen; ++i) {
+		const size_t len = strnlen(list[i], NAME_MAX);
+		memcpy(name, list[i], len);
+		name[len] = '\n';
+		if (write(fd, name, len+1) <= 0) return errno;
+	}
+	return 0;
+}
+
+void free_list(char*** arr, fnum_t* const lines) {
+	if (!*arr) return;
+	for (fnum_t i = 0; i < *lines; ++i) {
+		free((*arr)[i]);
+	}
+	free(*arr);
+	*arr = NULL;
+	*lines = 0;
+}
+
 /* Tells if there are duplicates on list */
 bool duplicates_on_list(char** const list, const fnum_t listlen) {
 	for (fnum_t f = 0; f < listlen; ++f) {
@@ -478,11 +500,4 @@ bool duplicates_on_list(char** const list, const fnum_t listlen) {
 		}
 	}
 	return false;
-}
-
-void free_line_list(const fnum_t lines, char** const arr) {
-	for (fnum_t i = 0; i < lines; ++i) {
-		free(arr[i]);
-	}
-	free(arr);
 }
