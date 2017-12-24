@@ -41,36 +41,40 @@ enum mode {
 	MODE_MANAGER,
 	MODE_CHMOD,
 	MODE_WAIT,
+
 	MODE_NUM
 };
 
 enum command {
 	CMD_NONE = 0,
+
 	CMD_QUIT,
+	CMD_HELP,
+
 	CMD_COPY,
 	CMD_MOVE,
 	CMD_REMOVE,
-	CMD_SWITCH_PANEL,
+	CMD_CREATE_DIR,
+	CMD_RENAME,
+
 	CMD_UP_DIR,
 	CMD_ENTER_DIR,
-	CMD_REFRESH,
+
 	CMD_ENTRY_UP,
 	CMD_ENTRY_DOWN,
-	CMD_CREATE_DIR,
+
 	CMD_ENTRY_FIRST,
 	CMD_ENTRY_LAST,
-	CMD_RENAME,
-	CMD_DIR_VOLUME,
-	CMD_TOGGLE_HIDDEN,
+
 	CMD_CD,
 	CMD_OPEN_FILE,
 	CMD_EDIT_FILE,
-	CMD_SELECT_FILE,
-	CMD_SELECT_ALL,
-	CMD_SELECT_NONE,
-	CMD_HELP,
-	CMD_FIND,
-	CMD_CHMOD,
+
+	CMD_REFRESH,
+	CMD_SWITCH_PANEL,
+
+	CMD_DIR_VOLUME,
+	CMD_TOGGLE_HIDDEN,
 
 	CMD_SORT_BY_NAME_ASC,
 	CMD_SORT_BY_NAME_DESC,
@@ -79,10 +83,18 @@ enum command {
 	CMD_SORT_BY_SIZE_ASC,
 	CMD_SORT_BY_SIZE_DESC,
 
-	CMD_RETURN,
+	CMD_SELECT_FILE,
+	CMD_SELECT_ALL,
+	CMD_SELECT_NONE,
+
+	CMD_FIND,
+
+	CMD_CHMOD,
 	CMD_CHANGE,
+	CMD_RETURN,
 	CMD_CHOWN,
 	CMD_CHGRP,
+
 	CMD_TOGGLE_UR,
 	CMD_TOGGLE_UW,
 	CMD_TOGGLE_UX,
@@ -135,6 +147,7 @@ enum theme_element {
 	THEME_ENTRY_LNK_OTH_SEL,
 	//THEME_ENTRY_LNK_PATH,
 	//THEME_ENTRY_LNK_PATH_INV,
+
 	THEME_ELEM_NUM
 };
 
@@ -242,7 +255,6 @@ static struct input2cmd default_mapping[] = {
 	{ { UTF8("o"), ENDK }, MODE_MANAGER, CMD_OPEN_FILE },
 	{ { UTF8("e"), UTF8("d"), ENDK }, MODE_MANAGER, CMD_EDIT_FILE },
 
-	// TODO select block
 	{ { UTF8("v"), ENDK }, MODE_MANAGER, CMD_SELECT_FILE },
 	{ { UTF8("V"), UTF8("a"), ENDK }, MODE_MANAGER, CMD_SELECT_ALL },
 	{ { UTF8("V"), UTF8("0"), ENDK }, MODE_MANAGER, CMD_SELECT_NONE },
@@ -307,35 +319,31 @@ static const size_t default_mapping_length = (sizeof(default_mapping)/sizeof(str
 static const char* const cmd_help[] = {
 	[CMD_QUIT] = "Quit hund.",
 	[CMD_HELP] = "Display help screen.",
-	[CMD_COPY] = "Copy selected file to the other directory.",
-	[CMD_MOVE] = "Move selected file to the other directory.",
-	[CMD_REMOVE] = "Remove selected file.",
+
+	[CMD_COPY] = "Copy highlighted file to the other directory.",
+	[CMD_MOVE] = "Move highlighted file to the other directory.",
+	[CMD_REMOVE] = "Remove highlighted file.",
+	[CMD_CREATE_DIR] = "Create new directories.",
+	[CMD_RENAME] = "Rename selected files.",
+
+	[CMD_UP_DIR] = "Go up in directory tree.",
+	[CMD_ENTER_DIR] = "Enter highlighted directory.",
+
+	[CMD_ENTRY_UP] = "Go to previous entry.",
+	[CMD_ENTRY_DOWN] = "Go to next entry.",
+
+	[CMD_ENTRY_FIRST] = "Go to the top file in directory.",
+	[CMD_ENTRY_LAST] = "Go to the bottom file in directory.",
+
+	[CMD_CD] = "Jump to some directory.",
+	[CMD_OPEN_FILE] = "Open selected file in pager.",
+	[CMD_EDIT_FILE] = "Open selected file in text editor.",
+
+	[CMD_REFRESH] = "Rescan directories and redraw UI.",
 	[CMD_SWITCH_PANEL] = "Switch active panel.",
-	[CMD_UP_DIR] = "Move up in directory tree.",
-	[CMD_ENTER_DIR] = "Enter selected directory.",
-	[CMD_REFRESH] = "Rescan directories and redraw window.",
-	[CMD_ENTRY_UP] = "Select previous entry.",
-	[CMD_ENTRY_DOWN] = "Select next entry.",
-	[CMD_CREATE_DIR] = "Create new directory. Prompts for name.",
-	[CMD_ENTRY_FIRST] = "Select top file in directory.",
-	[CMD_ENTRY_LAST] = "Select bottom file in directory.",
-	[CMD_RENAME] = "Rename selected file. Prompts for new name.",
+
 	[CMD_DIR_VOLUME] = "Calcualte volume of highlighted directory.",
-	[CMD_TOGGLE_HIDDEN] = "Switch between hiding/showing hidden files.",
-	[CMD_CD] = "Jump to some directory. Prompts for path.",
-	[CMD_OPEN_FILE] = "Open selected file in less.",
-	[CMD_EDIT_FILE] = "Open selected file in vi.",
-
-	[CMD_SELECT_FILE] = "Select file.",
-	[CMD_SELECT_ALL] = "Select all visible files.",
-	[CMD_SELECT_NONE] = "Unselect all files.",
-
-	[CMD_FIND] = "Search for files in current directory.",
-
-	[CMD_CHMOD] = "Change permissions of selected file.",
-	[CMD_RETURN] = "Abort changes and return.",
-	[CMD_CHOWN] = "Change owner of file. Prompts for login.",
-	[CMD_CHGRP] = "Change group of file. Prompts for group name.",
+	[CMD_TOGGLE_HIDDEN] = "Toggle between hiding/showing hidden files.",
 
 	[CMD_SORT_BY_NAME_ASC] = "Sort by name ascending.",
 	[CMD_SORT_BY_NAME_DESC] = "Sort by name descending.",
@@ -344,7 +352,18 @@ static const char* const cmd_help[] = {
 	[CMD_SORT_BY_SIZE_ASC] = "Sort by size ascending.",
 	[CMD_SORT_BY_SIZE_DESC] = "Sort by size descending.",
 
+	[CMD_SELECT_FILE] = "Select/unselect file.",
+	[CMD_SELECT_ALL] = "Select all visible files.",
+	[CMD_SELECT_NONE] = "Unselect all files.",
+
+	[CMD_FIND] = "Search for files in current directory.",
+
+	[CMD_CHMOD] = "Change permissions of highlighted file.",
 	[CMD_CHANGE] = "Apply changes and return.",
+	[CMD_RETURN] = "Abort changes and return.",
+	[CMD_CHOWN] = "Change owner of file.",
+	[CMD_CHGRP] = "Change group of file.",
+
 	[CMD_TOGGLE_UIOX] = "Toggle set user ID on execution.",
 	[CMD_TOGGLE_GIOX] = "Toggle set group ID on execution.",
 	[CMD_TOGGLE_SB] = "Toggle sticky bit.",
@@ -384,9 +403,9 @@ static const char* const copyright_notice[] = {
 
 enum msg_type {
 	MSG_NONE = 0,
-	MSG_INFO,
+	MSG_INFO = 1<<0,
 	//MSG_WARNING,
-	MSG_ERROR,
+	MSG_ERROR = 1<<1,
 };
 
 static const char* const timefmt = "%Y-%m-%d %H:%M:%S";
