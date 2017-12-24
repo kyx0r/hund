@@ -62,12 +62,13 @@ utf8* file_view_path_to_selected(struct file_view* const);
 void file_view_change_sorting(struct file_view* const, sorting_foo);
 
 void file_view_selected_to_list(struct file_view* const,
-		char*** const, fnum_t* const);
+		struct string_list* const);
 
-void select_from_list(struct file_view* const, char** const, const fnum_t);
+void select_from_list(struct file_view* const,
+		const struct string_list* const);
 
 bool conflicts_with_existing(struct file_view* const,
-		char** const, const fnum_t);
+		const struct string_list* const);
 
 struct file_record* hfr(const struct file_view* const);
 #endif

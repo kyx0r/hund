@@ -60,13 +60,6 @@ void next_entry(struct file_view* const fv) {
 	}
 	else {
 		fnum_t i = fv->selection;
-		/* Truth table - "Keep looking?" or "What to put in while"
-		 * 1 = Keep looking
-		 * 0 = Give up
-		 *         hidden | not hidden
-		 * out of array |0|0|
-		 * in array     |0|1|
-		 */
 		do {
 			i += 1;
 		} while (i < fv->num_files && hidden(fv, i));
@@ -304,23 +297,23 @@ void file_view_change_sorting(struct file_view* const fv, sorting_foo sorting) {
 }
 
 void file_view_selected_to_list(struct file_view* const fv,
-		char*** const list, fnum_t* const listlen) {
-	*listlen = 0;
+		struct string_list* const list) {
+	list->len = 0;
 	for (fnum_t f = 0, s = 0;
 	     f < fv->num_files && s < fv->num_selected; ++f) {
 		if (!fv->file_list[f]->selected) continue;
-		*listlen += 1;
-		*list = realloc(*list, (*listlen) * sizeof(char*));
-		(*list)[(*listlen)-1] = strdup(fv->file_list[f]->file_name);
+		list->len += 1;
+		list->str = realloc(list->str, (list->len) * sizeof(char*));
+		list->str[list->len-1] = strdup(fv->file_list[f]->file_name);
 		s += 1;
 	}
 }
 
 void select_from_list(struct file_view* const fv,
-		char** const list, const fnum_t listlen) {
-	for (fnum_t li = 0; li < listlen; ++li) {
+		const struct string_list* const list) {
+	for (fnum_t li = 0; li < list->len; ++li) {
 		for (fnum_t s = 0; s < fv->num_files; ++s) {
-			if (!strcmp(list[li], fv->file_list[s]->file_name)) {
+			if (!strcmp(list->str[li], fv->file_list[s]->file_name)) {
 				fv->file_list[s]->selected = true;
 				fv->num_selected += 1;
 				break;
@@ -330,9 +323,9 @@ void select_from_list(struct file_view* const fv,
 }
 
 bool conflicts_with_existing(struct file_view* const fv,
-		char** const list, const fnum_t listlen) {
-	for (fnum_t f = 0; f < listlen; ++f) {
-		if (file_on_list(fv, list[f])) return true;
+		const struct string_list* const list) {
+	for (fnum_t f = 0; f < list->len; ++f) {
+		if (file_on_list(fv, list->str[f])) return true;
 	}
 	return false;
 }

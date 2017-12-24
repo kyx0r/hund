@@ -125,4 +125,15 @@ bool substitute(char* const, const char* const, const char* const);
 size_t imb(const char*, const char*);
 bool contains(const char* const, const char* const);
 
+struct string_list {
+	char** str;
+	fnum_t len;
+};
+
+int file_to_list(const int, struct string_list* const);
+int list_to_file(const struct string_list* const, int);
+void free_list(struct string_list* const);
+
+bool duplicates_on_list(struct string_list* const);
+
 #endif

@@ -142,11 +142,18 @@ static void open_find(struct ui* const i) {
 
 static void prepare_long_task(struct ui* const i, struct task* const t,
 		enum task_type tt, const utf8* const err) {
-	// TODO OOM proof
 	// TODO cleanup
 	// TODO collision -> add to conflict file (repeat until there are no collisions)
 	// TODO estimate volume for selection
 	if (!i->pv->num_files) return;
+	/*if (!i->pv->num_selected) {
+		hfr(i->pv)->selected = true;
+		i->pv->num_selected = 1;
+	}
+	char** list;
+	fnum_t list_len;
+	file_view_selected_to_list(i->pv, &list, &list_len);*/
+
 	utf8* src = NULL, *dst = NULL, *nn = NULL;
 	if (!(src = file_view_path_to_selected(i->pv))) {
 		failed(i, err, ENAMETOOLONG, NULL);
@@ -191,12 +198,9 @@ static void process_input(struct ui* const i, struct task* const t) {
 	struct file_record* fr = NULL;
 	char tmpn[] = "/tmp/hund.XXXXXXXX";
 	int tmpfd;
-	char** list = NULL;
-	fnum_t list_len = 0;
-	char** sel_list = NULL;
-	fnum_t sel_list_len = 0;
-	char** ren_list = NULL;
-	fnum_t ren_list_len = 0;
+	struct string_list files = { NULL, 0 };
+	struct string_list selected_files = { NULL, 0 };
+	struct string_list renamed_files = { NULL, 0 };
 	switch (cmd) {
 	/* HELP */
 	case CMD_HELP_QUIT:
@@ -362,19 +366,19 @@ static void process_input(struct ui* const i, struct task* const t) {
 	case CMD_CREATE_DIR:
 		tmpfd = mkstemp(tmpn);
 		editor(tmpn);
-		file_to_list(tmpfd, &list, &list_len);
-		for (fnum_t f = 0; f < list_len; ++f) {
-			if (!strnlen(list[f], NAME_MAX)) continue; // Blank lines are ignored
+		file_to_list(tmpfd, &files);
+		for (fnum_t f = 0; f < files.len; ++f) {
+			if (!strnlen(files.str[f], NAME_MAX)) continue; // Blank lines are ignored
 			path = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
-			if (((err = EINVAL, contains(list[f], "/"))
-			   || (err = append_dir(path, list[f]))
+			if (((err = EINVAL, contains(files.str[f], "/"))
+			   || (err = append_dir(path, files.str[f]))
 			   || (mkdir(path, MKDIR_DEFAULT_PERM) ? (err = errno) : 0))
 			   && err) {
 				failed(i, "creating directory", err, NULL);
 			}
 			free(path);
 		}
-		free_list(&list, &list_len);
+		free_list(&files);
 		close(tmpfd);
 		unlink(tmpn);
 		file_view_scan_dir(i->pv);
@@ -388,24 +392,26 @@ static void process_input(struct ui* const i, struct task* const t) {
 			i->pv->num_selected += 1;
 		}
 		tmpfd = mkstemp(tmpn);
-		file_view_selected_to_list(i->pv, &sel_list, &sel_list_len);
-		err = list_to_file(sel_list, sel_list_len, tmpfd);
+		file_view_selected_to_list(i->pv, &selected_files);
+		err = list_to_file(&selected_files, tmpfd);
 		do {
-			free_list(&ren_list, &ren_list_len);
+			free_list(&renamed_files);
 			editor(tmpn);
-			file_to_list(tmpfd, &ren_list, &ren_list_len);
-		} while (duplicates_on_list(ren_list, ren_list_len)
-		         || conflicts_with_existing(i->pv, ren_list, ren_list_len));
+			file_to_list(tmpfd, &renamed_files);
+		} while (duplicates_on_list(&renamed_files));
+		// TODO
+		         //|| conflicts_with_existing(i->pv, &renamed_files));
 		opath = malloc(PATH_MAX+1);
 		npath = malloc(PATH_MAX+1);
-		if (sel_list_len == ren_list_len) {
-			for (fnum_t f = 0; f < sel_list_len; ++f) {
-				if (!strcmp(sel_list[f], ren_list[f])) continue;
+		if (selected_files.len == renamed_files.len) {
+			for (fnum_t f = 0; f < selected_files.len; ++f) {
+				if (!strcmp(selected_files.str[f],
+							renamed_files.str[f])) continue;
 				strncpy(opath, i->pv->wd, PATH_MAX);
 				strncpy(npath, i->pv->wd, PATH_MAX);
-				if (((err = EINVAL, contains(ren_list[f], "/"))
-				   || (err = append_dir(opath, sel_list[f]))
-				   || (err = append_dir(npath, ren_list[f]))
+				if (((err = EINVAL, contains(renamed_files.str[f], "/"))
+				   || (err = append_dir(opath, selected_files.str[f]))
+				   || (err = append_dir(npath, renamed_files.str[f]))
 				   || (rename(opath, npath) ? (err = errno) : 0))
 				   && err) {
 					failed(i, "rename", err, NULL);
@@ -413,7 +419,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 			}
 			file_view_scan_dir(i->pv);
 			file_view_sort(i->pv);
-			select_from_list(i->pv, ren_list, ren_list_len);
+			select_from_list(i->pv, &renamed_files);
 		}
 		else {
 			failed(i, "rename", 0, "number of lines does not"
@@ -423,8 +429,8 @@ static void process_input(struct ui* const i, struct task* const t) {
 		free(opath);
 		close(tmpfd);
 		unlink(tmpn);
-		free_list(&sel_list, &sel_list_len);
-		free_list(&ren_list, &ren_list_len);
+		free_list(&selected_files);
+		free_list(&renamed_files);
 		break;
 	case CMD_DIR_VOLUME:
 		// TODO don't perform on non-dirs

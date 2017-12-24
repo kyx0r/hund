@@ -510,3 +510,82 @@ bool contains(const char* const str, const char* const subs) {
 	}
 	return false;
 }
+
+/*
+ * Reads file from fd and forms a list of lines
+ * \n is turned into \0
+ *
+ * TODO flexible buffer length
+ * TODO errors
+ */
+int file_to_list(const int fd, struct string_list* const list) {
+	list->str = NULL;
+	list->len = 0;
+	char name[NAME_MAX+1];
+	size_t nlen = 0, top = 0;
+	ssize_t rd = 0;
+	char* nl;
+	if (lseek(fd, 0, SEEK_SET) == -1) return errno;
+	memset(name, 0, sizeof(name));
+	for (;;) {
+		rd = read(fd, name+top, NAME_MAX+1-top);
+		if (rd == -1) {
+			int e = errno;
+			for (fnum_t f = 0; f < list->len; ++f) {
+				free(list->str[f]);
+			}
+			free(list->str);
+			list->str = NULL;
+			list->len = 0;
+			return e;
+		}
+		if (!rd && !*name) break;
+		nl = memchr(name, '\n', sizeof(name));
+		if (nl) {
+			*nl = 0;
+			nlen = nl-name;
+		}
+		else {
+			nlen = strnlen(name, NAME_MAX);
+		}
+		list->str = realloc(list->str, (list->len+1) * sizeof(char*));
+		list->str[list->len] = strncpy(malloc(nlen+1), name, nlen+1);
+		top = NAME_MAX+1-nlen+1;
+		memmove(name, name+nlen+1, top);
+		list->len += 1;
+	}
+	return 0;
+}
+
+int list_to_file(const struct string_list* const list, int fd) {
+	if (lseek(fd, 0, SEEK_SET)) return errno;
+	char name[NAME_MAX+1];
+	for (fnum_t i = 0; i < list->len; ++i) {
+		const size_t len = strnlen(list->str[i], NAME_MAX);
+		memcpy(name, list->str[i], len);
+		name[len] = '\n';
+		if (write(fd, name, len+1) <= 0) return errno;
+	}
+	return 0;
+}
+
+void free_list(struct string_list* const list) {
+	if (!list->str) return;
+	for (fnum_t i = 0; i < list->len; ++i) {
+		free(list->str[i]);
+	}
+	free(list->str);
+	list->str = NULL;
+	list->len = 0;
+}
+
+/* Tells if there are duplicates on list */
+bool duplicates_on_list(struct string_list* const list) {
+	for (fnum_t f = 0; f < list->len; ++f) {
+		for (fnum_t g = 0; g < list->len; ++g) {
+			if (f == g) continue;
+			if (!strcmp(list->str[f], list->str[g])) return true;
+		}
+	}
+	return false;
+}
