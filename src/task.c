@@ -204,29 +204,27 @@ static int _copy_some(struct task* const t,
  *      copying = copy checklist -> new_path
  *		moving = copy checklist -> new_path + remove checklist
  */
-char* build_new_path(const struct task* const t,
-		const char* const cp, char* const buf) {
-	strncpy(buf, cp, PATH_MAX);
-	if (t->newname) { // name colission; using new name
-		const size_t dst_len = strnlen(t->dst, PATH_MAX);
-		const size_t newname_len = strnlen(t->newname, NAME_MAX);
+void build_new_path(const char* const dst, const char* const src,
+		const char* const new_name, const char* const checklist,
+		char* const buf) {
+	strncpy(buf, checklist, PATH_MAX);
+	if (new_name) { // name colission; using new name
+		const size_t dst_len = strnlen(dst, PATH_MAX);
+		const size_t newname_len = strnlen(new_name, NAME_MAX);
 		char* _dst = malloc(dst_len+1+newname_len+1);
-		strncpy(_dst, t->dst, dst_len+1);
-		if (append_dir(_dst, t->newname)) {
-			free(_dst);
-			return NULL;
+		strncpy(_dst, dst, dst_len+1);
+		if (!append_dir(_dst, new_name)) {
+			substitute(buf, src, _dst);
 		}
-		substitute(buf, t->src, _dst);
 		free(_dst);
 	}
 	else { // name stays the same
-		const size_t repll = current_dir_i(t->src)-1;
-		char* const repl = strncpy(malloc(repll+1), t->src, repll);
+		const size_t repll = current_dir_i(src)-1;
+		char* const repl = strncpy(malloc(repll+1), src, repll);
 		repl[repll] = 0;
-		substitute(buf, repl, t->dst);
+		substitute(buf, repl, dst);
 		free(repl);
 	}
-	return buf;
 }
 
 void tree_walk_start(struct tree_walk* tw, const char* const path) {
@@ -353,7 +351,7 @@ int _at_step(struct task* const t, int* const c,
 		break;
 	case AT_LINK:
 		if (copy) {
-			build_new_path(t, t->tw.cpath, npath);
+			build_new_path(t->dst, t->src, t->newname, t->tw.cpath, npath);
 			int err;
 			if (t->rl) {
 				err = link_copy_raw(t->tw.cpath, npath);
@@ -374,7 +372,7 @@ int _at_step(struct task* const t, int* const c,
 		break;
 	case AT_FILE:
 		if (copy) {
-			build_new_path(t, t->tw.cpath, npath);
+			build_new_path(t->dst, t->src, t->newname, t->tw.cpath, npath);
 			_copy_some(t, t->tw.cpath, npath, buf, bufsize, c); // TODO err
 			if (t->in != -1 || t->out != -1) return 0;
 		}
@@ -389,7 +387,7 @@ int _at_step(struct task* const t, int* const c,
 		break;
 	case AT_DIR:
 		if (copy) {
-			build_new_path(t, t->tw.cpath, npath);
+			build_new_path(t->dst, t->src, t->newname, t->tw.cpath, npath);
 			if (mkdir(npath, t->tw.cs.st_mode)) return errno;
 			t->size_done += t->tw.cs.st_size;
 			t->dirs_done += 1;

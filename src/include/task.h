@@ -92,6 +92,12 @@ struct task {
 	bool paused;
 	bool done;
 	bool rl; // Raw Links
+	/*
+	char* dst;
+	char** src;
+	char** ren;
+	fnum_t len;
+	*/
 	char *src, *dst, *newname; // newname is used for name conflicts
 	struct tree_walk tw;
 	int in, out; // when copying, fd of old and new files are held here
@@ -106,8 +112,8 @@ void task_clean(struct task* const);
 
 int estimate_volume(char*, ssize_t* const, int* const, int* const, const bool);
 
-char* build_new_path(const struct task* const,
-		const char* const, char* const);
+void build_new_path(const char* const, const char* const,
+		const char* const, const char* const, char* const);
 
 void tree_walk_start(struct tree_walk*, const char* const);
 void tree_walk_end(struct tree_walk*);
