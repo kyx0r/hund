@@ -93,13 +93,15 @@ struct task {
 	bool done;
 	bool rl; // Raw Links
 
-	/*
-	char* dst;
-	char** src;
-	char** ren;
-	fnum_t len;
-	*/
-	char *src, *dst, *newname; // newname is used for name conflicts
+	//    vvv basically pointers to file_view->wd; to not free
+	char* src; // Source directory path
+	char* dst; // Destination directory path
+	struct string_list targets; // Files to be copied
+	struct string_list renamed; // Same size as targets,
+	fnum_t current_target;
+	// NULL == no conflict, use origial name
+	// NONNULL = conflict, contains pointer to name replacement
+
 	struct tree_walk tw;
 	int in, out; // when copying, fd of old and new files are held here
 	ssize_t size_total, size_done;
@@ -108,17 +110,25 @@ struct task {
 };
 
 void task_new(struct task* const, const enum task_type,
-		char* const, char* const, char* const);
+		char* const, char* const,
+		const struct string_list* const,
+		const struct string_list* const);
 void task_clean(struct task* const);
 
 int estimate_volume(char*, ssize_t* const, int* const, int* const, const bool);
+void estimate_volume_for_list(const char* const,
+		const struct string_list* const,
+		ssize_t* const, int* const, int* const, const bool);
 
 void build_new_path(const char* const, const char* const,
-		const char* const, const char* const, char* const);
+		const char* const, const char* const, const char* const,
+		char* const);
 
 void tree_walk_start(struct tree_walk*, const char* const);
 void tree_walk_end(struct tree_walk*);
 void tree_walk_step(struct tree_walk*);
 
-int do_task(struct task*, int);
+char* current_target_path(struct task* const);
+
+int do_task(struct task* const, int);
 #endif

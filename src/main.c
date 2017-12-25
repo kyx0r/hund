@@ -141,49 +141,41 @@ static void open_find(struct ui* const i) {
 }
 
 static void prepare_long_task(struct ui* const i, struct task* const t,
-		enum task_type tt, const utf8* const err) {
-	// TODO cleanup
-	// TODO collision -> add to conflict file (repeat until there are no collisions)
-	// TODO estimate volume for selection
+		enum task_type tt) {
 	if (!i->pv->num_files) return;
-	/*if (!i->pv->num_selected) {
+	if (!i->pv->num_selected) {
 		hfr(i->pv)->selected = true;
 		i->pv->num_selected = 1;
 	}
-	char** list;
-	fnum_t list_len;
-	file_view_selected_to_list(i->pv, &list, &list_len);*/
+	struct string_list selected = { NULL, 0 };
+	struct string_list renamed = { NULL, 0 };
+	file_view_selected_to_list(i->pv, &selected);
 
-	utf8* src = NULL, *dst = NULL, *nn = NULL;
-	if (!(src = file_view_path_to_selected(i->pv))) {
-		failed(i, err, ENAMETOOLONG, NULL);
-		free(src);
-		return;
-	}
-	const utf8* const fn = i->pv->file_list[i->pv->selection]->file_name;
 	if (tt == TASK_MOVE || tt == TASK_COPY) {
-		dst = strncpy(malloc(PATH_MAX+1), i->sv->wd, PATH_MAX);
-		if (file_on_list(i->sv, fn)) {
-			nn = calloc(NAME_MAX+1, sizeof(char));
-			strncpy(nn, fn, NAME_MAX);
-			const size_t nnlen = strnlen(nn, NAME_MAX);
-			if (open_prompt(i, nn, nn+nnlen, NAME_MAX)) {
-				free(src);
-				free(dst);
-				free(nn);
-				return;
-			}
+		if (conflicts_with_existing(i->sv, &selected)) {
+			list_copy(&renamed, &selected);
+			do {
+				char tmpn[] = "/tmp/hund.XXXXXXXX";
+				int tmpfd = mkstemp(tmpn);
+				list_to_file(&renamed, tmpfd);
+
+				editor(tmpn);
+				file_to_list(tmpfd, &renamed);
+
+				close(tmpfd);
+				unlink(tmpn);
+			} while (conflicts_with_existing(i->sv, &renamed));
+		}
+		else {
+			renamed.len = selected.len;
+			renamed.str = calloc(renamed.len, sizeof(char*));
 		}
 	}
-	int r; // TODO
-	task_new(t, tt, src, dst, nn);
-	if ((r = estimate_volume(t->src,
-					&(t->size_total), &(t->files_total),
-					&(t->dirs_total), false))) {
-		failed(i, "build file list", r, NULL);
-		task_clean(t);
-		return;
-	}
+
+	task_new(t, tt, i->pv->wd, i->sv->wd, &selected, &renamed);
+	estimate_volume_for_list(i->pv->wd, &selected,
+			&(t->size_total), &(t->files_total),
+			&(t->dirs_total), false);
 	i->m = MODE_WAIT;
 }
 
@@ -310,16 +302,13 @@ static void process_input(struct ui* const i, struct task* const t) {
 		if (err) failed(i, "up dir", err, NULL);
 		break;
 	case CMD_COPY:
-		// TODO multiple selection
-		prepare_long_task(i, t, TASK_COPY, task_strings[TASK_COPY][NOUN]);
+		prepare_long_task(i, t, TASK_COPY);
 		break;
 	case CMD_MOVE:
-		// TODO multiple selection
-		prepare_long_task(i, t, TASK_MOVE, task_strings[TASK_MOVE][NOUN]);
+		prepare_long_task(i, t, TASK_MOVE);
 		break;
 	case CMD_REMOVE:
-		// TODO multiple selection
-		prepare_long_task(i, t, TASK_REMOVE, task_strings[TASK_REMOVE][NOUN]);
+		prepare_long_task(i, t, TASK_REMOVE);
 		break;
 	case CMD_EDIT_FILE:
 		if ((path = file_view_path_to_selected(i->pv))) {
