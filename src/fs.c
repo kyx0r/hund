@@ -292,16 +292,17 @@ void pretty_size(off_t s, char* const buf) {
 	static const char units[] = { 'B', 'K', 'M', 'G', 'T', 'P', 'E', 'Z' };
 	const char* unit = units;
 	unsigned rest = 0;
-	while (s > 1024) {
+	while (s >= 1024) {
 		rest = s % 1024;
 		s /= 1024;
 		unit += 1;
 	}
-	if (rest > 100) rest /= 10; // TODO FIXME
-	if (!(rest % 10)) rest /= 10;
-	if (rest > 100) rest /= 10;
-	if (!(rest % 10)) rest /= 10;
-	if (rest) snprintf(buf, SIZE_BUF_SIZE, "%u.%u%c", (unsigned)s, rest, *unit);
+	rest *= 1000;
+	rest /= 1024;
+	rest /= 10;
+	char r[2] = { '0' + (rest / 10), '0' + (rest % 10) };
+	if (r[1] != '0') snprintf(buf, SIZE_BUF_SIZE, "%u.%c%c%c", (unsigned)s, r[0], r[1], *unit);
+	else if (r[0] != '0') snprintf(buf, SIZE_BUF_SIZE, "%u.%c%c", (unsigned)s, r[0], *unit);
 	else snprintf(buf, SIZE_BUF_SIZE, "%u%c", (unsigned)s, *unit);
 }
 
@@ -512,6 +513,12 @@ bool contains(const char* const str, const char* const subs) {
 }
 
 /*
+ * LIST TODO
+ * 1. Make it fool-proof
+ */
+
+
+/*
  * Reads file from fd and forms a list of lines
  * \n is turned into \0
  *
@@ -569,10 +576,19 @@ int list_to_file(const struct string_list* const list, int fd) {
 	return 0;
 }
 
+void list_copy(struct string_list* const dst_list,
+		const struct string_list* const src_list) {
+	dst_list->len = src_list->len;
+	dst_list->str = malloc(dst_list->len*sizeof(char*));
+	for (fnum_t i = 0; i < dst_list->len; ++i) {
+		dst_list->str[i] = strdup(src_list->str[i]);
+	}
+}
+
 void free_list(struct string_list* const list) {
 	if (!list->str) return;
 	for (fnum_t i = 0; i < list->len; ++i) {
-		free(list->str[i]);
+		if (list->str[i]) free(list->str[i]);
 	}
 	free(list->str);
 	list->str = NULL;
