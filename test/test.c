@@ -10,7 +10,8 @@
 int main() {
 	SETUP_TESTS;
 
-	SECTION("path");
+	SECTION("fs");
+
 	int r;
 
 	/*char path0[PATH_MAX] = "/home/user/.config/fancyproggie";
@@ -22,30 +23,29 @@ int main() {
 	r = prettify_path(path1, home0);
 	TEST(r == -1 && strcmp(path1, "/etc/X11/xinit/xinitrc.d") == 0, "path remained unchanged");*/
 
-	char path2[PATH_MAX] = "/";
-	r = enter_dir(path2, "usr");
-	TEST(r == 0 && strcmp(path2, "/usr") == 0, "entered directory in root (respect /)");
+	char path[PATH_MAX] = "/";
+	r = enter_dir(path, "usr");
+	TEST(r == 0 && strcmp(path, "/usr") == 0, "entered directory in root (respect /)");
 
-	r = enter_dir(path2, "bin");
-	TEST(r == 0 && strcmp(path2, "/usr/bin") == 0, "correct path");
+	r = enter_dir(path, "bin");
+	TEST(r == 0 && strcmp(path, "/usr/bin") == 0, "correct path");
 
-	r = enter_dir(path2, ".");
-	TEST(r == 0 && strcmp(path2, "/usr/bin") == 0, "path unchanged");
+	r = enter_dir(path, ".");
+	TEST(r == 0 && strcmp(path, "/usr/bin") == 0, "path unchanged");
 
-	r = enter_dir(path2, "..");
-	TEST(r == 0 && strcmp(path2, "/usr") == 0, "up_dir used");
+	r = enter_dir(path, "..");
+	TEST(r == 0 && strcmp(path, "/usr") == 0, "up_dir used");
 
-	char path3[PATH_MAX+1];
-	memset(path3, 0, sizeof(path3));
-	path3[0] = '/';
-	memset(path3+1, 'a', PATH_MAX-3); // 1 to leave null-terminator, 1 for /, 1 for b
-	r = enter_dir(path3, "b");
-	TEST(r == 0 && strlen(path3) == PATH_MAX, "path filled");
+	memset(path, 0, sizeof(path));
+	path[0] = '/';
+	memset(path+1, 'a', PATH_MAX-3); // 1 to leave null-terminator, 1 for /, 1 for b
+	r = enter_dir(path, "b");
+	TEST(r == 0 && strlen(path) == PATH_MAX, "path filled");
 
-	r = enter_dir(path3, "end");
-	TEST(r && strlen(path3) == PATH_MAX, "respect PATH_MAX; leave path unchanged");
-	r = append_dir(path3, "end");
-	TEST(r && strlen(path3) == PATH_MAX, "respect PATH_MAX; leave path unchanged");
+	r = enter_dir(path, "end");
+	TEST(r && strlen(path) == PATH_MAX, "respect PATH_MAX; leave path unchanged");
+	r = append_dir(path, "end");
+	TEST(r && strlen(path) == PATH_MAX, "respect PATH_MAX; leave path unchanged");
 
 	/*char path4[PATH_MAX] = "/bin";
 	char cd[NAME_MAX];
@@ -65,24 +65,37 @@ int main() {
 	TEST(path_is_relative("./netctl"), "relative");
 	TEST(path_is_relative("etc/netctl"), "relative");
 
-	char path5[PATH_MAX] = "/dope/";
+	strcpy(path, "/dope/");
 	char dir5[] = "./wat/lol/../wut";
-	enter_dir(path5, dir5);
-	TEST(strcmp(path5, "/dope/wat/wut") == 0, "");
+	enter_dir(path, dir5);
+	TEST(strcmp(path, "/dope/wat/wut") == 0, "");
 
-	enter_dir(path5, "/home/user");
-	TEST(strcmp(path5, "/home/user") == 0, "");
+	enter_dir(path, "/home/user");
+	TEST(strcmp(path, "/home/user") == 0, "");
 
-	char path6[PATH_MAX];
+	/*char path6[PATH_MAX];
 	enter_dir(path6, "~");
 	struct passwd* pwd = get_pwd();
-	TEST(strcmp(path6, pwd->pw_dir) == 0, "");
+	TEST(strcmp(path6, pwd->pw_dir) == 0, "");*/
 
 	char path7[PATH_MAX+1] = "/home/user/images/memes";
 	int e = append_dir(path7, "lol");
 	TEST(e == 0 && !strcmp(path7, "/home/user/images/memes/lol"), "");
 
-	END_SECTION("path");
+	TEST(imb("1234567", "123") == 3, "");
+	TEST(imb("1234567", "023") == 0, "");
+	TEST(imb("1234567", "1234567") == 7, "");
+	TEST(imb("1034567", "1214567") == 1, "");
+
+	TEST(contains("lol", "lol"), "");
+	TEST(contains("lolz", "lol"), "");
+	TEST(contains("qqlolz", "lol"), "");
+	TEST(contains("qłąkąz", "łąką"), "");
+	TEST(!contains("qqloz", "lol"), "");
+	TEST(!contains("qqlooolz", "looool"), "");
+	TEST(contains("/home/user/lols", "/"), "");
+
+	END_SECTION("fs");
 
 
 	SECTION("utf8");
@@ -178,23 +191,25 @@ int main() {
 
 	END_SECTION("utf8");
 
+	SECTION("task");
 
-	SECTION("file");
+	char* result = malloc(PATH_MAX);
+	build_new_path("/home/user/doc/dir/file.txt",
+			"/home/user/doc", "/home/user/.trash",
+			"dir", "repl", result);
+	TEST(!strcmp(result, "/home/user/.trash/repl/file.txt"), "");
 
-	TEST(imb("1234567", "123") == 3, "");
-	TEST(imb("1234567", "023") == 0, "");
-	TEST(imb("1234567", "1234567") == 7, "");
-	TEST(imb("1034567", "1214567") == 1, "");
+	build_new_path("/home/user/doc/dir/file.txt",
+			"/home/user/doc", "/home/user/.trash", "doc", NULL, result);
+	TEST(!strcmp(result, "/home/user/.trash/dir/file.txt"), "");
 
-	TEST(contains("lol", "lol"), "");
-	TEST(contains("lolz", "lol"), "");
-	TEST(contains("qqlolz", "lol"), "");
-	TEST(contains("qłąkąz", "łąką"), "");
-	TEST(!contains("qqloz", "lol"), "");
-	TEST(!contains("qqlooolz", "looool"), "");
-	TEST(contains("/home/user/lols", "/"), "");
+	build_new_path("/home/user/doc/dir",
+			"/home/user", "/home/root/.trash", "user", NULL, result);
+	TEST(!strcmp(result, "/home/root/.trash/doc/dir"), "");
 
-	END_SECTION("file");
+	free(result);
+
+	END_SECTION("task");
 
 	END_TESTS;
 }
