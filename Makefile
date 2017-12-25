@@ -6,7 +6,7 @@ DEBUG = true
 ifeq ($(DEBUG),true)
 	CFLAGS += -g
 else
-	CFLAGS += -O2 -s
+	CFLAGS += -O2 -Os -s
 endif
 LIBS = -lpanel -lncurses
 OBJDIR = obj
