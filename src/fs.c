@@ -548,6 +548,7 @@ int file_to_list(const int fd, struct string_list* const list) {
 		}
 		top = NAME_MAX+1-(nlen+1);
 		memmove(name, name+nlen+1, top);
+		memset(name+top, 0, nlen+1);
 		list->len += 1;
 	}
 	return 0;
