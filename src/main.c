@@ -358,7 +358,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		editor(tmpn);
 		file_to_list(tmpfd, &files);
 		for (fnum_t f = 0; f < files.len; ++f) {
-			if (!strnlen(files.str[f], NAME_MAX)) continue; // Blank lines are ignored
+			if (!files.str[f]) continue; // Blank lines are ignored
 			path = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
 			if (((err = EINVAL, contains(files.str[f], "/"))
 			   || (err = append_dir(path, files.str[f]))
