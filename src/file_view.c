@@ -313,7 +313,9 @@ void select_from_list(struct file_view* const fv,
 		const struct string_list* const list) {
 	for (fnum_t li = 0; li < list->len; ++li) {
 		for (fnum_t s = 0; s < fv->num_files; ++s) {
-			if (!strcmp(list->str[li], fv->file_list[s]->file_name)) {
+			if (list->str[li]
+			    && !strcmp(list->str[li],
+					fv->file_list[s]->file_name)) {
 				fv->file_list[s]->selected = true;
 				fv->num_selected += 1;
 				break;
