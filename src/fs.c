@@ -24,10 +24,6 @@ bool is_lnk(const char* path) {
 	return (!lstat(path, &s) && S_ISLNK(s.st_mode));
 }
 
-/*
- * Checks if that thing pointed by path is a directory
- * If path points to link, then pointed file is checked
- */
 bool is_dir(const char* path) {
 	struct stat s;
 	return (!stat(path, &s) && S_ISDIR(s.st_mode));
@@ -44,11 +40,7 @@ bool same_fs(const char* const a, const char* const b) {
 }
 
 bool executable(const mode_t m, const mode_t n) {
-	return (m & 0111) != 0 || (n & 0111) != 0;
-}
-
-bool file_exists(const char* path) {
-	return !access(path, F_OK);
+	return (m & 0111) != 0 || (n & 0111) != 0; // TODO ???
 }
 
 void file_list_clean(struct file_record*** const fl, fnum_t* const nf) {
@@ -72,7 +64,6 @@ void file_list_clean(struct file_record*** const fl, fnum_t* const nf) {
  * On ENOMEM: cleans everything
  * On stat/lstat errors: zeroes failed fields
  * TODO test
- * TODO scan for the number of entries first and then allocate the array
  */
 int scan_dir(const char* const wd, struct file_record*** const fl,
 		fnum_t* const nf, fnum_t* const nhf) {
@@ -237,7 +228,7 @@ int link_copy(const char* const wd,
 	const ssize_t lpath_len = readlink(src, lpath, PATH_MAX);
 	if (lpath_len == -1) return errno;
 	lpath[lpath_len] = 0;
-	if (!file_exists(lpath)) return ENOENT;
+	if (access(lpath, F_OK)) return ENOENT;
 	if (!path_is_relative(lpath)) {
 		return (symlink(lpath, dst) ? errno : 0);
 	}
@@ -513,17 +504,9 @@ bool contains(const char* const str, const char* const subs) {
 }
 
 /*
- * LIST TODO
- * 1. Make it fool-proof
- */
-
-
-/*
  * Reads file from fd and forms a list of lines
- * \n is turned into \0
  *
  * TODO flexible buffer length
- * TODO errors
  */
 int file_to_list(const int fd, struct string_list* const list) {
 	list->str = NULL;
@@ -538,12 +521,7 @@ int file_to_list(const int fd, struct string_list* const list) {
 		rd = read(fd, name+top, NAME_MAX+1-top);
 		if (rd == -1) {
 			int e = errno;
-			for (fnum_t f = 0; f < list->len; ++f) {
-				free(list->str[f]);
-			}
-			free(list->str);
-			list->str = NULL;
-			list->len = 0;
+			free_list(list);
 			return e;
 		}
 		if (!rd && !*name) break;
@@ -555,9 +533,20 @@ int file_to_list(const int fd, struct string_list* const list) {
 		else {
 			nlen = strnlen(name, NAME_MAX);
 		}
-		list->str = realloc(list->str, (list->len+1) * sizeof(char*));
-		list->str[list->len] = strncpy(malloc(nlen+1), name, nlen+1);
-		top = NAME_MAX+1-nlen+1;
+		void* tmp_str = realloc(list->str, (list->len+1) * sizeof(char*));
+		if (!tmp_str) {
+			int e = errno;
+			free_list(list);
+			return e;
+		}
+		list->str = tmp_str;
+		if (nlen) {
+			list->str[list->len] = strncpy(malloc(nlen+1), name, nlen+1);
+		}
+		else {
+			list->str[list->len] = NULL;
+		}
+		top = NAME_MAX+1-(nlen+1);
 		memmove(name, name+nlen+1, top);
 		list->len += 1;
 	}
@@ -581,7 +570,7 @@ void list_copy(struct string_list* const dst_list,
 	dst_list->len = src_list->len;
 	dst_list->str = malloc(dst_list->len*sizeof(char*));
 	for (fnum_t i = 0; i < dst_list->len; ++i) {
-		dst_list->str[i] = strdup(src_list->str[i]);
+		dst_list->str[i] = strdup(src_list->str[i]); // TODO
 	}
 }
 
@@ -595,12 +584,21 @@ void free_list(struct string_list* const list) {
 	list->len = 0;
 }
 
+bool blank_lines(const struct string_list* const list) {
+	for (fnum_t i = 0; i < list->len; ++i) {
+		if (!list->str[i]) return true;
+	}
+	return false;
+}
+
 /* Tells if there are duplicates on list */
-bool duplicates_on_list(struct string_list* const list) {
+bool duplicates_on_list(const struct string_list* const list) {
 	for (fnum_t f = 0; f < list->len; ++f) {
 		for (fnum_t g = 0; g < list->len; ++g) {
 			if (f == g) continue;
-			if (!strcmp(list->str[f], list->str[g])) return true;
+			if (list->str[f]
+			    && list->str[g]
+				&& !strcmp(list->str[f], list->str[g])) return true;
 		}
 	}
 	return false;

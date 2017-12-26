@@ -38,13 +38,14 @@
  * GENERAL TODO NOTES
  * 1. Likes to segfault while doing anything on root's/special files.
  * 2. Messages may be blocked by other messages
- * 3. Okay, TODO:
+ * 3. Okay,
  *    - PATH_MAX (4096) includes null-terminator
  *    - NAME_MAX (255) does not
  *    - LOGIN_NAME_MAX (32) does not
- * 4. Selected files that became invisible (switched visibility) should be unselected
- * 5. TODO get rid of utf8 typedef
+ * 5. get rid of utf8 typedef
  * 6. file-list conversion should detect too long filenames
+ * 7. I Seriously need a quick (at lease) binary prompt (Y/N)
+ * 8. Configuration of copy/move/remove operation
  */
 
 static void failed(struct ui* const i, const utf8* const f,
@@ -334,7 +335,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		cdp = calloc(PATH_MAX+1, sizeof(utf8));
 		if ((open_prompt(i, cdp, cdp, PATH_MAX)
 		   || (err = ENAMETOOLONG, enter_dir(path, cdp))
-		   || (err = ENOENT, !file_exists(path))
+		   || (err = ENOENT, access(path, F_OK))
 		   || (err = ENOTDIR, !is_dir(path)))
 		   && err) {
 			failed(i, "cd", err, NULL);
@@ -374,8 +375,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		file_view_sort(i->pv);
 		break;
 	case CMD_RENAME:
-		// TODO dont allow blank lines
-		// TODO clearer error messages
+		// TODO an option to somehow abort operation
 		if (!i->pv->num_selected) {
 			hfr(i->pv)->selected = true;
 			i->pv->num_selected += 1;
@@ -390,12 +390,21 @@ static void process_input(struct ui* const i, struct task* const t) {
 		} while (duplicates_on_list(&renamed_files));
 		// TODO
 		         //|| conflicts_with_existing(i->pv, &renamed_files));
-		opath = malloc(PATH_MAX+1);
-		npath = malloc(PATH_MAX+1);
-		if (selected_files.len == renamed_files.len) {
+		if (blank_lines(&renamed_files)) {
+			failed(i, "rename", 0, "file contains blank lines");
+		}
+		else if (selected_files.len > renamed_files.len) {
+			failed(i, "rename", 0, "file does not contain enough lines");
+		}
+		else if (selected_files.len < renamed_files.len) {
+			failed(i, "rename", 0, "file contains too much lines");
+		}
+		else {
+			opath = malloc(PATH_MAX+1);
+			npath = malloc(PATH_MAX+1);
 			for (fnum_t f = 0; f < selected_files.len; ++f) {
 				if (!strcmp(selected_files.str[f],
-							renamed_files.str[f])) continue;
+				    renamed_files.str[f])) continue;
 				strncpy(opath, i->pv->wd, PATH_MAX);
 				strncpy(npath, i->pv->wd, PATH_MAX);
 				if (((err = EINVAL, contains(renamed_files.str[f], "/"))
@@ -409,10 +418,6 @@ static void process_input(struct ui* const i, struct task* const t) {
 			file_view_scan_dir(i->pv);
 			file_view_sort(i->pv);
 			select_from_list(i->pv, &renamed_files);
-		}
-		else {
-			failed(i, "rename", 0, "number of lines does not"
-					" match number of files");
 		}
 		free(npath);
 		free(opath);

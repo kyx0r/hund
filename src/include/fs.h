@@ -87,7 +87,6 @@ bool is_dir(const char*);
 bool same_fs(const char* const, const char* const);
 bool executable(const mode_t, const mode_t);
 
-bool file_exists(const char*);
 void file_list_clean(struct file_record*** const, fnum_t* const);
 int scan_dir(const char* const, struct file_record*** const,
 		fnum_t* const, fnum_t* const);
@@ -135,6 +134,7 @@ int list_to_file(const struct string_list* const, int);
 void list_copy(struct string_list* const, const struct string_list* const);
 void free_list(struct string_list* const);
 
-bool duplicates_on_list(struct string_list* const);
+bool blank_lines(const struct string_list* const);
+bool duplicates_on_list(const struct string_list* const);
 
 #endif
