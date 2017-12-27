@@ -499,7 +499,6 @@ void ui_draw(struct ui* const i) {
 		mvwprintw(sw, 0, 0, "%*c", i->scrw, ' ');
 	}
 	wrefresh(sw);
-
 	update_panels();
 	doupdate();
 	refresh();
@@ -550,33 +549,33 @@ void chmod_close(struct ui* const i) {
 
 int ui_prompt(struct ui* const i, const char* const q,
 		const struct input* o, const size_t oc) {
-	mvwprintw(stdscr, i->scrh, 0, "%*c", i->scrw, ' ');
-	wmove(stdscr, i->scrh, 0);
-	wprintw(stdscr, "%s (", q);
+	int top = 0;
+	char hints[32];
+	memset(hints, 0, sizeof(hints));
 	for (size_t j = 0; j < oc; ++j) {
 		if (j) {
-			wprintw(stdscr, "/");
+			top += snprintf(hints+top, sizeof(hints)-top, "/");
 		}
 		switch (o[j].t) {
 		case UTF8:
-			wprintw(stdscr, "%s", o[j].d.utf);
+			top += snprintf(hints+top, sizeof(hints)-top,
+					"%s", o[j].d.utf);
 			break;
 		case CTRL:
-			wprintw(stdscr, "^%c", (char)o[j].d.c);
+			top += snprintf(hints+top, sizeof(hints)-top,
+					"^%c", (char)o[j].d.c);
 			break;
 		case SPECIAL:
-			wprintw(stdscr, "%s", keyname(o[j].d.c)+4);
+			top += snprintf(hints+top, sizeof(hints)-top,
+					"%s", keyname(o[j].d.c)+4);
 			break;
 		default:
-			wprintw(stdscr, "???");
+			top += snprintf(hints+top, sizeof(hints)-top, "??");
 			break;
 		}
 	}
-	wprintw(stdscr, ")");
+	mvwprintw(stdscr, i->scrh-1, 0, "%s (%s)", q, hints);
 	wrefresh(stdscr);
-	update_panels();
-	doupdate();
-	refresh();
 	struct input in;
 	for (;;) {
 		in = get_input(stdscr);
