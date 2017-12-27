@@ -35,17 +35,21 @@
 #include "include/task.h"
 
 /*
- * GENERAL TODO NOTES
+ * GENERAL TODO
  * 1. Likes to segfault while doing anything on root's/special files.
  * 2. Messages may be blocked by other messages
  * 3. Okay,
  *    - PATH_MAX (4096) includes null-terminator
  *    - NAME_MAX (255) does not
  *    - LOGIN_NAME_MAX (32) does not
- * 5. get rid of utf8 typedef
  * 6. file-list conversion should detect too long filenames
- * 7. I Seriously need a quick (at lease) binary prompt (Y/N)
  * 8. Configuration of copy/move/remove operation
+ *    - merge on conflict
+ *    - copy raw links
+ *    - dereference links
+ * 9. Error handling.
+ * 10. Transfer speed and % done
+ * 11. Prompt needs to be less ambiguous (hints, like y=yes, a=abort, ^N=next)
  */
 
 static void failed(struct ui* const i, const utf8* const f,
@@ -68,7 +72,7 @@ static int spawn(char* const arg[]) {
 	int ret = 0, status, nullfd;
 	pid_t pid = fork();
 	if (pid == 0) {
-		nullfd = open("/dev/null", O_WRONLY, 0200);
+		nullfd = open("/dev/null", O_WRONLY, 0100);
 		if (dup2(nullfd, STDERR_FILENO) == -1) ret = errno;
 		// TODO ???
 		close(nullfd);
@@ -143,6 +147,7 @@ static void open_find(struct ui* const i) {
 
 static void prepare_long_task(struct ui* const i, struct task* const t,
 		enum task_type tt) {
+	// TODO error handling
 	if (!i->pv->num_files) return;
 	if (!i->pv->num_selected) {
 		hfr(i->pv)->selected = true;
@@ -151,21 +156,42 @@ static void prepare_long_task(struct ui* const i, struct task* const t,
 	struct string_list selected = { NULL, 0 };
 	struct string_list renamed = { NULL, 0 };
 	file_view_selected_to_list(i->pv, &selected);
-
+	static const struct input o[] = {
+		UTF8("n"), UTF8("y"), UTF8("a")
+	};
 	if (tt == TASK_MOVE || tt == TASK_COPY) {
 		if (conflicts_with_existing(i->sv, &selected)) {
-			list_copy(&renamed, &selected);
-			do {
-				char tmpn[] = "/tmp/hund.XXXXXXXX";
-				int tmpfd = mkstemp(tmpn);
-				list_to_file(&renamed, tmpfd);
+			int d = ui_prompt(i, "There are conflicts. Rename?", o, 3);
+			if (!d) {
+				remove_conflicting(i->sv, &selected);
+				list_copy(&renamed, &selected);
+			}
+		    if (d == 2 || !selected.len) {
+				free_list(&selected);
+				return;
+			}
+			if (d == 1) {
+				list_copy(&renamed, &selected);
+				bool unsolved;
+				do {
+					char tmpn[] = "/tmp/hund.XXXXXXXX";
+					int tmpfd = mkstemp(tmpn);
+					list_to_file(&renamed, tmpfd);
 
-				editor(tmpn);
-				file_to_list(tmpfd, &renamed);
+					editor(tmpn);
+					file_to_list(tmpfd, &renamed); // TODO err
 
-				close(tmpfd);
-				unlink(tmpn);
-			} while (conflicts_with_existing(i->sv, &renamed));
+					close(tmpfd);
+					unlink(tmpn);
+					if ((unsolved = conflicts_with_existing(i->sv, &renamed))) {
+						if (!ui_prompt(i, "There still are conflicts. Try again?", o, 2)) {
+							free_list(&selected);
+							free_list(&renamed);
+							return;
+						}
+					}
+				} while (unsolved);
+			}
 		}
 		else {
 			renamed.len = selected.len;
@@ -186,14 +212,16 @@ static void process_input(struct ui* const i, struct task* const t) {
 	     *opath = NULL, *npath = NULL;
 	int err = 0;
 	int sink_fc, sink_dc; // TODO FIXME
-	bool s;
-	const enum command cmd = get_cmd(i);
-	struct file_record* fr = NULL;
+	struct file_record* fr = NULL; // File Record
 	char tmpn[] = "/tmp/hund.XXXXXXXX";
 	int tmpfd;
 	struct string_list files = { NULL, 0 };
-	struct string_list selected_files = { NULL, 0 };
-	struct string_list renamed_files = { NULL, 0 };
+	struct string_list sf = { NULL, 0 }; // Selected Files
+	struct string_list rf = { NULL, 0 }; // Renamed Files
+	static const struct input o[] = {
+		UTF8("n"), UTF8("y"), UTF8("a")
+	};
+	const enum command cmd = get_cmd(i);
 	switch (cmd) {
 	/* HELP */
 	case CMD_HELP_QUIT:
@@ -213,7 +241,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		break;
 	case CMD_CHANGE:
 		// TODO multiple selection
-		// TODO recursive
+		// TODO recursive ("Apply changes recursively?")
 		if (chmod(i->path, i->perm)) {
 			failed(i, "chmod", errno, NULL);
 		}
@@ -375,56 +403,62 @@ static void process_input(struct ui* const i, struct task* const t) {
 		file_view_sort(i->pv);
 		break;
 	case CMD_RENAME:
-		// TODO an option to somehow abort operation
 		if (!i->pv->num_selected) {
 			hfr(i->pv)->selected = true;
 			i->pv->num_selected += 1;
 		}
 		tmpfd = mkstemp(tmpn);
-		file_view_selected_to_list(i->pv, &selected_files);
-		err = list_to_file(&selected_files, tmpfd);
+		file_view_selected_to_list(i->pv, &sf);
+		err = list_to_file(&sf, tmpfd);
+		bool unsolved;
 		do {
-			free_list(&renamed_files);
+			free_list(&rf);
 			editor(tmpn);
-			file_to_list(tmpfd, &renamed_files);
-		} while (duplicates_on_list(&renamed_files));
-		// TODO
-		         //|| conflicts_with_existing(i->pv, &renamed_files));
-		if (blank_lines(&renamed_files)) {
+			file_to_list(tmpfd, &rf);
+			if ((unsolved = duplicates_on_list(&rf))) {
+				if (!ui_prompt(i, "There are conflicts. Retry?", o, 2)) {
+					free_list(&sf);
+					free_list(&rf);
+					return;
+				}
+			}
+		} while (unsolved);
+		// TODO conflicts_with_existing(i->pv, &rf));
+		if (blank_lines(&rf)) {
 			failed(i, "rename", 0, "file contains blank lines");
 		}
-		else if (selected_files.len > renamed_files.len) {
+		else if (sf.len > rf.len) {
 			failed(i, "rename", 0, "file does not contain enough lines");
 		}
-		else if (selected_files.len < renamed_files.len) {
+		else if (sf.len < rf.len) {
 			failed(i, "rename", 0, "file contains too much lines");
 		}
 		else {
 			opath = malloc(PATH_MAX+1);
 			npath = malloc(PATH_MAX+1);
-			for (fnum_t f = 0; f < selected_files.len; ++f) {
-				if (!strcmp(selected_files.str[f],
-				    renamed_files.str[f])) continue;
+			for (fnum_t f = 0; f < sf.len; ++f) {
+				if (!strcmp(sf.str[f],
+				    rf.str[f])) continue;
 				strncpy(opath, i->pv->wd, PATH_MAX);
 				strncpy(npath, i->pv->wd, PATH_MAX);
-				if (((err = EINVAL, contains(renamed_files.str[f], "/"))
-				   || (err = append_dir(opath, selected_files.str[f]))
-				   || (err = append_dir(npath, renamed_files.str[f]))
+				if (((err = EINVAL, contains(rf.str[f], "/"))
+				   || (err = append_dir(opath, sf.str[f]))
+				   || (err = append_dir(npath, rf.str[f]))
 				   || (rename(opath, npath) ? (err = errno) : 0))
 				   && err) {
 					failed(i, "rename", err, NULL);
 				}
 			}
+			free(npath);
+			free(opath);
 			file_view_scan_dir(i->pv);
 			file_view_sort(i->pv);
-			select_from_list(i->pv, &renamed_files);
+			select_from_list(i->pv, &rf);
 		}
-		free(npath);
-		free(opath);
 		close(tmpfd);
 		unlink(tmpn);
-		free_list(&selected_files);
-		free_list(&renamed_files);
+		free_list(&sf);
+		free_list(&rf);
 		break;
 	case CMD_DIR_VOLUME:
 		// TODO don't perform on non-dirs
@@ -441,8 +475,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		break;
 	case CMD_SELECT_FILE:
 		fr = hfr(i->pv);
-		s = fr->selected = !fr->selected;
-		if (s) {
+		if ((fr->selected = !fr->selected)) {
 			i->pv->num_selected += 1;
 		}
 		else {
@@ -476,10 +509,12 @@ static void process_input(struct ui* const i, struct task* const t) {
 		break;
 	case CMD_CHMOD:
 		// TODO multiple selection
-		if (!(path = file_view_path_to_selected(i->pv))) {
+		if ((path = file_view_path_to_selected(i->pv))) {
+			chmod_open(i, path);
+		}
+		else {
 			failed(i, "chmod", ENAMETOOLONG, NULL);
 		}
-		else chmod_open(i, path);
 		break;
 	case CMD_TOGGLE_HIDDEN:
 		file_view_toggle_hidden(i->pv);
