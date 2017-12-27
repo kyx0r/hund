@@ -503,10 +503,23 @@ bool contains(const char* const str, const char* const subs) {
 	return false;
 }
 
+char* list_push(struct string_list* const list, const char* const s) {
+	void* tmp = realloc(list->str, (list->len+1) * sizeof(char*));
+	if (!tmp) return NULL;
+	list->str = tmp;
+	const size_t slen = strnlen(s, NAME_MAX);
+	list->str[list->len] = malloc(slen+1); // TODO
+	memcpy(list->str[list->len], s, slen+1);
+	list->str[list->len][slen] = 0;
+	list->len += 1;
+	return list->str[list->len - 1];
+}
+
 /*
  * Reads file from fd and forms a list of lines
  *
  * TODO flexible buffer length
+ * TODO more testing
  */
 int file_to_list(const int fd, struct string_list* const list) {
 	list->str = NULL;
@@ -526,13 +539,12 @@ int file_to_list(const int fd, struct string_list* const list) {
 		}
 		if (!rd && !*name) break;
 		nl = memchr(name, '\n', sizeof(name));
-		if (nl) {
-			*nl = 0;
-			nlen = nl-name;
+		if (!nl && !(nl = memchr(name, 0, sizeof(name)))) {
+			free_list(list);
+			return ENAMETOOLONG;
 		}
-		else {
-			nlen = strnlen(name, NAME_MAX);
-		}
+		*nl = 0;
+		nlen = nl-name;
 		void* tmp_str = realloc(list->str, (list->len+1) * sizeof(char*));
 		if (!tmp_str) {
 			int e = errno;
