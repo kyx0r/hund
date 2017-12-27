@@ -29,12 +29,8 @@
 /*
  * UI TODO NOTES
  * terimnal should be assumed to be at least 80x24
- * infobar does not fit
- * 1. TODO? merge infobars and pathbars and only show information of the primary panel
- *     - then add user/group to infobar
- * 2. TODO selection is not very visible
- * 3. TODO scroll too long filenames
- * 4. TODO redesign chmod (if 1 is fully done, then all changes can be seen on infobar)
+ * 1. TODO selection is not very visible
+ * 2. TODO scroll too long filenames
  */
 static enum theme_element mode2theme(const mode_t m, const mode_t n) {
 	switch (m & S_IFMT) {
@@ -156,6 +152,7 @@ static void _printw_entry(WINDOW* const w, const fnum_t dr,
 		const struct file_record* const cfr,
 		const fnum_t width, const bool highlight) {
 	// TODO scroll filenames that are too long to fit in the panel width
+	// TODO cut out all characters that would spoil UI: \r \n \t \x1b ...
 	const enum theme_element te = mode2theme(cfr->s.st_mode,
 			(cfr->l ? cfr->l->st_mode : 0)) + (highlight ? 1 : 0);
 	char* invname = NULL;
@@ -410,17 +407,6 @@ static void ui_draw_help(struct ui* const i) {
 	WINDOW* const hw = stdscr;
 	wclear(hw);
 	int dr = -i->helpy; // TODO
-	wattron(hw, A_BOLD);
-	int cnl = 0; // Copytight Notice Line
-	while (copyright_notice[cnl]) {
-		const char* const cr = copyright_notice[cnl];
-		mvwprintw(hw, dr, 0, "%s%*c", cr, i->scrw-utf8_width(cr), ' ');
-		dr += 1;
-		cnl += 1;
-	}
-	mvwprintw(hw, dr, 0, "%*c", i->scrw, ' ');
-    dr += 1;
-	wattroff(hw, A_BOLD);
 	for (size_t m = 0; m < MODE_NUM; ++m) {
 		/* MODE TITLE */
 		wattron(hw, A_BOLD);
@@ -443,6 +429,17 @@ static void ui_draw_help(struct ui* const i) {
 		mvwprintw(hw, dr, 0, "%*c", i->scrw, ' ');
 		dr += 1;
 	}
+
+	/* COPYRIGHT NOTICE */
+	wattron(hw, A_BOLD);
+	int cnl = 0; // Copytight Notice Line
+	while (copyright_notice[cnl]) {
+		const char* const cr = copyright_notice[cnl];
+		mvwprintw(hw, dr, 0, "%s%*c", cr, i->scrw-utf8_width(cr), ' ');
+		dr += 1;
+		cnl += 1;
+	}
+	wattroff(hw, A_BOLD);
 	wrefresh(hw);
 }
 
@@ -518,7 +515,6 @@ void ui_update_geometry(struct ui* const i) {
 		wresize(ow, i->scrh-2, w[x]);
 		move_panel(p, 0, px[x]);
 	}
-
 	WINDOW* sw = panel_window(i->status);
 	wresize(sw, 1, i->scrw);
 	move_panel(i->status, i->scrh-1, 0);
@@ -550,6 +546,44 @@ void chmod_close(struct ui* const i) {
 	i->m = MODE_MANAGER;
 	free(i->path);
 	i->path = NULL;
+}
+
+int ui_prompt(struct ui* const i, const char* const q,
+		const struct input* o, const size_t oc) {
+	mvwprintw(stdscr, i->scrh, 0, "%*c", i->scrw, ' ');
+	wmove(stdscr, i->scrh, 0);
+	wprintw(stdscr, "%s (", q);
+	for (size_t j = 0; j < oc; ++j) {
+		if (j) {
+			wprintw(stdscr, "/");
+		}
+		switch (o[j].t) {
+		case UTF8:
+			wprintw(stdscr, "%s", o[j].d.utf);
+			break;
+		case CTRL:
+			wprintw(stdscr, "^%c", (char)o[j].d.c);
+			break;
+		case SPECIAL:
+			wprintw(stdscr, "%s", keyname(o[j].d.c)+4);
+			break;
+		default:
+			wprintw(stdscr, "???");
+			break;
+		}
+	}
+	wprintw(stdscr, ")");
+	wrefresh(stdscr);
+	update_panels();
+	doupdate();
+	refresh();
+	struct input in;
+	for (;;) {
+		in = get_input(stdscr);
+		for (size_t j = 0; j < oc; ++j) {
+			if (!memcmp(&in, o+j, sizeof(struct input))) return j;
+		}
+	}
 }
 
 /*

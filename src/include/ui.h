@@ -458,6 +458,9 @@ void ui_update_geometry(struct ui* const);
 int chmod_open(struct ui* const, utf8* const);
 void chmod_close(struct ui* const);
 
+int ui_prompt(struct ui* const, const char* const q,
+		const struct input*, const size_t);
+
 struct input get_input(WINDOW* const);
 enum command get_cmd(struct ui* const);
 int fill_textbox(utf8* const, utf8** const, const size_t, WINDOW* const);
