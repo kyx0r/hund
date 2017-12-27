@@ -332,6 +332,18 @@ bool conflicts_with_existing(struct file_view* const fv,
 	return false;
 }
 
+void remove_conflicting(struct file_view* const fv,
+		struct string_list* const list) {
+	struct string_list repl = { NULL, 0 };
+	for (fnum_t f = 0; f < list->len; ++f) {
+		if (!file_on_list(fv, list->str[f])) {
+			list_push(&repl, list->str[f]);
+		}
+	}
+	free_list(list);
+	*list = repl;
+}
+
 /* Highlighted File Record */
 struct file_record* hfr(const struct file_view* const fv) {
 	return (fv->num_files ?

@@ -70,5 +70,7 @@ void select_from_list(struct file_view* const,
 bool conflicts_with_existing(struct file_view* const,
 		const struct string_list* const);
 
+void remove_conflicting(struct file_view* const, struct string_list* const);
+
 struct file_record* hfr(const struct file_view* const);
 #endif
