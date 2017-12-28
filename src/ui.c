@@ -22,15 +22,14 @@
 /* This file contains UI-related functions
  * These functions are supposed to draw elements of UI.
  * They are supposed to read file_view contents, but never modify it.
- *
- * TODO KEY_RESIZE - better handling, less mess
  */
 
 /*
  * UI TODO NOTES
- * terimnal should be assumed to be at least 80x24
+ * 0. terimnal should be assumed to be at least 80x24
  * 1. TODO selection is not very visible
  * 2. TODO scroll too long filenames
+ * 3. TODO KEY_RESIZE - better handling, less mess
  */
 
 static enum theme_element mode2theme(const mode_t m, const mode_t n) {
@@ -249,7 +248,7 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	const struct file_view* const s = i->fvs[v];
 	const fnum_t nhf = i->fvs[v]->num_hidden;
 	WINDOW* const w = panel_window(i->fvp[v]);
-	int pathbarpos[2] = { 0, i->scrw/2 };
+	int panelxoff[2] = { 0, i->scrw/2 };
 
 	int _ph = 0, _pw = 0;
 	getmaxyx(w, _ph, _pw);
@@ -257,10 +256,10 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	const fnum_t ph = _ph, pw = _pw;
 
 	/* Top pathbar */
-	_printw_pathbar(s->wd, stdscr, pathbarpos[v], pw);
+	_printw_pathbar(s->wd, stdscr, panelxoff[v], pw);
 
 	fnum_t dr = 0; // Drawing Row
-	fnum_t e = _start_search_index(s, nhf, ph - 2);
+	fnum_t e = _start_search_index(s, nhf, ph - 1);
 	while (s->num_files-nhf && e < s->num_files && dr < ph) {
 		if (!visible(s, e)) {
 			e += 1;
