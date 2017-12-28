@@ -32,6 +32,7 @@
  * 1. TODO selection is not very visible
  * 2. TODO scroll too long filenames
  */
+
 static enum theme_element mode2theme(const mode_t m, const mode_t n) {
 	switch (m & S_IFMT) {
 	case S_IFBLK: return THEME_ENTRY_BLK_UNS;
@@ -61,12 +62,18 @@ struct ui ui_init(struct file_view* const pv,
 	struct ui i;
 	setlocale(LC_ALL, "");
 	initscr();
-	if (has_colors() == FALSE) {
-		endwin();
-		printf("no colors :(\n"); // TODO
-		exit(EXIT_FAILURE);
-	}
 	start_color();
+	if (has_colors() == FALSE) {
+		// TODO
+		init_color(COLOR_WHITE, 1000, 1000, 1000);
+		init_color(COLOR_BLACK, 0, 0, 0);
+		init_color(COLOR_RED, 1000, 1000, 1000);
+		init_color(COLOR_GREEN, 1000, 1000, 1000);
+		init_color(COLOR_BLUE, 1000, 1000, 1000);
+		init_color(COLOR_CYAN, 1000, 1000, 1000);
+		init_color(COLOR_MAGENTA, 1000, 1000, 1000);
+		init_color(COLOR_YELLOW, 1000, 1000, 1000);
+	}
 	noecho();
 	//cbreak();
 	//nonl();
@@ -75,12 +82,6 @@ struct ui ui_init(struct file_view* const pv,
 	keypad(stdscr, TRUE);
 	//timeout(DEFAULT_GETCH_TIMEOUT);
 	curs_set(0);
-
-	// TODO
-	//init_color(COLOR_WHITE, 1000, 1000, 1000);
-	//init_color(COLOR_MAGENTA, 1000, 0, 1000);
-	//init_color(COLOR_YELLOW, 1000, 1000, 0);
-	//init_color(COLOR_CYAN, 0, 1000, 1000);
 
 	for (int i = THEME_OTHER+1; i < THEME_ELEM_NUM; ++i) {
 		init_pair(i, theme_scheme[i][1], theme_scheme[i][2]);
@@ -102,16 +103,15 @@ struct ui ui_init(struct file_view* const pv,
 	i.ili = 0;
 	memset(i.il, 0, INPUT_LIST_LENGTH*sizeof(struct input));
 	i.kml = default_mapping_length;
-	i.mks = calloc(default_mapping_length, sizeof(int));
+	i.mks = calloc(default_mapping_length, sizeof(unsigned short));
 	i.kmap = default_mapping; // TODO ???
 	//i.kmap = malloc(default_mapping_length*sizeof(struct input2cmd));
 	/*for (size_t k = 0; k < default_mapping_length; ++k) {
 		memcpy(&i.kmap[k], &default_mapping[k], sizeof(struct input2cmd));
 	}*/
-	WINDOW* sw = newwin(1, 1, 0, 0);
-	keypad(sw, TRUE);
-	//wtimeout(hw, DEFAULT_GETCH_TIMEOUT);
-	i.status = new_panel(sw);
+	memset(i.perm, 0, sizeof(i.perm));
+	memset(i.o, 0, sizeof(i.o));
+	memset(i.g, 0, sizeof(i.g));
 	return i;
 }
 
@@ -122,33 +122,31 @@ void ui_end(struct ui* const i) {
 		del_panel(p);
 		delwin(w);
 	}
-	WINDOW* sw = panel_window(i->status);
-	del_panel(i->status);
-	delwin(sw);
 	free(i->mks);
 	endwin();
 	memset(i, 0, sizeof(struct ui));
 }
+
 static void _printw_pathbar(const char* const path,
-		WINDOW* const w, const fnum_t width) {
+		WINDOW* const w, const int x, const fnum_t width) {
 	// TODO
 	const struct passwd* const pwd = getpwuid(geteuid());
 	const int pi = prettify_path_i(path, pwd->pw_dir);
 	const size_t path_width = utf8_width(path+pi) + (pi ? 1 : 0);
 	wattron(w, COLOR_PAIR(THEME_PATHBAR));
 	if (path_width <= width-2) {
-		mvwprintw(w, 0, 0, "%s%s%*c ", (pi ? " ~" : " "),
+		mvwprintw(w, 0, x, "%s%s%*c ", (pi ? " ~" : " "),
 				path+pi, width-(path_width+2), ' ');
 	}
 	else {
 		const size_t sg = path_width - ((width-2) + (pi?1:0));
 		const char* const p = path+pi+utf8_slice_length(path+pi, sg);
-		mvwprintw(w, 0, 0, " %s ", p);
+		mvwprintw(w, 0, x, " %s ", p);
 	}
 	wattroff(w, COLOR_PAIR(THEME_PATHBAR));
 }
 
-static void _printw_entry(WINDOW* const w, const fnum_t dr,
+static void _printw_entry(WINDOW* const w, const fnum_t dr, const int y,
 		const struct file_record* const cfr,
 		const fnum_t width, const bool highlight) {
 	// TODO scroll filenames that are too long to fit in the panel width
@@ -187,12 +185,14 @@ static void _printw_entry(WINDOW* const w, const fnum_t dr,
 	}
 	char open = theme_scheme[te][0];
 	char close = ' ';
-	if (cfr->selected) { // TODO not very visible
+	if (cfr->selected) {
+		// TODO not very visible
+		// maybe just indent selected?
 		open = '[';
 		close = ']';
 	}
 	wattron(w, COLOR_PAIR(te));
-	mvwprintw(w, dr, 0, "%c%.*s%*c%s%c",
+	mvwprintw(w, dr, y, "%c%.*s%*c%s%c",
 			open, utf8_slice_length(fn, fn_slice), fn,
 			space, ' ', sbuf, close);
 	wattroff(w, COLOR_PAIR(te));
@@ -249,6 +249,7 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	const struct file_view* const s = i->fvs[v];
 	const fnum_t nhf = i->fvs[v]->num_hidden;
 	WINDOW* const w = panel_window(i->fvp[v]);
+	int pathbarpos[2] = { 0, i->scrw/2 };
 
 	int _ph = 0, _pw = 0;
 	getmaxyx(w, _ph, _pw);
@@ -256,9 +257,9 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 	const fnum_t ph = _ph, pw = _pw;
 
 	/* Top pathbar */
-	_printw_pathbar(s->wd, w, pw);
+	_printw_pathbar(s->wd, stdscr, pathbarpos[v], pw);
 
-	fnum_t dr = 1; // Drawing Row
+	fnum_t dr = 0; // Drawing Row
 	fnum_t e = _start_search_index(s, nhf, ph - 2);
 	while (s->num_files-nhf && e < s->num_files && dr < ph) {
 		if (!visible(s, e)) {
@@ -266,7 +267,7 @@ static void ui_draw_panel(struct ui* const i, const int v) {
 			continue;
 		}
 		const bool hl = (e == s->selection && i->fvs[v] == i->pv);
-		_printw_entry(w, dr, s->file_list[e], pw, hl);
+		_printw_entry(w, dr, 0, s->file_list[e], pw, hl);
 		dr += 1;
 		e += 1;
 	}
@@ -323,24 +324,57 @@ static void stringify_pug(mode_t m, uid_t u, gid_t g,
 }
 
 static void _printw_statusbar(struct ui* const i, const int dr) {
-	// TODO
-	const size_t stat_data_size = LOGIN_NAME_MAX*2+2+10+1+TIME_SIZE;
-	char stat_data[stat_data_size];
-	snprintf(stat_data, sizeof(stat_data),
-			"%s %s %.10s %s", i->user, i->group, i->perms, i->time);
-	const size_t stat_len = strnlen(stat_data, sizeof(stat_data));
-
-	const size_t status_size = 32; // TODO
+	// TODO FIXME
+	const size_t status_size = 32;
 	char status[status_size];
 	snprintf(status, status_size,
 			"%uf %u%c %us",
 			i->pv->num_files-(i->pv->show_hidden ? 0 : i->pv->num_hidden),
 			i->pv->num_hidden, (i->pv->show_hidden ? 'H' : 'h'),
 			i->pv->num_selected);
+	const size_t cw = utf8_width(status);
+	const size_t uw = utf8_width(i->user);
+	const size_t gw = utf8_width(i->group);
+	const size_t sw = uw+1+gw+1+10+1+TIME_SIZE+1;
+	const size_t padding = i->scrw-cw-sw;
 
 	wattron(stdscr, COLOR_PAIR(THEME_STATUSBAR));
-	mvwprintw(stdscr, dr, 0, " %s%*c%s ", status,
-			i->scrw-utf8_width(status)-stat_len-2, ' ', stat_data);
+	mvwprintw(stdscr, dr, 0, " %s%*c", status, padding, ' ');
+	size_t top = 1+cw+padding;
+
+	if (i->o[0] != i->o[1]) wattron(stdscr, A_UNDERLINE);
+	mvwprintw(stdscr, dr, top, "%s", i->user);
+	if (i->o[0] != i->o[1]) wattroff(stdscr, A_UNDERLINE);
+	top += uw;
+
+	mvwprintw(stdscr, dr, top, " ");
+	top += 1;
+
+	if (i->g[0] != i->g[1]) wattron(stdscr, A_UNDERLINE);
+	mvwprintw(stdscr, dr, top, "%s", i->group);
+	if (i->g[0] != i->g[1]) wattroff(stdscr, A_UNDERLINE);
+	top += gw;
+
+	mvwprintw(stdscr, dr, top, " ");
+	top += 1;
+
+	mvwprintw(stdscr, dr, top, "%c", i->perms[0]);
+	top += 1;
+	for (size_t p = 1; p < 10; ++p) {
+		mode_t m[2] = {
+			(i->perm[0] & 0777) & (0400 >> (p-1)),
+			(i->perm[1] & 0777) & (0400 >> (p-1))
+		};
+		bool diff = m[0] != m[1];
+		if (diff) wattron(stdscr, A_UNDERLINE);
+		mvwprintw(stdscr, dr, top, "%c", i->perms[p]);
+		if (diff) wattroff(stdscr, A_UNDERLINE);
+		top += 1;
+	}
+
+	mvwprintw(stdscr, dr, top, " %s ", i->time);
+	top += TIME_SIZE-1;
+
 	wattroff(stdscr, COLOR_PAIR(THEME_STATUSBAR));
 }
 
@@ -449,14 +483,13 @@ void ui_draw(struct ui* const i) {
 		ui_draw_help(i);
 	}
 	else if (i->m == MODE_CHMOD) {
-		// TODO highlight modified fields
 		const struct file_record* const _hfr = hfr(i->pv);
 		if (_hfr) {
 			const time_t lt = _hfr->s.st_mtim.tv_sec;
 			const struct tm* const tt = localtime(&lt);
-			strftime(i->time, TIME_SIZE, timefmt, tt); // TODO
+			strftime(i->time, TIME_SIZE, timefmt, tt);
 		}
-		stringify_pug(i->perm, i->o, i->g,
+		stringify_pug(i->perm[1], i->o[1], i->g[1],
 				i->perms, i->user, i->group);
 		_printw_statusbar(i, i->scrh-2);
 	}
@@ -474,7 +507,6 @@ void ui_draw(struct ui* const i) {
 		}
 		_printw_statusbar(i, i->scrh-2);
 	}
-	WINDOW* sw = panel_window(i->status);
 	// TODO
 	if (i->mt) {
 		int cp = 0;
@@ -483,22 +515,21 @@ void ui_draw(struct ui* const i) {
 		case MSG_ERROR: cp = THEME_ERROR; break;
 		default: break;
 		}
-		wattron(sw, COLOR_PAIR(cp));
-		mvwprintw(sw, 0, 0, "%s", i->msg);
-		wattroff(sw, COLOR_PAIR(cp));
+		wattron(stdscr, COLOR_PAIR(cp));
+		mvwprintw(stdscr, i->scrh-1, 0, "%s", i->msg);
+		wattroff(stdscr, COLOR_PAIR(cp));
 
-		mvwprintw(sw, 0, strlen(i->msg), "%*c",
+		mvwprintw(stdscr, i->scrh-1, strlen(i->msg), "%*c",
 				i->scrw-utf8_width(i->msg), ' ');
 		i->mt = MSG_NONE;
 	}
 	else if (i->prompt) { // TODO
-		mvwprintw(sw, 0, 0, "%c%s%*c", i->prch, i->prompt,
+		mvwprintw(stdscr, i->scrh-1, 0, "%c%s%*c", i->prch, i->prompt,
 				i->scrw-(utf8_width(i->prompt)+1), ' ');
 	}
 	else {
-		mvwprintw(sw, 0, 0, "%*c", i->scrw, ' ');
+		mvwprintw(stdscr, i->scrh-1, 0, "%*c", i->scrw, ' ');
 	}
-	wrefresh(sw);
 	update_panels();
 	doupdate();
 	refresh();
@@ -511,12 +542,9 @@ void ui_update_geometry(struct ui* const i) {
 	for (int x = 0; x < 2; ++x) {
 		PANEL* p = i->fvp[x];
 		WINDOW* ow = panel_window(p);
-		wresize(ow, i->scrh-2, w[x]);
-		move_panel(p, 0, px[x]);
+		wresize(ow, i->scrh-3, w[x]);
+		move_panel(p, 1, px[x]);
 	}
-	WINDOW* sw = panel_window(i->status);
-	wresize(sw, 1, i->scrw);
-	move_panel(i->status, i->scrh-1, 0);
 	i->ui_needs_refresh = false;
 }
 
@@ -530,9 +558,9 @@ int chmod_open(struct ui* const i, char* const path) {
 	struct group* grp = getgrgid(s.st_gid);
 	if (!grp) return errno;
 
-	i->o = s.st_uid;
-	i->g = s.st_gid;
-	i->perm = s.st_mode;
+	i->o[0] = i->o[1] = s.st_uid;
+	i->g[0] = i->g[1] = s.st_gid;
+	i->perm[0] = i->perm[1] = s.st_mode;
 	i->path = path;
 	i->m = MODE_CHMOD;
 	strncpy(i->user, pwd->pw_name, LOGIN_NAME_MAX+1);
@@ -545,6 +573,9 @@ void chmod_close(struct ui* const i) {
 	i->m = MODE_MANAGER;
 	free(i->path);
 	i->path = NULL;
+	memset(i->perm, 0, sizeof(i->perm));
+	memset(i->o, 0, sizeof(i->o));
+	memset(i->g, 0, sizeof(i->g));
 }
 
 int ui_select(struct ui* const i, const char* const q,
@@ -578,7 +609,7 @@ int ui_select(struct ui* const i, const char* const q,
 	wrefresh(stdscr);
 	struct input in;
 	for (;;) {
-		in = get_input(stdscr);
+		in = get_input();
 		for (size_t j = 0; j < oc; ++j) {
 			if (!memcmp(&in, o+j, sizeof(struct input))) return j;
 		}
@@ -589,11 +620,11 @@ int ui_select(struct ui* const i, const char* const q,
  * Unused bytes of union input_data are zeroed,
  * so comparing two inputs via memcmp is possible.
  */
-struct input get_input(WINDOW* const w) {
+struct input get_input(void) {
 	struct input r;
 	memset(&r, 0, sizeof(struct input));
 	size_t utflen = 0;
-	int init = wgetch(w);
+	int init = getch();
 	const char u = (char)init;
 	const char* kn = keyname(init);
 	if (init == -1) {
@@ -611,7 +642,7 @@ struct input get_input(WINDOW* const w) {
 		r.t = UTF8;
 		r.d.utf[0] = u;
 		for (size_t i = 1; i < utflen; ++i) {
-			r.d.utf[i] = (char)wgetch(w);
+			r.d.utf[i] = (char)getch();
 		}
 	}
 	else {
@@ -634,8 +665,8 @@ struct input get_input(WINDOW* const w) {
  * HANDLES KEY_RESIZE // FIXME somewhere else?
  */
 enum command get_cmd(struct ui* const i) {
-	memset(i->mks, 0, i->kml*sizeof(int));
-	struct input newinput = get_input(stdscr);
+	memset(i->mks, 0, i->kml*sizeof(unsigned short));
+	struct input newinput = get_input();
 	if (newinput.t == SPECIAL && newinput.d.c == KEY_RESIZE) {
 		ui_update_geometry(i); // TODO TODO FIXME maybe not here
 		ui_draw(i);
@@ -681,7 +712,7 @@ enum command get_cmd(struct ui* const i) {
 	if (!matches) {
 		i->ili = 0;
 		memset(i->il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
-		memset(i->mks, 0, i->kml*sizeof(int));
+		memset(i->mks, 0, i->kml*sizeof(unsigned short));
 		return CMD_NONE;
 	}
 	else if (matches == 1) {
@@ -707,66 +738,63 @@ enum command get_cmd(struct ui* const i) {
  * returns 2 on ^N and -2 on ^P
  * returns -3 if KEY_RESIZE was 'pressed'
  */
-int fill_textbox(char* const buf, char** const buftop,
-		const size_t bsize, WINDOW* const w) {
+int fill_textbox(const struct ui* const I,
+		char* const buf, char** const buftop, const size_t bsize) {
 	curs_set(2);
-	wmove(w, 0, utf8_width(buf)-utf8_width(*buftop)+1);
-	wrefresh(w);
-	struct input i = get_input(w);
+	move(I->scrh-1, utf8_width(buf)-utf8_width(*buftop)+1);
+	refresh();
+	struct input i = get_input();
 	curs_set(0);
-	if (i.t == SPECIAL && i.d.c == KEY_RESIZE) return -3;
+	if (IS_SPEC(i, KEY_RESIZE)) return -3;
 	if (i.t == END) return 1;
-	if (i.t == CTRL && i.d.c == '[') return -1;
-	else if (i.t == CTRL && i.d.c == 'N') return 2;
-	else if (i.t == CTRL && i.d.c == 'P') return -2;
-	else if ((i.t == CTRL && i.d.c == 'J') ||
+	if (IS_CTRL(i, '[')) return -1;
+	else if (IS_CTRL(i, 'N')) return 2;
+	else if (IS_CTRL(i, 'P')) return -2;
+	else if ((IS_CTRL(i, 'J')) ||
 	         (i.t == UTF8 &&
 	         (i.d.utf[0] == '\n' || i.d.utf[0] == '\r'))) {
 		if (*buftop != buf) return 0;
+	}
+	else if (i.t == UTF8 && (i.d.utf[0] > 0 && i.d.utf[0] < 32)) {
+		return 1;
 	}
 	else if (i.t == UTF8 && (size_t)(*buftop - buf) < bsize) {
 		utf8_insert(buf, i.d.utf, utf8_ng_till(buf, *buftop));
 		*buftop += utf8_g2nb(i.d.utf);
 	}
-	else if ((i.t == CTRL && i.d.c == 'H') ||
-	         (i.t == SPECIAL && i.d.c == KEY_BACKSPACE)) {
+	else if (IS_CTRL(i, 'H') || IS_SPEC(i, KEY_BACKSPACE)) {
 		if (*buftop != buf) {
 			const size_t before = strnlen(buf, bsize);
 			utf8_remove(buf, utf8_ng_till(buf, *buftop)-1);
 			*buftop -= before - strnlen(buf, bsize);
 		}
-		else if (strnlen(buf, bsize));
- 		// Exit only when buf is empty
-		else return -1;
+		else if (!strnlen(buf, bsize)) {
+			return -1;
+		}
 	}
-	else if ((i.t == CTRL && i.d.c == 'D') ||
-	         (i.t == SPECIAL && i.d.c == KEY_DC)) {
+	else if (IS_CTRL(i, 'D') || IS_SPEC(i, KEY_DC)) {
 		utf8_remove(buf, utf8_ng_till(buf, *buftop));
 	}
-	else if ((i.t == CTRL && i.d.c == 'A') ||
-	         (i.t == SPECIAL && i.d.c == KEY_HOME)) {
+	else if (IS_CTRL(i, 'A') || IS_SPEC(i, KEY_HOME)) {
 		*buftop = buf;
 	}
-	else if ((i.t == CTRL && i.d.c == 'E') ||
-	         (i.t == SPECIAL && i.d.c == KEY_END)) {
+	else if (IS_CTRL(i, 'E') || IS_SPEC(i, KEY_END)) {
 		*buftop = buf+strnlen(buf, bsize);
 	}
-	else if (i.t == CTRL && i.d.c == 'U') {
+	else if (IS_CTRL(i, 'U')) {
 		*buftop = buf;
 		memset(buf, 0, bsize);
 	}
-	else if (i.t == CTRL && i.d.c == 'K') {
+	else if (IS_CTRL(i, 'K')) {
 		const size_t clen = strnlen(buf, bsize);
 		memset(*buftop, 0, strnlen(*buftop, bsize-clen));
 	}
-	else if ((i.t == CTRL && i.d.c == 'F') ||
-	         (i.t == SPECIAL && i.d.c == KEY_RIGHT)) {
+	else if (IS_CTRL(i, 'F') || IS_SPEC(i, KEY_RIGHT)) {
 		if ((size_t)(*buftop - buf) < bsize) {
 			*buftop += utf8_g2nb(*buftop);
 		}
 	}
-	else if ((i.t == CTRL && i.d.c == 'B') ||
-	         (i.t == SPECIAL && i.d.c == KEY_LEFT)) {
+	else if (IS_CTRL(i, 'B') || IS_SPEC(i, KEY_LEFT)) {
 		if (*buftop - buf) {
 			const size_t gt = utf8_ng_till(buf, *buftop);
 			*buftop = buf;
@@ -785,7 +813,7 @@ int open_prompt(struct ui* const i, char* const t,
 	ui_draw(i);
 	int r = 1;
 	while (r != -1 && r != 0) {
-		r = fill_textbox(t, &t_top, t_size, panel_window(i->status));
+		r = fill_textbox(i, t, &t_top, t_size);
 		if (r == -3) ui_update_geometry(i);
 		ui_draw(i); // TODO only redraw hintbar
 	}

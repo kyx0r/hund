@@ -37,7 +37,7 @@
 
 extern char** environ;
 
-#define MSG_BUFFER_SIZE 256
+#define MSG_BUFFER_SIZE 128
 
 // TODO maybe confirmation of removal,move,copy...
 enum mode {
@@ -202,8 +202,6 @@ struct input {
 	union input_data d;
 };
 
-struct input get_input(WINDOW* const);
-
 #define INPUT_LIST_LENGTH 4
 
 struct input2cmd {
@@ -211,6 +209,9 @@ struct input2cmd {
 	enum mode m : 8;
 	enum command c : 8;
 };
+
+#define IS_CTRL(I,K) (((I).t == CTRL) && ((I).d.c == (K)))
+#define IS_SPEC(I,K) (((I).t == SPECIAL) && ((I).d.c == (K)))
 
 #define ENDK { .t = END }
 #define UTF8(K) { .t = UTF8, .d.utf = K }
@@ -299,6 +300,14 @@ static struct input2cmd default_mapping[] = {
 	{ { UTF8("o"), UTF8("r"), ENDK }, MODE_CHMOD, CMD_TOGGLE_OR },
 	{ { UTF8("o"), UTF8("w"), ENDK }, MODE_CHMOD, CMD_TOGGLE_OW },
 	{ { UTF8("o"), UTF8("x"), ENDK }, MODE_CHMOD, CMD_TOGGLE_OX },
+
+	/* TODO
+	 * +x
+	 * -x
+	 * o+x
+	 * u+x
+	 * ???
+	 */
 
 	/* MODE WAIT */
 	{ { UTF8("q"), UTF8("q"), ENDK }, MODE_WAIT, CMD_TASK_QUIT },
@@ -434,20 +443,21 @@ struct ui {
 	struct file_view* pv;
 	struct file_view* sv;
 
-	PANEL* status; // TODO stdscr
 	size_t helpy;
 
 	struct input2cmd* kmap;
 	size_t kml; // Key Mapping Length
-	int* mks; // Matching Key Sequence // TODO char would be enough
+	unsigned short* mks; // Matching Key Sequence
 
 	struct input il[INPUT_LIST_LENGTH];
 	int ili;
 
 	char* path; // path of chmodded file
-	mode_t perm; // permissions of chmodded file
-	uid_t o;
-	gid_t g;
+	// [0] = old value
+	// [1] = new/edited value
+	mode_t perm[2]; // permissions of chmodded file
+	uid_t o[2];
+	gid_t g[2];
 	char perms[10];
 	char time[TIME_SIZE];
 	char user[LOGIN_NAME_MAX+1];
@@ -465,9 +475,10 @@ void chmod_close(struct ui* const);
 int ui_select(struct ui* const, const char* const q,
 		const struct input*, const size_t);
 
-struct input get_input(WINDOW* const);
+struct input get_input(void);
 enum command get_cmd(struct ui* const);
-int fill_textbox(char* const, char** const, const size_t, WINDOW* const);
+int fill_textbox(const struct ui* const, char* const,
+		char** const, const size_t);
 
 int open_prompt(struct ui* const, char* const, char*, const size_t);
 

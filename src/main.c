@@ -50,11 +50,21 @@
  */
 
 static int editor(char* const path) {
-	char exeimg[PATH_MAX+1];
+	char exeimg[PATH_MAX];
 	strcpy(exeimg, "/bin");
 	const char* ed = getenv("VISUAL");
 	if (!ed) ed = getenv("EDITOR");
 	append_dir(exeimg, ed ? ed : "vi");
+	char* const arg[] = { exeimg, path, NULL };
+	spawn(arg);
+	return 0;
+}
+
+static int pager(char* const path) {
+	char exeimg[PATH_MAX];
+	strcpy(exeimg, "/bin");
+	char* const pager = getenv("PAGER");
+	append_dir(exeimg, pager ? pager : "less");
 	char* const arg[] = { exeimg, path, NULL };
 	spawn(arg);
 	return 0;
@@ -70,7 +80,7 @@ static void open_find(struct ui* const i) {
 	ui_draw(i);
 	int r = 1;
 	while (r != 0 && r != -1) {
-		r = fill_textbox(t, &t_top, NAME_MAX, panel_window(i->status));
+		r = fill_textbox(i, t, &t_top, NAME_MAX);
 		if (r == -3) ui_update_geometry(i);
 		if (r == -1) i->pv->selection = sbfc;
 		else if (r == 2 || r == -2 || t_top != t) {
@@ -193,10 +203,10 @@ static void process_input(struct ui* const i, struct task* const t) {
 	case CMD_CHANGE:
 		// TODO multiple selection
 		// TODO recursive ("Apply changes recursively?")
-		if (chmod(i->path, i->perm)) {
+		if (chmod(i->path, i->perm[1])) {
 			failed(i, "chmod", errno, NULL);
 		}
-		if (lchown(i->path, i->o, i->g)) {
+		if (lchown(i->path, i->o[1], i->g[1])) {
 			failed(i, "chmod", errno, NULL);
 		}
 		if ((err = file_view_scan_dir(i->pv))) {
@@ -213,7 +223,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 			struct passwd* pwd = getpwnam(name);
 			if (!pwd) failed(i, "chown", 0, "Such user does not exist");
 			else {
-				i->o = pwd->pw_uid;
+				i->o[1] = pwd->pw_uid;
 				strncpy(i->user, pwd->pw_name, LOGIN_NAME_MAX);
 			}
 		}
@@ -227,24 +237,24 @@ static void process_input(struct ui* const i, struct task* const t) {
 			struct group* grp = getgrnam(name);
 			if (!grp) failed(i, "chgrp", 0, "Such group does not exist");
 			else {
-				i->g = grp->gr_gid;
+				i->g[1] = grp->gr_gid;
 				strncpy(i->group, grp->gr_name, LOGIN_NAME_MAX);
 			}
 		}
 		free(name);
 		break;
-	case CMD_TOGGLE_UIOX: i->perm ^= S_ISUID; break;
-	case CMD_TOGGLE_GIOX: i->perm ^= S_ISGID; break;
-	case CMD_TOGGLE_SB: i->perm ^= S_ISVTX; break;
-	case CMD_TOGGLE_UR: i->perm ^= S_IRUSR; break;
-	case CMD_TOGGLE_UW: i->perm ^= S_IWUSR; break;
-	case CMD_TOGGLE_UX: i->perm ^= S_IXUSR; break;
-	case CMD_TOGGLE_GR: i->perm ^= S_IRGRP; break;
-	case CMD_TOGGLE_GW: i->perm ^= S_IWGRP; break;
-	case CMD_TOGGLE_GX: i->perm ^= S_IXGRP; break;
-	case CMD_TOGGLE_OR: i->perm ^= S_IROTH; break;
-	case CMD_TOGGLE_OW: i->perm ^= S_IWOTH; break;
-	case CMD_TOGGLE_OX: i->perm ^= S_IXOTH; break;
+	case CMD_TOGGLE_UIOX: i->perm[1] ^= S_ISUID; break;
+	case CMD_TOGGLE_GIOX: i->perm[1] ^= S_ISGID; break;
+	case CMD_TOGGLE_SB: i->perm[1] ^= S_ISVTX; break;
+	case CMD_TOGGLE_UR: i->perm[1] ^= S_IRUSR; break;
+	case CMD_TOGGLE_UW: i->perm[1] ^= S_IWUSR; break;
+	case CMD_TOGGLE_UX: i->perm[1] ^= S_IXUSR; break;
+	case CMD_TOGGLE_GR: i->perm[1] ^= S_IRGRP; break;
+	case CMD_TOGGLE_GW: i->perm[1] ^= S_IWGRP; break;
+	case CMD_TOGGLE_GX: i->perm[1] ^= S_IXGRP; break;
+	case CMD_TOGGLE_OR: i->perm[1] ^= S_IROTH; break;
+	case CMD_TOGGLE_OW: i->perm[1] ^= S_IWOTH; break;
+	case CMD_TOGGLE_OX: i->perm[1] ^= S_IXOTH; break;
 	/* WAIT */
 	case CMD_TASK_QUIT:
 		t->done = true; // TODO
@@ -300,12 +310,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 	case CMD_OPEN_FILE:
 		if ((path = file_view_path_to_selected(i->pv))) {
 			if (is_dir(path)) failed(i, "open", EISDIR, NULL);
-			char exeimg[NAME_MAX]; // TODO
-			strcpy(exeimg, "/bin");
-			char* const pager = getenv("PAGER");
-			append_dir(exeimg, pager ? pager : "less");
-			char* const arg[] = { exeimg, path, NULL };
-			spawn(arg);
+			pager(path);
 			free(path);
 		}
 		break;
