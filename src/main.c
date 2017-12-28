@@ -27,9 +27,6 @@
 #include <getopt.h>
 #include <string.h>
 #include <limits.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
-#include <signal.h>
 
 #include "include/ui.h"
 #include "include/task.h"
@@ -42,7 +39,6 @@
  *    - PATH_MAX (4096) includes null-terminator
  *    - NAME_MAX (255) does not
  *    - LOGIN_NAME_MAX (32) does not
- * 6. file-list conversion should detect too long filenames
  * 8. Configuration of copy/move/remove operation
  *    - merge on conflict
  *    - copy raw links
@@ -50,40 +46,8 @@
  * 9. Error handling.
  * 10. Transfer speed and % done
  * 11. Prompt needs to be less ambiguous (hints, like y=yes, a=abort, ^N=next)
+ * 12. Handle WINCHG raw
  */
-
-static void failed(struct ui* const i, const utf8* const f,
-		const int reason, const utf8* const custom) {
-	i->mt = MSG_ERROR;
-	if (custom) {
-		snprintf(i->msg, MSG_BUFFER_SIZE, "%s failed: %s", f, custom);
-	}
-	else {
-		snprintf(i->msg, MSG_BUFFER_SIZE, "%s failed: %s (%d)",
-				f, strerror(reason), reason);
-	}
-}
-
-extern char** environ;
-
-static int spawn(char* const arg[]) {
-	def_prog_mode();
-	endwin();
-	int ret = 0, status, nullfd;
-	pid_t pid = fork();
-	if (pid == 0) {
-		nullfd = open("/dev/null", O_WRONLY, 0100);
-		if (dup2(nullfd, STDERR_FILENO) == -1) ret = errno;
-		// TODO ???
-		close(nullfd);
-		if (execve(arg[0], arg, environ)) ret = errno;
-	}
-	else {
-		while (waitpid(pid, &status, 0) == -1);
-	}
-	reset_prog_mode();
-	return ret;
-}
 
 static int editor(char* const path) {
 	char exeimg[PATH_MAX+1];
@@ -94,21 +58,6 @@ static int editor(char* const path) {
 	char* const arg[] = { exeimg, path, NULL };
 	spawn(arg);
 	return 0;
-}
-
-static int open_prompt(struct ui* const i, utf8* const t,
-		utf8* t_top, const size_t t_size) {
-	i->prch = '>';
-	i->prompt = t;
-	ui_draw(i);
-	int r = 1;
-	while (r != -1 && r != 0) {
-		r = fill_textbox(t, &t_top, t_size, panel_window(i->status));
-		if (r == -3) ui_update_geometry(i);
-		ui_draw(i); // TODO only redraw hintbar
-	}
-	i->prompt = NULL;
-	return r;
 }
 
 static void open_find(struct ui* const i) {
@@ -148,7 +97,12 @@ static void open_find(struct ui* const i) {
 static void prepare_long_task(struct ui* const i, struct task* const t,
 		enum task_type tt) {
 	// TODO error handling
+	// TODO FIXME simplify
 	if (!i->pv->num_files) return;
+	static const struct input o[] = {
+		UTF8("n"), UTF8("y"), UTF8("a")
+	};
+	//if (tt == TASK_REMOVE && !ui_select(i, "Delete?", o, 2)) return;
 	if (!i->pv->num_selected) {
 		hfr(i->pv)->selected = true;
 		i->pv->num_selected = 1;
@@ -156,12 +110,9 @@ static void prepare_long_task(struct ui* const i, struct task* const t,
 	struct string_list selected = { NULL, 0 };
 	struct string_list renamed = { NULL, 0 };
 	file_view_selected_to_list(i->pv, &selected);
-	static const struct input o[] = {
-		UTF8("n"), UTF8("y"), UTF8("a")
-	};
 	if (tt == TASK_MOVE || tt == TASK_COPY) {
 		if (conflicts_with_existing(i->sv, &selected)) {
-			int d = ui_prompt(i, "There are conflicts. Rename?", o, 3);
+			int d = ui_select(i, "There are conflicts. Rename?", o, 3);
 			if (!d) {
 				remove_conflicting(i->sv, &selected);
 				list_copy(&renamed, &selected);
@@ -184,7 +135,7 @@ static void prepare_long_task(struct ui* const i, struct task* const t,
 					close(tmpfd);
 					unlink(tmpn);
 					if ((unsolved = conflicts_with_existing(i->sv, &renamed))) {
-						if (!ui_prompt(i, "There still are conflicts. Try again?", o, 2)) {
+						if (!ui_select(i, "There still are conflicts. Try again?", o, 2)) {
 							free_list(&selected);
 							free_list(&renamed);
 							return;
@@ -208,7 +159,7 @@ static void prepare_long_task(struct ui* const i, struct task* const t,
 
 static void process_input(struct ui* const i, struct task* const t) {
 	struct file_view* tmp = NULL;
-	utf8 *path = NULL, *cdp = NULL, *name = NULL,
+	char *path = NULL, *cdp = NULL, *name = NULL,
 	     *opath = NULL, *npath = NULL;
 	int err = 0;
 	int sink_fc, sink_dc; // TODO FIXME
@@ -256,7 +207,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		break;
 	case CMD_CHOWN:
 		/* TODO in $VISUAL */
-		name = calloc(LOGIN_NAME_MAX+1, sizeof(utf8));
+		name = calloc(LOGIN_NAME_MAX+1, sizeof(char));
 		if (!open_prompt(i, name, name, LOGIN_NAME_MAX)) {
 			errno = 0;
 			struct passwd* pwd = getpwnam(name);
@@ -270,7 +221,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		break;
 	case CMD_CHGRP:
 		/* TODO in $VISUAL */
-		name = calloc(LOGIN_NAME_MAX+1, sizeof(utf8));
+		name = calloc(LOGIN_NAME_MAX+1, sizeof(char));
 		if (!open_prompt(i, name, name, LOGIN_NAME_MAX)) {
 			errno = 0;
 			struct group* grp = getgrnam(name);
@@ -360,7 +311,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		break;
 	case CMD_CD:
 		path = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
-		cdp = calloc(PATH_MAX+1, sizeof(utf8));
+		cdp = calloc(PATH_MAX+1, sizeof(char));
 		if ((open_prompt(i, cdp, cdp, PATH_MAX)
 		   || (err = ENAMETOOLONG, enter_dir(path, cdp))
 		   || (err = ENOENT, access(path, F_OK))
@@ -416,7 +367,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 			editor(tmpn);
 			file_to_list(tmpfd, &rf);
 			if ((unsolved = duplicates_on_list(&rf))) {
-				if (!ui_prompt(i, "There are conflicts. Retry?", o, 2)) {
+				if (!ui_select(i, "There are conflicts. Retry?", o, 2)) {
 					free_list(&sf);
 					free_list(&rf);
 					return;
@@ -636,7 +587,7 @@ int main(int argc, char* argv[]) {
 	/* If user passed initial directories in cmdline,
 	 * save these paths for later
 	 */
-	utf8* init_wd[2] = { NULL, NULL };
+	char* init_wd[2] = { NULL, NULL };
 	int init_wd_top = 0;
 	while (optind < argc) {
 		if (init_wd_top < 2) {
@@ -662,7 +613,7 @@ int main(int argc, char* argv[]) {
 			strncpy(fvs[v].wd, "/", 2);
 		}
 		if (init_wd[v]) { // Apply argument-passed paths
-			utf8* const e = strndup(init_wd[v], PATH_MAX);
+			char* const e = strndup(init_wd[v], PATH_MAX);
 			if (enter_dir(fvs[v].wd, e)) {
 				fprintf(stderr, "path too long: limit is %d; jumping to /\n", PATH_MAX);
 				strncpy(fvs[v].wd, "/", 2);

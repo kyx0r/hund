@@ -23,20 +23,19 @@
 #include <string.h>
 #include <stdbool.h>
 
-typedef char utf8;
 typedef unsigned int codepoint_t;
 
-void utf8_cp2b(utf8* const, const codepoint_t);
-codepoint_t utf8_b2cp(const utf8* const);
-size_t utf8_g2nb(const utf8* const);
+void utf8_cp2b(char* const, const codepoint_t);
+codepoint_t utf8_b2cp(const char* const);
+size_t utf8_g2nb(const char* const);
 size_t utf8_cp2nb(const codepoint_t);
-size_t utf8_width(const utf8*);
-size_t utf8_slice_length(const utf8* const, const size_t);
-size_t utf8_ng_till(const utf8*, const utf8* const);
-bool utf8_validate(const utf8* const);
+size_t utf8_width(const char*);
+size_t utf8_slice_length(const char* const, const size_t);
+size_t utf8_ng_till(const char*, const char* const);
+bool utf8_validate(const char* const);
 
-void utf8_insert(utf8*, const utf8* const, const size_t);
-void utf8_remove(utf8* const, const size_t);
+void utf8_insert(char*, const char* const, const size_t);
+void utf8_remove(char* const, const size_t);
 
-void cut_non_ascii(const utf8*, utf8*, size_t);
+void cut_non_ascii(const char*, char*, size_t);
 #endif

@@ -101,7 +101,7 @@ int main() {
 	SECTION("utf8");
 
 	struct test_utf8_pair {
-		utf8* b;
+		char* b;
 		codepoint_t cp;
 	} tup[] = {
 		{ .b = " ", .cp = 0x20 },
@@ -126,7 +126,7 @@ int main() {
 	TEST(symmetric, "cp2b and b2cp are symmetric");
 
 	// Some Valid Strings
-	utf8* svs[] = {
+	char* svs[] = {
 		"!@#$%^&*()_+",
 		"ascii is cool",
 		"Pchnąć w tę łódź jeża lub ośm skrzyń fig.",
@@ -143,13 +143,13 @@ int main() {
 	TEST(utf8_width("Γαζίες καὶ μυρτιὲς δὲν θὰ βρῶ πιὰ στὸ χρυσαφὶ ξέφωτο.") == 53, "");
 	TEST(utf8_width("Eble ĉiu kvazaŭdeca fuŝĥoraĵo ĝojigas homtipon.") == 47, "");
 
-	for (size_t i = 0; i < sizeof(svs)/sizeof(utf8*); ++i) {
+	for (size_t i = 0; i < sizeof(svs)/sizeof(char*); ++i) {
 		TEST(utf8_width(svs[i])<=strlen(svs[i]), "apparent width <= length; loose, but always true");
 		TEST(utf8_width(svs[i]) == utf8_ng_till(svs[i], svs[i]+strlen(svs[i])), "");
 		TEST(utf8_validate(svs[i]), "all valid strings are valid");
 	}
 
-	utf8* sis[] = {
+	char* sis[] = {
 		"\xf0", // byte says 4 bytes, but there is only one
 		"\xe0",
 		"\xb0",
@@ -162,7 +162,7 @@ int main() {
 		"\x20\xac", // Euro sign in utf-16, big endian
 		"\xac\x20", // Euro sign in utf-16, little endian
 	};
-	for (size_t i = 0; i < sizeof(sis)/sizeof(utf8*); ++i) {
+	for (size_t i = 0; i < sizeof(sis)/sizeof(char*); ++i) {
 		TEST(!utf8_validate(sis[i]), "all invalid strings are invalid");
 	}
 
@@ -171,7 +171,7 @@ int main() {
 	TEST(utf8_slice_length("", 2) == 0, "");
 	TEST(utf8_slice_length("a", 0) == 0, "");
 
-	utf8 inserted[20] = "łąkała";
+	char inserted[20] = "łąkała";
 	utf8_insert(inserted, "ń", 2);
 	TEST(!strcmp(inserted, "łąńkała"), "");
 	utf8_insert(inserted, "ł", 5);

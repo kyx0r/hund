@@ -29,9 +29,13 @@
 #include <linux/limits.h>
 #include <locale.h>
 #include <time.h>
+#include <sys/wait.h>
+#include <signal.h>
 
 #include "file_view.h"
 #include "utf8.h"
+
+extern char** environ;
 
 #define MSG_BUFFER_SIZE 256
 
@@ -420,10 +424,10 @@ struct ui {
 	enum mode m;
 	enum msg_type mt;
 
-	utf8 msg[MSG_BUFFER_SIZE];
+	char msg[MSG_BUFFER_SIZE];
 
 	char prch;
-	utf8* prompt;
+	char* prompt;
 
 	PANEL* fvp[2];
 	struct file_view* fvs[2];
@@ -440,7 +444,7 @@ struct ui {
 	struct input il[INPUT_LIST_LENGTH];
 	int ili;
 
-	utf8* path; // path of chmodded file
+	char* path; // path of chmodded file
 	mode_t perm; // permissions of chmodded file
 	uid_t o;
 	gid_t g;
@@ -455,14 +459,21 @@ void ui_end(struct ui* const);
 void ui_draw(struct ui* const);
 void ui_update_geometry(struct ui* const);
 
-int chmod_open(struct ui* const, utf8* const);
+int chmod_open(struct ui* const, char* const);
 void chmod_close(struct ui* const);
 
-int ui_prompt(struct ui* const, const char* const q,
+int ui_select(struct ui* const, const char* const q,
 		const struct input*, const size_t);
 
 struct input get_input(WINDOW* const);
 enum command get_cmd(struct ui* const);
-int fill_textbox(utf8* const, utf8** const, const size_t, WINDOW* const);
+int fill_textbox(char* const, char** const, const size_t, WINDOW* const);
+
+int open_prompt(struct ui* const, char* const, char*, const size_t);
+
+void failed(struct ui* const, const char* const,
+		const int, const char* const);
+
+int spawn(char* const[]);
 
 #endif

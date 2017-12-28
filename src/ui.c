@@ -157,7 +157,7 @@ static void _printw_entry(WINDOW* const w, const fnum_t dr,
 			(cfr->l ? cfr->l->st_mode : 0)) + (highlight ? 1 : 0);
 	char* invname = NULL;
 	const bool valid = utf8_validate(cfr->file_name);
-	const utf8* const fn = (valid ? cfr->file_name : invname);
+	const char* const fn = (valid ? cfr->file_name : invname);
 	if (!valid) {
 		invname = malloc(NAME_MAX+1);
 		cut_non_ascii(cfr->file_name, invname, NAME_MAX);
@@ -520,7 +520,7 @@ void ui_update_geometry(struct ui* const i) {
 	i->ui_needs_refresh = false;
 }
 
-int chmod_open(struct ui* const i, utf8* const path) {
+int chmod_open(struct ui* const i, char* const path) {
 	struct stat s;
 	if (stat(path, &s)) return errno;
 	errno = 0;
@@ -547,7 +547,7 @@ void chmod_close(struct ui* const i) {
 	i->path = NULL;
 }
 
-int ui_prompt(struct ui* const i, const char* const q,
+int ui_select(struct ui* const i, const char* const q,
 		const struct input* o, const size_t oc) {
 	int top = 0;
 	char hints[32];
@@ -594,7 +594,7 @@ struct input get_input(WINDOW* const w) {
 	memset(&r, 0, sizeof(struct input));
 	size_t utflen = 0;
 	int init = wgetch(w);
-	const utf8 u = (utf8)init;
+	const char u = (char)init;
 	const char* kn = keyname(init);
 	if (init == -1) {
 		r.t = END;
@@ -611,7 +611,7 @@ struct input get_input(WINDOW* const w) {
 		r.t = UTF8;
 		r.d.utf[0] = u;
 		for (size_t i = 1; i < utflen; ++i) {
-			r.d.utf[i] = (utf8)wgetch(w);
+			r.d.utf[i] = (char)wgetch(w);
 		}
 	}
 	else {
@@ -707,7 +707,7 @@ enum command get_cmd(struct ui* const i) {
  * returns 2 on ^N and -2 on ^P
  * returns -3 if KEY_RESIZE was 'pressed'
  */
-int fill_textbox(utf8* const buf, utf8** const buftop,
+int fill_textbox(char* const buf, char** const buftop,
 		const size_t bsize, WINDOW* const w) {
 	curs_set(2);
 	wmove(w, 0, utf8_width(buf)-utf8_width(*buftop)+1);
@@ -776,4 +776,50 @@ int fill_textbox(utf8* const buf, utf8** const buftop,
 		}
 	}
 	return 1;
+}
+
+int open_prompt(struct ui* const i, char* const t,
+		char* t_top, const size_t t_size) {
+	i->prch = '>';
+	i->prompt = t;
+	ui_draw(i);
+	int r = 1;
+	while (r != -1 && r != 0) {
+		r = fill_textbox(t, &t_top, t_size, panel_window(i->status));
+		if (r == -3) ui_update_geometry(i);
+		ui_draw(i); // TODO only redraw hintbar
+	}
+	i->prompt = NULL;
+	return r;
+}
+
+void failed(struct ui* const i, const char* const f,
+		const int reason, const char* const custom) {
+	i->mt = MSG_ERROR;
+	if (custom) {
+		snprintf(i->msg, MSG_BUFFER_SIZE, "%s failed: %s", f, custom);
+	}
+	else {
+		snprintf(i->msg, MSG_BUFFER_SIZE, "%s failed: %s (%d)",
+				f, strerror(reason), reason);
+	}
+}
+
+int spawn(char* const arg[]) {
+	def_prog_mode();
+	endwin();
+	int ret = 0, status, nullfd;
+	pid_t pid = fork();
+	if (pid == 0) {
+		nullfd = open("/dev/null", O_WRONLY, 0100);
+		if (dup2(nullfd, STDERR_FILENO) == -1) ret = errno;
+		// TODO ???
+		close(nullfd);
+		if (execve(arg[0], arg, environ)) ret = errno;
+	}
+	else {
+		while (waitpid(pid, &status, 0) == -1);
+	}
+	reset_prog_mode();
+	return ret;
 }

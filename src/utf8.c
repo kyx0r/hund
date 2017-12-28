@@ -20,7 +20,7 @@
 #include "include/utf8.h"
 
 /* CodePoint To Bytes */
-void utf8_cp2b(utf8* const b, const codepoint_t cp) {
+void utf8_cp2b(char* const b, const codepoint_t cp) {
 	if (cp < (codepoint_t) 0x80) {
 		b[0] = 0x7f & cp;
 	}
@@ -42,7 +42,7 @@ void utf8_cp2b(utf8* const b, const codepoint_t cp) {
 }
 
 /* Bytes To CodePoint */
-codepoint_t utf8_b2cp(const utf8* const b) {
+codepoint_t utf8_b2cp(const char* const b) {
 	codepoint_t cp = 0;
 	if ((b[0] & 0x80) == 0) {
 		cp = b[0];
@@ -96,7 +96,7 @@ codepoint_t utf8_b2cp(const utf8* const b) {
  * 1 x 4 bytes
  * 11111xxx -> invalid (see impementation)
  */
-size_t utf8_g2nb(const utf8* const g) {
+size_t utf8_g2nb(const char* const g) {
 	if (!*g) return 0;
 	// Top 5 bits To Length
 	static const char t2l[32] = {
@@ -119,7 +119,7 @@ size_t utf8_cp2nb(const codepoint_t cp) {
 }
 
 /* Apparent width */
-size_t utf8_width(const utf8* b) {
+size_t utf8_width(const char* b) {
 	size_t g = 0;
 	size_t s;
 	while (*b && (s = utf8_g2nb(b)) != 0) {
@@ -130,7 +130,7 @@ size_t utf8_width(const utf8* b) {
 }
 
 /* Calculates how much bytes take first g glyphs */
-size_t utf8_slice_length(const utf8* const b, size_t g) {
+size_t utf8_slice_length(const char* const b, size_t g) {
 	size_t r = 0;
 	for (size_t i = 0; i < g && *(b+r); ++i) {
 		r += utf8_g2nb(b+r);
@@ -139,7 +139,7 @@ size_t utf8_slice_length(const utf8* const b, size_t g) {
 }
 
 /* Number of glyphs till some address in that string */
-size_t utf8_ng_till(const utf8* a, const utf8* const b) {
+size_t utf8_ng_till(const char* a, const char* const b) {
 	size_t g = 0;
 	while (b - a > 0) {
 		a += utf8_g2nb(a);
@@ -148,7 +148,7 @@ size_t utf8_ng_till(const utf8* a, const utf8* const b) {
 	return g;
 }
 
-bool utf8_validate(const utf8* const b) {
+bool utf8_validate(const char* const b) {
 	const size_t bl = strlen(b);
 	size_t i = 0;
 	while (i < bl) {
@@ -158,7 +158,7 @@ bool utf8_validate(const utf8* const b) {
 		 * inital byte are like 10xxxxxx
 		 */
 		if (s > 1) {
-			const utf8* v = b+i+1;
+			const char* v = b+i+1;
 			while (v < b+i+s) {
 				if ((*v & 0xc0) != 0x80) return false;
 				v += 1;
@@ -169,7 +169,7 @@ bool utf8_validate(const utf8* const b) {
 	return i == bl;
 }
 
-void utf8_insert(utf8* a, const utf8* const b, const size_t pos) {
+void utf8_insert(char* a, const char* const b, const size_t pos) {
 	const size_t bl = strlen(b);
 	for (size_t i = 0; i < pos; ++i) {
 		a += utf8_g2nb(a);
@@ -179,8 +179,8 @@ void utf8_insert(utf8* a, const utf8* const b, const size_t pos) {
 }
 
 /* Remove glyph at index */
-void utf8_remove(utf8* const a, const size_t j) {
-	utf8* t = a;
+void utf8_remove(char* const a, const size_t j) {
+	char* t = a;
 	for (size_t i = 0; i < j; ++i) {
 		t += utf8_g2nb(t);
 	}
@@ -189,7 +189,7 @@ void utf8_remove(utf8* const a, const size_t j) {
 }
 
 /* Copies only ASCII characters to buf */
-void cut_non_ascii(const utf8* str, utf8* buf, size_t n) {
+void cut_non_ascii(const char* str, char* buf, size_t n) {
 	while (*str && n) {
 		if (utf8_g2nb(str) == 1) {
 			*buf = *str;

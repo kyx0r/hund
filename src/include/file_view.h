@@ -43,8 +43,8 @@ void prev_entry(struct file_view* const);
 void last_entry(struct file_view* const);
 
 void delete_file_list(struct file_view* const);
-bool file_on_list(struct file_view* const, const utf8* const);
-void file_highlight(struct file_view* const, const utf8* const);
+bool file_on_list(struct file_view* const, const char* const);
+void file_highlight(struct file_view* const, const char* const);
 
 bool file_find(struct file_view* const, const char* const, fnum_t, fnum_t);
 
@@ -57,7 +57,7 @@ void file_view_toggle_hidden(struct file_view* const);
 int file_view_scan_dir(struct file_view* const);
 void file_view_sort(struct file_view* const);
 
-utf8* file_view_path_to_selected(struct file_view* const);
+char* file_view_path_to_selected(struct file_view* const);
 
 void file_view_change_sorting(struct file_view* const, sorting_foo);
 

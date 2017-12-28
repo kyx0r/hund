@@ -152,7 +152,7 @@ void delete_file_list(struct file_view* const fv) {
 	fv->selection = fv->num_hidden = 0;
 }
 
-bool file_on_list(struct file_view* const fv, const utf8* const name) {
+bool file_on_list(struct file_view* const fv, const char* const name) {
 	fnum_t i = 0;
 	while (i < fv->num_files &&	strcmp(fv->file_list[i]->file_name, name)) {
 		i += 1;
@@ -161,7 +161,7 @@ bool file_on_list(struct file_view* const fv, const utf8* const name) {
 }
 
 /* Finds and highlighs file with given name */
-void file_highlight(struct file_view* const fv, const utf8* const name) {
+void file_highlight(struct file_view* const fv, const char* const name) {
 	fnum_t i = 0;
 	while (i < fv->num_files &&	strcmp(fv->file_list[i]->file_name, name)) {
 		i += 1;
@@ -176,7 +176,7 @@ void file_highlight(struct file_view* const fv, const utf8* const name) {
 	}
 }
 
-bool file_find(struct file_view* const fv, const utf8* const name,
+bool file_find(struct file_view* const fv, const char* const name,
 		fnum_t start, fnum_t end) {
 	if (start <= end) {
 		for (fnum_t i = start; i <= end; ++i) {
@@ -205,7 +205,7 @@ bool file_find(struct file_view* const fv, const utf8* const name,
 
 int file_view_enter_selected_dir(struct file_view* const fv) {
 	if (!fv->num_files || !visible(fv, fv->selection)) return 0;
-	const utf8* const fn = fv->file_list[fv->selection]->file_name;
+	const char* const fn = fv->file_list[fv->selection]->file_name;
 	const struct stat* rst = &fv->file_list[fv->selection]->s;
 	const struct stat* lst = fv->file_list[fv->selection]->l;
 	if (!lst) return ENOENT;
@@ -224,7 +224,7 @@ int file_view_enter_selected_dir(struct file_view* const fv) {
 }
 
 int file_view_up_dir(struct file_view* const fv) {
-	utf8* prevdir = strncpy(malloc(NAME_MAX+1),
+	char* prevdir = strncpy(malloc(NAME_MAX+1),
 			fv->wd+current_dir_i(fv->wd), NAME_MAX);
 	up_dir(fv->wd);
 	int err = file_view_scan_dir(fv);
@@ -277,9 +277,9 @@ void file_view_sort(struct file_view* const fv) {
 	sort_file_list(fv->sorting, fv->file_list, fv->num_files);
 }
 
-utf8* file_view_path_to_selected(struct file_view* const fv) {
+char* file_view_path_to_selected(struct file_view* const fv) {
 	if (!fv->num_files) return NULL;
-	utf8* p = malloc(PATH_MAX+1);
+	char* p = malloc(PATH_MAX+1);
 	strncpy(p, fv->wd, PATH_MAX);
 	if (enter_dir(p, fv->file_list[fv->selection]->file_name)) {
 		free(p);
