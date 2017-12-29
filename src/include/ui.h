@@ -26,7 +26,7 @@
 
 #include <ncurses.h> // TODO
 #include <panel.h>
-#include <linux/limits.h>
+#include <limits.h>
 #include <locale.h>
 #include <time.h>
 #include <sys/wait.h>
