@@ -338,13 +338,11 @@ static void stringify_pug(mode_t m, uid_t u, gid_t g,
 
 static void _printw_statusbar(struct ui* const i, const int dr) {
 	// TODO FIXME
-	const size_t status_size = 32;
-	char status[status_size];
-	snprintf(status, status_size,
-			"%uf %u%c %us",
-			i->pv->num_files-(i->pv->show_hidden ? 0 : i->pv->num_hidden),
-			i->pv->num_hidden, (i->pv->show_hidden ? 'H' : 'h'),
-			i->pv->num_selected);
+	char status[32];
+	const fnum_t nhf = (i->pv->show_hidden ? 0 : i->pv->num_hidden);
+	const char hs = (i->pv->show_hidden ? 'H' : 'h');
+	snprintf(status, sizeof(status), "%uf %u%c %us", i->pv->num_files-nhf,
+			i->pv->num_hidden, hs, i->pv->num_selected);
 	const size_t cw = utf8_width(status);
 	const size_t uw = utf8_width(i->user);
 	const size_t gw = utf8_width(i->group);
@@ -374,11 +372,11 @@ static void _printw_statusbar(struct ui* const i, const int dr) {
 	mvwprintw(stdscr, dr, top, "%c", i->perms[0]);
 	top += 1;
 	for (size_t p = 1; p < 10; ++p) {
-		mode_t m[2] = {
+		const mode_t m[2] = {
 			(i->perm[0] & 0777) & (0400 >> (p-1)),
 			(i->perm[1] & 0777) & (0400 >> (p-1))
 		};
-		bool diff = m[0] != m[1];
+		const bool diff = m[0] != m[1];
 		if (diff) wattron(stdscr, A_UNDERLINE);
 		mvwprintw(stdscr, dr, top, "%c", i->perms[p]);
 		if (diff) wattroff(stdscr, A_UNDERLINE);
@@ -441,7 +439,8 @@ void _printw_cmd_and_keyseqs(WINDOW* const w,
 }
 
 void _find_all_keyseqs4cmd(const struct ui* const i, const enum command c,
-		const enum mode m, const struct input2cmd* ic[], size_t* const ki) {
+		const enum mode m, const struct input2cmd* ic[],
+		size_t* const ki) {
 	*ki = 0;
 	for (size_t k = 0; k < i->kml; ++k) {
 		if (i->kmap[k].c != c || i->kmap[k].m != m) continue;
@@ -510,7 +509,7 @@ void ui_draw(struct ui* const i) {
 		for (int v = 0; v < 2; ++v) {
 			ui_draw_panel(i, v);
 		}
-		const struct file_record* _hfr = hfr(i->pv);
+		const struct file_record* const _hfr = hfr(i->pv);
 		if (_hfr) {
 			const time_t lt = _hfr->s.st_mtim.tv_sec;
 			const struct tm* const tt = localtime(&lt);
@@ -520,7 +519,7 @@ void ui_draw(struct ui* const i) {
 		}
 		_printw_statusbar(i, i->scrh-2);
 	}
-	// TODO
+	size_t top = 0;
 	if (i->mt) {
 		int cp = 0;
 		switch (i->mt) {
@@ -529,20 +528,20 @@ void ui_draw(struct ui* const i) {
 		default: break;
 		}
 		wattron(stdscr, COLOR_PAIR(cp));
-		mvwprintw(stdscr, i->scrh-1, 0, "%s", i->msg);
+		mvwprintw(stdscr, i->scrh-1, top, "%s", i->msg);
 		wattroff(stdscr, COLOR_PAIR(cp));
-
-		mvwprintw(stdscr, i->scrh-1, strlen(i->msg), "%*c",
-				i->scrw-utf8_width(i->msg), ' ');
+		top += strlen(i->msg);
 		i->mt = MSG_NONE;
 	}
 	else if (i->prompt) { // TODO
-		mvwprintw(stdscr, i->scrh-1, 0, "%c%s%*c", i->prch, i->prompt,
-				i->scrw-(utf8_width(i->prompt)+1), ' ');
+		mvwprintw(stdscr, i->scrh-1, top, "%c%s", i->prch, i->prompt);
+		top += utf8_width(i->prompt)+1;
 	}
-	else {
-		mvwprintw(stdscr, i->scrh-1, 0, "%*c", i->scrw, ' ');
+	else if (i->m == MODE_CHMOD) {
+		mvwprintw(stdscr, i->scrh-1, top, "-- CHMOD --");
+		top += 11;
 	}
+	mvwprintw(stdscr, i->scrh-1, top, "%*c", i->scrw-top, ' ');
 	update_panels();
 	doupdate();
 	refresh();
@@ -635,8 +634,8 @@ int ui_select(struct ui* const i, const char* const q,
  */
 struct input get_input(void) {
 	struct input r;
+	memset(&r, 0, sizeof(struct input));
 	r.t = END;
-	memset(&r.d, 0, sizeof(union input_data));
 	size_t utflen = 0;
 	int init = getch();
 	const char u = (char)init;
@@ -803,12 +802,11 @@ int prompt(struct ui* const i, char* const t,
 	i->prch = '>';
 	i->prompt = t;
 	ui_draw(i);
-	int r = 1;
-	while (r != -1 && r != 0) {
+	int r;
+	do {
 		r = fill_textbox(i, t, &t_top, t_size);
-		if (r == -3) ui_update_geometry(i);
 		ui_draw(i); // TODO only redraw hintbar
-	}
+	} while (r && r != -1);
 	i->prompt = NULL;
 	return r;
 }
@@ -841,5 +839,6 @@ int spawn(char* const arg[]) {
 		while (waitpid(pid, &status, 0) == -1);
 	}
 	reset_prog_mode();
+	refresh();
 	return ret;
 }
