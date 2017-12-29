@@ -23,6 +23,10 @@ bool dotdot(const char* const n) {
 	return !strncmp(n, ".", 2) || !strncmp(n, "..", 3);
 }
 
+bool too_special(const mode_t m) {
+	return S_ISBLK(m) || S_ISCHR(m) || S_ISFIFO(m) || S_ISSOCK(m);
+}
+
 bool is_lnk(const char* path) {
 	struct stat s;
 	return (!lstat(path, &s) && S_ISLNK(s.st_mode));

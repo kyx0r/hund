@@ -87,6 +87,7 @@ struct file_record {
 };
 
 bool dotdot(const char* const);
+bool too_special(const mode_t);
 bool is_lnk(const char*);
 bool is_dir(const char*);
 bool same_fs(const char* const, const char* const);
