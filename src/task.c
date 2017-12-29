@@ -17,6 +17,10 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/* TODO
+ * 1. TODO fix nomenclature (targets?, renamed?)
+ */
+
 #include "include/task.h"
 
 void task_new(struct task* const t, const enum task_type tp,
@@ -63,10 +67,7 @@ int estimate_volume(char* path, ssize_t* const size_total,
 		if (!dir) return errno;
 		struct dirent* de;
 		while ((de = readdir(dir)) != NULL) {
-			if (!strncmp(de->d_name, ".", 2) ||
-				!strncmp(de->d_name, "..", 3)) {
-				continue;
-			}
+			if (dotdot(de->d_name)) continue;
 			char fpath[PATH_MAX+1];
 			strncpy(fpath, path, PATH_MAX);
 			if ((r = append_dir(fpath, de->d_name))) {
@@ -276,11 +277,9 @@ void tree_walk_step(struct tree_walk* tw) {
 	}
 
 	struct dirent* ce;
-	do { // Skip . and .
+	do { // Skip . and ..
 		ce = readdir(tw->dt->cd);
-	} while (ce && (
-			!strncmp(ce->d_name, ".", 2) ||
-			!strncmp(ce->d_name, "..", 3)));
+	} while (ce && dotdot(ce->d_name));
 
 	if (!ce) { // directory is empty or reached end of directory
 		tw->tws = AT_DIR_END;
@@ -316,21 +315,21 @@ int _at_step(struct task* const t, int* const c,
 		char* const new_path, char* const buf, const size_t bufsize) {
 	const bool copy = t->t == TASK_COPY || t->t == TASK_MOVE;
 	const bool remove = t->t == TASK_MOVE || t->t == TASK_REMOVE;
+	const char* const tfn = t->targets.str[t->current_target];
+	const char* const rfn = t->renamed.str[t->current_target];
 	switch (t->tw.tws) {
 	case AT_INIT:
 		if (copy && remove && same_fs(t->src, t->dst)) {
-			build_new_path(t->tw.cpath, t->src, t->dst,
-					t->targets.str[t->current_target],
-					t->renamed.str[t->current_target], new_path);
+			build_new_path(t->tw.cpath, t->src,
+					t->dst, tfn, rfn, new_path);
 			t->tw.tws = AT_EXIT;
 			if (rename(t->tw.cpath, new_path)) return errno;
 		}
 		break;
 	case AT_LINK:
 		if (copy) {
-			build_new_path(t->tw.cpath, t->src, t->dst,
-					t->targets.str[t->current_target],
-					t->renamed.str[t->current_target], new_path);
+			build_new_path(t->tw.cpath, t->src,
+					t->dst, tfn, rfn, new_path);
 			int err;
 			if (t->rl) {
 				err = link_copy_raw(t->tw.cpath, new_path);
@@ -351,10 +350,10 @@ int _at_step(struct task* const t, int* const c,
 		break;
 	case AT_FILE:
 		if (copy) {
-			build_new_path(t->tw.cpath, t->src, t->dst,
-					t->targets.str[t->current_target],
-					t->renamed.str[t->current_target], new_path);
-			_copy_some(t, t->tw.cpath, new_path, buf, bufsize, c); // TODO err
+			build_new_path(t->tw.cpath, t->src,
+					t->dst, tfn, rfn, new_path);
+			_copy_some(t, t->tw.cpath, new_path, buf, bufsize, c);
+			// ^^^^ TODO err
 			if (t->in != -1 || t->out != -1) return 0;
 		}
 		if (remove) {
@@ -368,9 +367,8 @@ int _at_step(struct task* const t, int* const c,
 		break;
 	case AT_DIR:
 		if (copy) {
-			build_new_path(t->tw.cpath, t->src, t->dst,
-					t->targets.str[t->current_target],
-					t->renamed.str[t->current_target], new_path);
+			build_new_path(t->tw.cpath, t->src,
+					t->dst, tfn, rfn, new_path);
 			if (mkdir(new_path, t->tw.cs.st_mode)) return errno;
 			t->size_done += t->tw.cs.st_size;
 			t->dirs_done += 1;

@@ -40,6 +40,10 @@
 
 #include "fs.h"
 
+#ifndef LOGIN_NAME_MAX // For BSD, TODO
+	#define LOGIN_NAME_MAX _SC_LOGIN_NAME_MAX
+#endif
+
 /* From LSB to MSB, by bit index */
 static const char* const mode_bit_meaning[] = {
 	"execute/sears by others",
@@ -82,6 +86,7 @@ struct file_record {
 	bool selected;
 };
 
+bool dotdot(const char* const);
 bool is_lnk(const char*);
 bool is_dir(const char*);
 bool same_fs(const char* const, const char* const);

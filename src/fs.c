@@ -19,6 +19,10 @@
 
 #include "include/fs.h"
 
+bool dotdot(const char* const n) {
+	return !strncmp(n, ".", 2) || !strncmp(n, "..", 3);
+}
+
 bool is_lnk(const char* path) {
 	struct stat s;
 	return (!lstat(path, &s) && S_ISLNK(s.st_mode));
@@ -96,10 +100,7 @@ int scan_dir(const char* const wd, struct file_record*** const fl,
 	*fl = tmp;
 	fnum_t gf = 0;
 	while ((de = readdir(dir)) != NULL) {
-		if (!strncmp(de->d_name, ".", 2) ||
-		    !strncmp(de->d_name, "..", 3)) {
-			continue;
-		}
+		if (dotdot(de->d_name)) continue;
 		if (de->d_name[0] == '.') {
 			*nhf += 1;
 		}
