@@ -46,7 +46,10 @@
  * 9. Error handling.
  * 10. Transfer speed and % done
  * 11. Prompt needs to be less ambiguous (hints, like y=yes, a=abort, ^N=next)
- * 12. Handle WINCHG raw
+ * 13. Actions like estimating volume or renaming
+ *     should have visible progress too
+ * 14. IDEA: Detecting file formats -> display name of a program that
+ *      would open highlighted file
  */
 
 static int editor(char* const path) {
@@ -70,7 +73,7 @@ static int pager(char* const path) {
 	return 0;
 }
 
-static void open_find(struct ui* const i) {
+inline static void open_find(struct ui* const i) {
 	char t[NAME_MAX+1];
 	char* t_top = t;
 	memset(t, 0, NAME_MAX+1);
@@ -78,10 +81,9 @@ static void open_find(struct ui* const i) {
 	i->prch = '/';
 	i->prompt = t;
 	ui_draw(i);
-	int r = 1;
-	while (r != 0 && r != -1) {
+	int r;
+	do {
 		r = fill_textbox(i, t, &t_top, NAME_MAX);
-		if (r == -3) ui_update_geometry(i);
 		if (r == -1) i->pv->selection = sbfc;
 		else if (r == 2 || r == -2 || t_top != t) {
 			fnum_t s = 0; // Start
@@ -94,25 +96,57 @@ static void open_find(struct ui* const i) {
 				s = i->pv->selection-1;
 				e = 0;
 			}
-			if (!file_find(i->pv, t, s, e)) {
-				//i->mt = MSG_INFO;
-				//snprintf(i->msg, MSG_BUFFER_SIZE, "no more matching entries");
-			}
+			file_find(i->pv, t, s, e);
 		}
 		ui_draw(i);
-	}
+	} while (r && r != -1);
 	i->prompt = NULL;
+}
+
+/* Only solves copy/move/remove conflicts */
+inline static bool _solve_conflicts(struct ui* const i,
+		struct string_list* const s,
+		struct string_list* const r) {
+	static const char* const question[] = {
+		"There are conflicts. Rename?",
+		"There are still conflicts. Try again?",
+	};
+	static const struct input o[] = { // TODO
+		UTF8("n"), UTF8("y"), UTF8("a")
+	};
+	int d = ui_select(i, question[0], o, 3);
+	if (!d) {
+		remove_conflicting(i->sv, s);
+		list_copy(r, s);
+		return s->len;
+	}
+	if (d == 1 && s->len) {
+		list_copy(r, s);
+		bool solved;
+		do {
+			char tmpn[] = "/tmp/hund.XXXXXXXX";
+			int tmpfd = mkstemp(tmpn);
+			list_to_file(r, tmpfd);
+
+			editor(tmpn);
+			file_to_list(tmpfd, r); // TODO err
+
+			close(tmpfd);
+			unlink(tmpn);
+			if ((solved = !conflicts_with_existing(i->sv, r))) {
+				return true;
+			}
+		} while (!solved && ui_select(i, question[1], o, 2));
+	}
+	free_list(s);
+	free_list(r);
+	return false;
 }
 
 static void prepare_long_task(struct ui* const i, struct task* const t,
 		enum task_type tt) {
 	// TODO error handling
-	// TODO FIXME simplify
 	if (!i->pv->num_files) return;
-	static const struct input o[] = {
-		UTF8("n"), UTF8("y"), UTF8("a")
-	};
-	//if (tt == TASK_REMOVE && !ui_select(i, "Delete?", o, 2)) return;
 	if (!i->pv->num_selected) {
 		hfr(i->pv)->selected = true;
 		i->pv->num_selected = 1;
@@ -120,39 +154,13 @@ static void prepare_long_task(struct ui* const i, struct task* const t,
 	struct string_list selected = { NULL, 0 };
 	struct string_list renamed = { NULL, 0 };
 	file_view_selected_to_list(i->pv, &selected);
+	static const struct input o[] = {
+		UTF8("n"), UTF8("y")
+	};
+	if (tt == TASK_REMOVE && !ui_select(i, "Remove?", o, 2)) return;
 	if (tt == TASK_MOVE || tt == TASK_COPY) {
 		if (conflicts_with_existing(i->sv, &selected)) {
-			int d = ui_select(i, "There are conflicts. Rename?", o, 3);
-			if (!d) {
-				remove_conflicting(i->sv, &selected);
-				list_copy(&renamed, &selected);
-			}
-		    if (d == 2 || !selected.len) {
-				free_list(&selected);
-				return;
-			}
-			if (d == 1) {
-				list_copy(&renamed, &selected);
-				bool unsolved;
-				do {
-					char tmpn[] = "/tmp/hund.XXXXXXXX";
-					int tmpfd = mkstemp(tmpn);
-					list_to_file(&renamed, tmpfd);
-
-					editor(tmpn);
-					file_to_list(tmpfd, &renamed); // TODO err
-
-					close(tmpfd);
-					unlink(tmpn);
-					if ((unsolved = conflicts_with_existing(i->sv, &renamed))) {
-						if (!ui_select(i, "There still are conflicts. Try again?", o, 2)) {
-							free_list(&selected);
-							free_list(&renamed);
-							return;
-						}
-					}
-				} while (unsolved);
-			}
+			if (!_solve_conflicts(i, &selected, &renamed)) return;
 		}
 		else {
 			renamed.len = selected.len;
@@ -218,10 +226,11 @@ static void process_input(struct ui* const i, struct task* const t) {
 	case CMD_CHOWN:
 		/* TODO in $VISUAL */
 		name = calloc(LOGIN_NAME_MAX+1, sizeof(char));
-		if (!open_prompt(i, name, name, LOGIN_NAME_MAX)) {
+		if (!prompt(i, name, name, LOGIN_NAME_MAX)) {
 			errno = 0;
 			struct passwd* pwd = getpwnam(name);
-			if (!pwd) failed(i, "chown", 0, "Such user does not exist");
+			if (!pwd) failed(i, "chown", 0,
+					"Such user does not exist");
 			else {
 				i->o[1] = pwd->pw_uid;
 				strncpy(i->user, pwd->pw_name, LOGIN_NAME_MAX);
@@ -232,10 +241,11 @@ static void process_input(struct ui* const i, struct task* const t) {
 	case CMD_CHGRP:
 		/* TODO in $VISUAL */
 		name = calloc(LOGIN_NAME_MAX+1, sizeof(char));
-		if (!open_prompt(i, name, name, LOGIN_NAME_MAX)) {
+		if (!prompt(i, name, name, LOGIN_NAME_MAX)) {
 			errno = 0;
 			struct group* grp = getgrnam(name);
-			if (!grp) failed(i, "chgrp", 0, "Such group does not exist");
+			if (!grp) failed(i, "chgrp", 0,
+					"Such group does not exist");
 			else {
 				i->g[1] = grp->gr_gid;
 				strncpy(i->group, grp->gr_name, LOGIN_NAME_MAX);
@@ -317,7 +327,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 	case CMD_CD:
 		path = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
 		cdp = calloc(PATH_MAX+1, sizeof(char));
-		if ((open_prompt(i, cdp, cdp, PATH_MAX)
+		if ((prompt(i, cdp, cdp, PATH_MAX)
 		   || (err = ENAMETOOLONG, enter_dir(path, cdp))
 		   || (err = ENOENT, access(path, F_OK))
 		   || (err = ENOTDIR, !is_dir(path)))
@@ -346,7 +356,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 			path = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
 			if (((err = EINVAL, contains(files.str[f], "/"))
 			   || (err = append_dir(path, files.str[f]))
-			   || (mkdir(path, MKDIR_DEFAULT_PERM) ? (err = errno) : 0))
+			   || (mkdir(path, MKDIR_DEFAULT_PERM) ? (err=errno) : 0))
 			   && err) {
 				failed(i, "creating directory", err, NULL);
 			}
@@ -400,7 +410,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 				if (((err = EINVAL, contains(rf.str[f], "/"))
 				   || (err = append_dir(opath, sf.str[f]))
 				   || (err = append_dir(npath, rf.str[f]))
-				   || (rename(opath, npath) ? (err = errno) : 0))
+				   || (rename(opath, npath) ? (err=errno) : 0))
 				   && err) {
 					failed(i, "rename", err, NULL);
 				}
@@ -527,7 +537,7 @@ static void task_finish(struct ui* const i, struct task* const t) {
 		if (t->t == TASK_REMOVE) file_view_afterdel(i->pv);
 		else if (t->t == TASK_MOVE) prev_entry(i->pv);
 		i->mt = MSG_INFO;
-		snprintf(i->msg, MSG_BUFFER_SIZE, "%s %s",
+		snprintf(i->msg, MSG_BUFFER_SIZE, "%s from %s", // TODO
 				task_strings[t->t][PAST], t->src);
 	}
 	task_clean(t);
@@ -537,7 +547,7 @@ static void task_finish(struct ui* const i, struct task* const t) {
 
 static void task_execute(struct ui* const i, struct task* const t) {
 	wtimeout(stdscr, 5);
-	int err = 0;
+	int err;
 	if (!t->paused && (err = do_task(t, 1024))) {
 		failed(i, task_strings[t->t][NOUN], err, NULL);
 		task_clean(t); // TODO
@@ -557,6 +567,8 @@ static void task_execute(struct ui* const i, struct task* const t) {
 		sdone, stota);
 }
 
+extern struct ui* I;
+
 int main(int argc, char* argv[]) {
 	static const char* const help = \
 	"Usage: hund [OPTION] [left panel] [right panel]\n"
@@ -570,7 +582,7 @@ int main(int argc, char* argv[]) {
 		{"chdir", required_argument, 0, 'c'},
 		{"help", no_argument, 0, 'h'},
 		{0, 0, 0, 0}
-    };
+	};
 	int o, opti = 0;
 	while ((o = getopt_long(argc, argv, sopt, lopt, &opti)) != -1) {
 		if (o == -1) break;
@@ -578,7 +590,8 @@ int main(int argc, char* argv[]) {
 		case 'c':
 			if (chdir(optarg)) {
 				int e = errno;
-				fprintf(stderr, "chdir failed: %s (%d)\n", strerror(e), e);
+				fprintf(stderr, "chdir failed:"
+						" %s (%d)\n", strerror(e), e);
 				exit(EXIT_FAILURE);
 			}
 			break;
@@ -601,7 +614,8 @@ int main(int argc, char* argv[]) {
 		}
 		else {
 			// Only two panels, only two paths allowed
-			fprintf(stderr, "invalid argument: '%s'\n", argv[optind]);
+			fprintf(stderr, "invalid argument:"
+					" '%s'\n", argv[optind]);
 			exit(EXIT_FAILURE);
 		}
 		optind += 1;
@@ -612,6 +626,7 @@ int main(int argc, char* argv[]) {
 	fvs[0].sorting = fvs[1].sorting = cmp_name_asc;
 
 	struct ui i = ui_init(&fvs[0], &fvs[1]);
+	I = &i;
 	for (int v = 0; v < 2; ++v) {
 		if (!getcwd(fvs[v].wd, PATH_MAX)) {
 			fprintf(stderr, "could not read cwd; jumping to /\n");
@@ -620,7 +635,8 @@ int main(int argc, char* argv[]) {
 		if (init_wd[v]) { // Apply argument-passed paths
 			char* const e = strndup(init_wd[v], PATH_MAX);
 			if (enter_dir(fvs[v].wd, e)) {
-				fprintf(stderr, "path too long: limit is %d; jumping to /\n", PATH_MAX);
+				fprintf(stderr, "path too long: limit is %d;"
+						" jumping to /\n", PATH_MAX);
 				strncpy(fvs[v].wd, "/", 2);
 			}
 			free(e);
@@ -632,7 +648,7 @@ int main(int argc, char* argv[]) {
 					fvs[v].wd, strerror(r), r);
 			exit(EXIT_FAILURE);
 		}
-		sort_file_list(fvs[v].sorting, fvs[v].file_list, fvs[v].num_files);
+		file_view_sort(&fvs[v]);
 		first_entry(&fvs[v]);
 	}
 
@@ -640,7 +656,8 @@ int main(int argc, char* argv[]) {
 	memset(&t, 0, sizeof(struct task));
 
 	i.mt = MSG_INFO;
-	snprintf(i.msg, MSG_BUFFER_SIZE, "Type ? for help and license notice.");
+	snprintf(i.msg, MSG_BUFFER_SIZE,
+			"Type ? for help and license notice.");
 	while (i.run) {
 		if (i.ui_needs_refresh) {
 			ui_update_geometry(&i);

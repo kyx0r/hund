@@ -29,7 +29,6 @@
  * 0. terimnal should be assumed to be at least 80x24
  * 1. TODO selection is not very visible
  * 2. TODO scroll too long filenames
- * 3. TODO KEY_RESIZE - better handling, less mess
  */
 
 static enum theme_element mode2theme(const mode_t m, const mode_t n) {
@@ -54,6 +53,16 @@ static enum theme_element mode2theme(const mode_t m, const mode_t n) {
 		}
 	default: return THEME_ENTRY_REG_UNS;
 	}
+}
+
+struct ui* I;
+static void handle_winch(int sig) {
+	(void)(sig);
+	endwin();
+	refresh();
+	clear();
+	ui_update_geometry(I);
+	ui_draw(I);
 }
 
 struct ui ui_init(struct file_view* const pv,
@@ -111,6 +120,11 @@ struct ui ui_init(struct file_view* const pv,
 	memset(i.perm, 0, sizeof(i.perm));
 	memset(i.o, 0, sizeof(i.o));
 	memset(i.g, 0, sizeof(i.g));
+
+	struct sigaction sa;
+	memset(&sa, 0, sizeof(struct sigaction));
+	sa.sa_handler = handle_winch;
+	sigaction(SIGWINCH, &sa, NULL);
 	return i;
 }
 
@@ -621,15 +635,13 @@ int ui_select(struct ui* const i, const char* const q,
  */
 struct input get_input(void) {
 	struct input r;
-	memset(&r, 0, sizeof(struct input));
+	r.t = END;
+	memset(&r.d, 0, sizeof(union input_data));
 	size_t utflen = 0;
 	int init = getch();
 	const char u = (char)init;
 	const char* kn = keyname(init);
-	if (init == -1) {
-		r.t = END;
-	}
-	else if (strlen(kn) == 2 && kn[0] == '^') {
+	if (strlen(kn) == 2 && kn[0] == '^') {
 		r.t = CTRL;
 		r.d.c = kn[1];
 	}
@@ -644,13 +656,6 @@ struct input get_input(void) {
 			r.d.utf[i] = (char)getch();
 		}
 	}
-	else {
-		if (init == KEY_RESIZE) {
-			r.t = SPECIAL;
-			r.d.c = init;
-		}
-		else r.t = END;
-	}
 	return r;
 }
 
@@ -660,20 +665,10 @@ struct input get_input(void) {
  * clear ili, and hint/matching table.
  * If there are a few, do nothing, wait longer.
  * If there is only one, send it.
- *
- * HANDLES KEY_RESIZE // FIXME somewhere else?
  */
 enum command get_cmd(struct ui* const i) {
 	memset(i->mks, 0, i->kml*sizeof(unsigned short));
 	struct input newinput = get_input();
-	if (newinput.t == SPECIAL && newinput.d.c == KEY_RESIZE) {
-		ui_update_geometry(i); // TODO TODO FIXME maybe not here
-		ui_draw(i);
-		memset(i->il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
-		i->ili = 0;
-		return CMD_NONE;
-	}
-
 	if (newinput.t == END) return CMD_NONE;
 	else if (newinput.t == CTRL && newinput.d.c == '[') { // ESC
 		memset(i->il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
@@ -735,7 +730,6 @@ enum command get_cmd(struct ui* const i) {
  * If keeps gathering, returns 1.
  * Additionally:
  * returns 2 on ^N and -2 on ^P
- * returns -3 if KEY_RESIZE was 'pressed'
  */
 int fill_textbox(const struct ui* const I,
 		char* const buf, char** const buftop, const size_t bsize) {
@@ -744,7 +738,6 @@ int fill_textbox(const struct ui* const I,
 	refresh();
 	struct input i = get_input();
 	curs_set(0);
-	if (IS_SPEC(i, KEY_RESIZE)) return -3;
 	if (i.t == END) return 1;
 	if (IS_CTRL(i, '[')) return -1;
 	else if (IS_CTRL(i, 'N')) return 2;
