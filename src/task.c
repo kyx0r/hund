@@ -54,50 +54,42 @@ void task_clean(struct task* const t) {
 
 /*
  * Calculates size of all files and subdirectories in directory
+ * st = size_total
+ * ft = files_total
+ * dt = dirs_total
+ * tl = transparent links
+ *
  * TODO more testing
- * TODO errors
  */
-int estimate_volume(char* path, ssize_t* const size_total,
-		int* const files_total, int* const dirs_total, const bool tl) {
+int estimate_volume(char* path, ssize_t* const st,
+		int* const ft, int* const dt, const bool tl) {
 	int r = 0;
 	struct stat s;
-	if ((tl && stat(path, &s)) || (!tl && lstat(path, &s))) return errno;
-	if (S_ISDIR(s.st_mode)) {
-		DIR* dir = opendir(path);
-		if (!dir) return errno;
-		struct dirent* de;
-		while ((de = readdir(dir)) != NULL) {
-			if (dotdot(de->d_name)) continue;
-			char fpath[PATH_MAX+1];
-			strncpy(fpath, path, PATH_MAX);
-			if ((r = append_dir(fpath, de->d_name))) {
-				closedir(dir);
-				return r;
-			}
-			struct stat ss;
-			if ((tl && stat(fpath, &ss))
-			   || (!tl && lstat(fpath, &ss))) {
-				closedir(dir);
-				return errno;
-			}
-			if (S_ISDIR(ss.st_mode)) {
-				r |= estimate_volume(fpath, size_total,
-						files_total, dirs_total, tl);
-			}
-			else if (S_ISREG(ss.st_mode)) {
-				*size_total += ss.st_size;
-				*files_total += 1;
-			}
-			up_dir(fpath);
+	if (tl ? stat(path, &s) : lstat(path, &s)) return errno;
+	if (too_special(s.st_mode)) return 0;
+	if (S_ISREG(s.st_mode) || (!tl && S_ISLNK(s.st_mode))) {
+		*st += s.st_size;
+		*ft += 1;
+		return 0;
+	}
+	// This leaves only DIR
+	DIR* dir = opendir(path);
+	if (!dir) return errno;
+	struct dirent* de;
+	while ((de = readdir(dir)) != NULL) {
+		if (dotdot(de->d_name)) continue;
+		char fpath[PATH_MAX+1];
+		strncpy(fpath, path, PATH_MAX);
+		if ((r = append_dir(fpath, de->d_name))) {
+			closedir(dir);
+			return r;
 		}
-		*size_total += s.st_size;
-		*dirs_total += 1;
-		closedir(dir);
+		r = estimate_volume(fpath, st, ft, dt, tl);
+		up_dir(fpath);
 	}
-	else if (S_ISREG(s.st_mode)) {
-		*size_total += s.st_size;
-		*files_total += 1;
-	}
+	*st += s.st_size;
+	*dt += 1;
+	closedir(dir);
 	return r;
 }
 
@@ -316,7 +308,10 @@ int _at_step(struct task* const t, int* const c,
 	const bool copy = t->t == TASK_COPY || t->t == TASK_MOVE;
 	const bool remove = t->t == TASK_MOVE || t->t == TASK_REMOVE;
 	const char* const tfn = t->targets.str[t->current_target];
-	const char* const rfn = t->renamed.str[t->current_target];
+	const char* rfn = NULL;
+	if (t->t == TASK_COPY || t->t == TASK_MOVE) {
+		rfn = t->renamed.str[t->current_target];
+	}
 	switch (t->tw.tws) {
 	case AT_INIT:
 		if (copy && remove && same_fs(t->src, t->dst)) {
