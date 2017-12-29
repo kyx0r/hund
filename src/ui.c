@@ -139,7 +139,7 @@ static void _printw_pathbar(const char* const path,
 	}
 	else {
 		const size_t sg = path_width - ((width-2) + (pi?1:0));
-		const char* const p = path+pi+utf8_slice_length(path+pi, sg);
+		const char* const p = path+pi+utf8_Ng2nb(path+pi, sg);
 		mvwprintw(w, 0, x, " %s ", p);
 	}
 	wattroff(w, COLOR_PAIR(THEME_PATHBAR));
@@ -192,7 +192,7 @@ static void _printw_entry(WINDOW* const w, const fnum_t dr, const int y,
 	}
 	wattron(w, COLOR_PAIR(te));
 	mvwprintw(w, dr, y, "%c%.*s%*c%s%c",
-			open, utf8_slice_length(fn, fn_slice), fn,
+			open, utf8_Ng2nb(fn, fn_slice), fn,
 			space, ' ', sbuf, close);
 	wattroff(w, COLOR_PAIR(te));
 	if (!valid) free(invname);
@@ -805,7 +805,7 @@ int fill_textbox(const struct ui* const I,
 	return 1;
 }
 
-int open_prompt(struct ui* const i, char* const t,
+int prompt(struct ui* const i, char* const t,
 		char* t_top, const size_t t_size) {
 	i->prch = '>';
 	i->prompt = t;

@@ -30,7 +30,7 @@ codepoint_t utf8_b2cp(const char* const);
 size_t utf8_g2nb(const char* const);
 size_t utf8_cp2nb(const codepoint_t);
 size_t utf8_width(const char*);
-size_t utf8_slice_length(const char* const, const size_t);
+size_t utf8_Ng2nb(const char* const, const size_t);
 size_t utf8_ng_till(const char*, const char* const);
 bool utf8_validate(const char* const);
 

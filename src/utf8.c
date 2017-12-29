@@ -130,7 +130,7 @@ size_t utf8_width(const char* b) {
 }
 
 /* Calculates how much bytes take first g glyphs */
-size_t utf8_slice_length(const char* const b, size_t g) {
+size_t utf8_Ng2nb(const char* const b, size_t g) {
 	size_t r = 0;
 	for (size_t i = 0; i < g && *(b+r); ++i) {
 		r += utf8_g2nb(b+r);

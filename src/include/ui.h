@@ -39,7 +39,6 @@ extern char** environ;
 
 #define MSG_BUFFER_SIZE 128
 
-// TODO maybe confirmation of removal,move,copy...
 enum mode {
 	MODE_HELP = 0,
 	MODE_MANAGER,
@@ -238,7 +237,7 @@ static struct input2cmd default_mapping[] = {
 
 	{ { UTF8("c"), UTF8("p"), ENDK }, MODE_MANAGER, CMD_COPY },
 
-	{ { UTF8("r"), UTF8("e"), UTF8("m"), ENDK }, MODE_MANAGER, CMD_REMOVE },
+	{ { UTF8("r"), UTF8("m"), ENDK }, MODE_MANAGER, CMD_REMOVE },
 
 	{ { UTF8("r"), UTF8("n"), ENDK }, MODE_MANAGER, CMD_RENAME },
 
@@ -480,7 +479,7 @@ enum command get_cmd(struct ui* const);
 int fill_textbox(const struct ui* const, char* const,
 		char** const, const size_t);
 
-int open_prompt(struct ui* const, char* const, char*, const size_t);
+int prompt(struct ui* const, char* const, char*, const size_t);
 
 void failed(struct ui* const, const char* const,
 		const int, const char* const);
