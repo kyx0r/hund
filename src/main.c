@@ -45,7 +45,7 @@
  *    - dereference links
  * 9. Error handling.
  * 10. Transfer speed and % done
- * 11. Prompt needs to be less ambiguous (hints, like y=yes, a=abort, ^N=next)
+ * 11. Select needs to be less ambiguous (hints, like y=yes, a=abort, ^N=next)
  * 13. Actions like estimating volume or renaming
  *     should have visible progress too
  * 14. IDEA: Detecting file formats -> display name of a program that
@@ -54,23 +54,21 @@
 
 static int editor(char* const path) {
 	char exeimg[PATH_MAX];
-	strcpy(exeimg, "/bin");
+	strcpy(exeimg, "/usr/bin");
 	const char* ed = getenv("VISUAL");
 	if (!ed) ed = getenv("EDITOR");
 	append_dir(exeimg, ed ? ed : "vi");
 	char* const arg[] = { exeimg, path, NULL };
-	spawn(arg);
-	return 0;
+	return spawn(arg);
 }
 
 static int pager(char* const path) {
 	char exeimg[PATH_MAX];
-	strcpy(exeimg, "/bin");
+	strcpy(exeimg, "/usr/bin");
 	char* const pager = getenv("PAGER");
 	append_dir(exeimg, pager ? pager : "less");
 	char* const arg[] = { exeimg, path, NULL };
-	spawn(arg);
-	return 0;
+	return spawn(arg);
 }
 
 inline static void open_find(struct ui* const i) {
@@ -558,13 +556,16 @@ static void task_execute(struct ui* const i, struct task* const t) {
 	pretty_size(t->size_done, sdone);
 	pretty_size(t->size_total, stota);
 	i->mt = MSG_INFO;
-	snprintf(i->msg, MSG_BUFFER_SIZE,
-		"%s %s %d/%df, %d/%dd, %s / %s",
+	int top = 0;
+	top += snprintf(i->msg+top, MSG_BUFFER_SIZE-top,
+		"%s %s: %d/%df, %d/%dd, %s/%s",
 		(t->paused ? "||" : ">>"),
 		task_strings[t->t][ING],
 		t->files_done, t->files_total,
 		t->dirs_done, t->dirs_total,
 		sdone, stota);
+	snprintf(i->msg+top, MSG_BUFFER_SIZE-top, ", %.*s", i->scrw-top,
+			t->tw.cpath+current_dir_i(t->tw.cpath));
 }
 
 extern struct ui* I;
