@@ -315,7 +315,9 @@ int append_dir(char* const path, const char* const dir) {
 	if (!dl) return 0;
 	const size_t pl = strnlen(path, PATH_MAX);
 	if (pl+2+dl > PATH_MAX) return ENAMETOOLONG;
-	strcat(path, "/");
+	if (memcmp(path, "/", 2)) {
+		strcat(path, "/");
+	}
 	strncat(path, dir, dl+1);
 	return 0;
 }
