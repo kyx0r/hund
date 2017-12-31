@@ -83,6 +83,14 @@ struct tree_walk {
 	char* cpath; // current path; will contain path of file/dir at current step
 };
 
+enum task_flags {
+	TF_NONE = 0,
+	TF_RAW_LINKS = 1<<0, // Copy links raw instead of recalculating
+	TF_MERGE = 1<<1, // Merge directories (overwrite filesby default)
+	TF_SKIP_CONFLICTS = 1<<3, // If merging, skip (leave) conflicting
+	TF_DEREF_LINKS = 1<<4, // If copying/moving links, copy what they point to
+};
+
 /*
  * Long disk operations
  * Displays state
@@ -91,7 +99,8 @@ struct task {
 	enum task_type t;
 	bool paused;
 	bool done;
-	bool rl; // Raw Links
+
+	enum task_flags tf;
 
 	//    vvv basically pointers to file_view->wd; to not free
 	char* src; // Source directory path
@@ -113,20 +122,25 @@ void task_new(struct task* const, const enum task_type,
 		char* const, char* const,
 		const struct string_list* const,
 		const struct string_list* const);
+
 void task_clean(struct task* const);
 
-int estimate_volume(char*, ssize_t* const, int* const, int* const, const bool);
+int estimate_volume(char*, ssize_t* const, int* const, int* const);
+
 void estimate_volume_for_list(const char* const,
 		const struct string_list* const,
-		ssize_t* const, int* const, int* const, const bool);
+		ssize_t* const, int* const,
+		int* const);
 
 void build_new_path(const char* const, const char* const,
 		const char* const, const char* const, const char* const,
 		char* const);
 
-void tree_walk_start(struct tree_walk*, const char* const);
-void tree_walk_end(struct tree_walk*);
-void tree_walk_step(struct tree_walk*);
+void tree_walk_start(struct tree_walk* const, const char* const);
+int tree_walk_down(struct tree_walk* const);
+void tree_walk_up(struct tree_walk* const);
+void tree_walk_end(struct tree_walk* const);
+int tree_walk_step(struct tree_walk* const);
 
 char* current_target_path(struct task* const);
 

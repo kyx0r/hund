@@ -103,16 +103,21 @@ inline static void open_find(struct ui* const i) {
 
 /* Only solves copy/move/remove conflicts */
 inline static bool _solve_conflicts(struct ui* const i,
+		enum task_flags* const t,
 		struct string_list* const s,
 		struct string_list* const r) {
-	static const char* const question[] = {
-		"There are conflicts. Rename?",
-		"There are still conflicts. Try again?",
+	static const char* const question = "There are conflicts.";
+	static const struct select_option o[] = {
+		{ UTF8("s"), "skip" },
+		{ UTF8("r"), "rename" },
+		{ UTF8("m"), "merge" },
+		{ UTF8("a"), "abort" }
 	};
-	static const struct input o[] = { // TODO
-		UTF8("n"), UTF8("y"), UTF8("a")
+	static const struct select_option m[] = {
+		{ UTF8("s"), "skip" },
+		{ UTF8("o"), "overwrite" },
 	};
-	int d = ui_select(i, question[0], o, 3);
+	int d = ui_select(i, question, o, 4);
 	if (!d) {
 		remove_conflicting(i->sv, s);
 		list_copy(r, s);
@@ -134,7 +139,14 @@ inline static bool _solve_conflicts(struct ui* const i,
 			if ((solved = !conflicts_with_existing(i->sv, r))) {
 				return true;
 			}
-		} while (!solved && ui_select(i, question[1], o, 2));
+		} while (!solved && ui_select(i, question, o, 4));
+	}
+	if (d == 2) {
+		*t |= TF_MERGE;
+		if (!ui_select(i, "How to handle conflicts?", m, 2)) {
+			*t |= TF_SKIP_CONFLICTS;
+		}
+		return true;
 	}
 	free_list(s);
 	free_list(r);
@@ -152,24 +164,26 @@ static void prepare_long_task(struct ui* const i, struct task* const t,
 	struct string_list selected = { NULL, 0 };
 	struct string_list renamed = { NULL, 0 };
 	file_view_selected_to_list(i->pv, &selected);
-	static const struct input o[] = {
-		UTF8("n"), UTF8("y")
+	static const struct select_option o[] = {
+		{ UTF8("n"), "no" },
+		{ UTF8("y"), "yes" }
 	};
+	enum task_flags tf = TF_RAW_LINKS;
 	if (tt == TASK_REMOVE && !ui_select(i, "Remove?", o, 2)) return;
 	if (tt == TASK_MOVE || tt == TASK_COPY) {
 		if (conflicts_with_existing(i->sv, &selected)) {
-			if (!_solve_conflicts(i, &selected, &renamed)) return;
+			if (!_solve_conflicts(i, &tf, &selected, &renamed)) return;
 		}
 		else {
 			renamed.len = selected.len;
 			renamed.str = calloc(renamed.len, sizeof(char*));
 		}
 	}
-
 	task_new(t, tt, i->pv->wd, i->sv->wd, &selected, &renamed);
+	t->tf = tf;
 	estimate_volume_for_list(i->pv->wd, &selected,
 			&(t->size_total), &(t->files_total),
-			&(t->dirs_total), false);
+			&(t->dirs_total));
 	i->m = MODE_WAIT;
 }
 
@@ -185,8 +199,10 @@ static void process_input(struct ui* const i, struct task* const t) {
 	struct string_list files = { NULL, 0 };
 	struct string_list sf = { NULL, 0 }; // Selected Files
 	struct string_list rf = { NULL, 0 }; // Renamed Files
-	static const struct input o[] = {
-		UTF8("n"), UTF8("y"), UTF8("a")
+	static const struct select_option o[] = {
+		{ UTF8("n"), "no" },
+		{ UTF8("y"), "yes" },
+		{ UTF8("a"), "abort" }
 	};
 	const enum command cmd = get_cmd(i);
 	switch (cmd) {
@@ -440,7 +456,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 			opath = file_view_path_to_selected(i->pv);
 			i->pv->file_list[i->pv->selection]->dir_volume = 0;
 			estimate_volume(opath, &i->pv->file_list[i->pv->selection]->dir_volume,
-					&sink_fc, &sink_dc, true); // TODO
+					&sink_fc, &sink_dc); // TODO
 			free(opath);
 		}
 		next_entry(i->pv);
