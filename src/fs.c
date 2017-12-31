@@ -72,6 +72,7 @@ void file_list_clean(struct file_record*** const fl, fnum_t* const nf) {
  * On ENOMEM: cleans everything
  * On stat/lstat errors: zeroes failed fields
  * TODO test
+ * TODO segfaults on dead links
  */
 int scan_dir(const char* const wd, struct file_record*** const fl,
 		fnum_t* const nf, fnum_t* const nhf) {
@@ -169,6 +170,7 @@ int cmp_name_desc(const void* p1, const void* p2) {
 }
 
 // TODO how to sort non-dirs?
+// TODO sorting by size/date seem to be random in FreeBSD
 int cmp_size_asc(const void* p1, const void* p2) {
 	const struct file_record* const fr1 = *((struct file_record**) p1);
 	const struct file_record* const fr2 = *((struct file_record**) p2);
@@ -443,8 +445,7 @@ int up_dir(char* const path) {
 }*/
 
 bool path_is_relative(const char* const path) {
-	return (path[0] != '/' && path[0] != '~') ||
-		(path[0] == '.' && path[1] == '/');
+	return path[0] != '/' && path[0] != '~';
 }
 
 /*
