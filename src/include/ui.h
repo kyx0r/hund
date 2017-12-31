@@ -471,8 +471,13 @@ void ui_update_geometry(struct ui* const);
 int chmod_open(struct ui* const, char* const);
 void chmod_close(struct ui* const);
 
+struct select_option {
+	struct input i;
+	char* h; // Hint
+};
+
 int ui_select(struct ui* const, const char* const q,
-		const struct input*, const size_t);
+		const struct select_option*, const size_t);
 
 struct input get_input(void);
 enum command get_cmd(struct ui* const);

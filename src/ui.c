@@ -26,7 +26,6 @@
 
 /*
  * UI TODO NOTES
- * 0. terimnal should be assumed to be at least 80x24
  * 1. TODO selection is not very visible
  * 2. TODO scroll too long filenames
  */
@@ -177,13 +176,15 @@ static void _printw_entry(WINDOW* const w, const fnum_t dr, const int y,
 	char sbuf[SIZE_BUF_SIZE];
 	size_t slen = 0;
 	sbuf[0] = 0;
-	if (S_ISREG(cfr->l->st_mode)) {
-		pretty_size(cfr->l->st_size, sbuf);
-		slen = strnlen(sbuf, SIZE_BUF_SIZE);
-	}
-	else if (S_ISDIR(cfr->l->st_mode) && cfr->dir_volume != -1) {
-		pretty_size(cfr->dir_volume, sbuf);
-		slen = strnlen(sbuf, SIZE_BUF_SIZE);
+	if (cfr->l) { // TODO signal broken symlink
+		if (S_ISREG(cfr->l->st_mode)) {
+			pretty_size(cfr->l->st_size, sbuf);
+			slen = strnlen(sbuf, SIZE_BUF_SIZE);
+		}
+		else if (S_ISDIR(cfr->l->st_mode) && cfr->dir_volume != -1) {
+			pretty_size(cfr->dir_volume, sbuf);
+			slen = strnlen(sbuf, SIZE_BUF_SIZE);
+		}
 	}
 
 	const size_t fnw = utf8_width(fn);
@@ -591,39 +592,41 @@ void chmod_close(struct ui* const i) {
 }
 
 int ui_select(struct ui* const i, const char* const q,
-		const struct input* o, const size_t oc) {
+		const struct select_option* o, const size_t oc) {
+	// TODO utf8_width
 	int top = 0;
-	char hints[32];
+	char hints[128];
 	memset(hints, 0, sizeof(hints));
 	for (size_t j = 0; j < oc; ++j) {
 		if (j) {
-			top += snprintf(hints+top, sizeof(hints)-top, "/");
+			top += snprintf(hints+top, sizeof(hints)-top, ", ");
 		}
-		switch (o[j].t) {
+		switch (o[j].i.t) {
 		case UTF8:
 			top += snprintf(hints+top, sizeof(hints)-top,
-					"%s", o[j].d.utf);
+					"%s=%s", o[j].i.d.utf, o[j].h);
 			break;
 		case CTRL:
 			top += snprintf(hints+top, sizeof(hints)-top,
-					"^%c", (char)o[j].d.c);
+					"^%c=%s", (char)o[j].i.d.c, o[j].h);
 			break;
 		case SPECIAL:
 			top += snprintf(hints+top, sizeof(hints)-top,
-					"%s", keyname(o[j].d.c)+4);
+					"%s=%s", keyname(o[j].i.d.c)+4, o[j].h);
 			break;
 		default:
 			top += snprintf(hints+top, sizeof(hints)-top, "??");
 			break;
 		}
 	}
-	mvwprintw(stdscr, i->scrh-1, 0, "%s (%s)", q, hints);
+	mvwprintw(stdscr, i->scrh-1, 0, "%s %s%*c", q, hints,
+			i->scrw-(strlen(q)+strlen(hints)+1));
 	wrefresh(stdscr);
 	struct input in;
 	for (;;) {
 		in = get_input();
 		for (size_t j = 0; j < oc; ++j) {
-			if (!memcmp(&in, o+j, sizeof(struct input))) return j;
+			if (!memcmp(&in, &o[j].i, sizeof(struct input))) return j;
 		}
 	}
 }
@@ -637,7 +640,7 @@ struct input get_input(void) {
 	memset(&r, 0, sizeof(struct input));
 	r.t = END;
 	size_t utflen = 0;
-	int init = getch();
+	int init = wgetch(stdscr);
 	const char u = (char)init;
 	const char* kn = keyname(init);
 	if (strlen(kn) == 2 && kn[0] == '^') {
@@ -669,7 +672,7 @@ enum command get_cmd(struct ui* const i) {
 	memset(i->mks, 0, i->kml*sizeof(unsigned short));
 	struct input newinput = get_input();
 	if (newinput.t == END) return CMD_NONE;
-	else if (newinput.t == CTRL && newinput.d.c == '[') { // ESC
+	else if (IS_CTRL(newinput, '[')) { // ESC
 		memset(i->il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
 		i->ili = 0;
 		return CMD_NONE;
@@ -824,13 +827,21 @@ void failed(struct ui* const i, const char* const f,
 }
 
 int spawn(char* const arg[]) {
+	// TODO errors
 	def_prog_mode();
+	//clear(); // TODO
 	endwin();
 	int ret = 0, status, nullfd;
 	pid_t pid = fork();
 	if (pid == 0) {
 		nullfd = open("/dev/null", O_WRONLY, 0100);
 		if (dup2(nullfd, STDERR_FILENO) == -1) ret = errno;
+		/*
+		 * TODO redirect to tmp file
+		 * if not empty, offer to show it's contents in pager
+		 */
+
+		//if (dup2(nullfd, STDOUT_FILENO) == -1) ret = errno;
 		// TODO ???
 		close(nullfd);
 		if (execve(arg[0], arg, environ)) ret = errno;
