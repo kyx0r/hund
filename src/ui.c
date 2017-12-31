@@ -36,7 +36,7 @@ static enum theme_element mode2theme(const mode_t m, const mode_t n) {
 	case S_IFCHR: return THEME_ENTRY_CHR_UNS;
 	case S_IFIFO: return THEME_ENTRY_FIFO_UNS;
 	case S_IFREG:
-		if (executable(m, 0)) return THEME_ENTRY_REG_EXE_UNS;
+		if (EXECUTABLE(m, 0)) return THEME_ENTRY_REG_EXE_UNS;
 		return THEME_ENTRY_REG_UNS;
 	case S_IFDIR: return THEME_ENTRY_DIR_UNS;
 	case S_IFSOCK: return THEME_ENTRY_SOCK_UNS;
