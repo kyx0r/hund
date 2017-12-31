@@ -196,6 +196,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 	struct file_record* fr = NULL; // File Record
 	char tmpn[] = "/tmp/hund.XXXXXXXX";
 	int tmpfd;
+	struct stat s;
 	struct string_list files = { NULL, 0 };
 	struct string_list sf = { NULL, 0 }; // Selected Files
 	struct string_list rf = { NULL, 0 }; // Renamed Files
@@ -352,7 +353,8 @@ static void process_input(struct ui* const i, struct task* const t) {
 		if ((prompt(i, cdp, cdp, PATH_MAX)
 		   || (err = ENAMETOOLONG, enter_dir(path, cdp))
 		   || (err = ENOENT, access(path, F_OK))
-		   || (err = ENOTDIR, !is_dir(path)))
+		   || (stat(path, &s) ? (err = errno) : 0)
+		   || (err = ENOTDIR, !S_ISDIR(s.st_mode)))
 		   && err) {
 			failed(i, "cd", err, NULL);
 		}

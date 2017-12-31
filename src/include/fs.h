@@ -86,14 +86,18 @@ struct file_record {
 	bool selected;
 };
 
-bool dotdot(const char* const);
-bool too_special(const mode_t);
-bool is_lnk(const char*);
-bool is_dir(const char*);
+#define S_ISTOOSPECIAL(M) (((M & S_IFMT) == S_IFBLK) \
+		|| ((M & S_IFMT) == S_IFCHR) \
+		|| ((M & S_IFMT) == S_IFIFO) \
+		|| ((M & S_IFMT) == S_IFSOCK))
+
+#define DOTDOT(N) (!strncmp((N), ".", 2) || !strncmp((N), "..", 3))
+#define EXECUTABLE(M,N) ((M & 0111) | (N & 0111))
+
 bool same_fs(const char* const, const char* const);
-bool executable(const mode_t, const mode_t);
 
 void file_list_clean(struct file_record*** const, fnum_t* const);
+
 int scan_dir(const char* const, struct file_record*** const,
 		fnum_t* const, fnum_t* const);
 

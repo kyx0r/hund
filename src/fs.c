@@ -19,24 +19,6 @@
 
 #include "include/fs.h"
 
-bool dotdot(const char* const n) {
-	return !strncmp(n, ".", 2) || !strncmp(n, "..", 3);
-}
-
-bool too_special(const mode_t m) {
-	return S_ISBLK(m) || S_ISCHR(m) || S_ISFIFO(m) || S_ISSOCK(m);
-}
-
-bool is_lnk(const char* path) {
-	struct stat s;
-	return (!lstat(path, &s) && S_ISLNK(s.st_mode));
-}
-
-bool is_dir(const char* path) {
-	struct stat s;
-	return (!stat(path, &s) && S_ISDIR(s.st_mode));
-}
-
 /*
  * Checks of two files are on the same filesystem.
  * If they are, moving files (and even whole directories)
@@ -45,10 +27,6 @@ bool is_dir(const char* path) {
 bool same_fs(const char* const a, const char* const b) {
 	struct stat sa, sb;
 	return !stat(a, &sa) && !stat(b, &sb) && (sa.st_dev == sb.st_dev);
-}
-
-bool executable(const mode_t m, const mode_t n) {
-	return (m & 0111) != 0 || (n & 0111) != 0; // TODO ???
 }
 
 void file_list_clean(struct file_record*** const fl, fnum_t* const nf) {
@@ -66,6 +44,31 @@ void file_list_clean(struct file_record*** const fl, fnum_t* const nf) {
 	*nf = 0;
 }
 
+/*
+ * On errors, cleans up link-stuff.
+ * Returns errno.
+ */
+int _scan_link(struct file_record* const nfr, const char* const fpath) {
+	struct stat ls;
+	char lpath[PATH_MAX];
+	if (stat(fpath, &ls) || !(nfr->l = malloc(sizeof(struct stat)))) {
+		nfr->l = NULL;
+		return errno;
+	}
+	else {
+		memcpy(nfr->l, &ls, sizeof(struct stat));
+		const int lp_len = readlink(fpath, lpath, PATH_MAX);
+		if (lp_len == -1 || !(nfr->link_path = malloc(lp_len+1))) {
+			free(nfr->l);
+			nfr->l = NULL;
+			return errno;
+		}
+		memcpy(nfr->link_path, lpath, lp_len);
+		nfr->link_path[lp_len] = 0;
+	}
+	return 0;
+}
+
 /* Cleans up old data and scans working directory,
  * putting data into variables passed in arguments.
  *
@@ -73,19 +76,20 @@ void file_list_clean(struct file_record*** const fl, fnum_t* const nf) {
  * On stat/lstat errors: zeroes failed fields
  * TODO test
  * TODO segfaults on dead links
+ *
+ * wd = Working Directory
+ * fl = File List
+ * nf = Number of Files
+ * nhf = Number of Hidden Files
  */
 int scan_dir(const char* const wd, struct file_record*** const fl,
 		fnum_t* const nf, fnum_t* const nhf) {
 	file_list_clean(fl, nf);
 	*nhf = 0;
-	int r = 0;
+	int err = 0;
 	DIR* dir = opendir(wd);
-	if (!dir) {
-		//closedir(dir); // TODO ???
-		return errno;
-	}
-	char fpath[PATH_MAX+1];
-	char lpath[PATH_MAX+1];
+	if (!dir) return errno;
+	char fpath[PATH_MAX];
 	struct dirent* de;
 	while ((de = readdir(dir)) != NULL) {
 		*nf += 1;
@@ -94,7 +98,7 @@ int scan_dir(const char* const wd, struct file_record*** const fl,
 	if (!*nf) {
 		*fl = NULL;
 		closedir(dir);
-		return r;
+		return err;
 	}
 	rewinddir(dir);
 	void* tmp = calloc(*nf, sizeof(struct file_record*));
@@ -103,15 +107,15 @@ int scan_dir(const char* const wd, struct file_record*** const fl,
 		return ENOMEM;
 	}
 	*fl = tmp;
-	fnum_t gf = 0;
+	fnum_t gf = 0; // Gathered Files
 	while ((de = readdir(dir)) != NULL) {
-		if (dotdot(de->d_name)) continue;
+		if (DOTDOT(de->d_name)) continue;
 		if (de->d_name[0] == '.') {
 			*nhf += 1;
 		}
 		struct file_record* nfr = malloc(sizeof(struct file_record));
 		if (!nfr) {
-			r = ENOMEM;
+			err = ENOMEM;
 			*nhf = 0;
 			file_list_clean(fl, nf);
 			break;
@@ -123,38 +127,26 @@ int scan_dir(const char* const wd, struct file_record*** const fl,
 		nfr->dir_volume = -1;
 		nfr->selected = false;
 		if (!nfr->file_name) {
-			r = ENOMEM;
+			err = ENOMEM;
 			*nhf = 0;
 			file_list_clean(fl, nf);
 			break;
 		}
 		strncpy(nfr->file_name, de->d_name, namelen+1);
 		nfr->link_path = NULL;
-		if (append_dir(strncpy(fpath, wd, PATH_MAX), nfr->file_name));
+		nfr->l = &nfr->s;
+		strncpy(fpath, wd, PATH_MAX);
+		if ((err = append_dir(fpath, nfr->file_name)));
 		else if (lstat(fpath, &nfr->s)) {
+			err = errno;
 			memset(&nfr->s, 0, sizeof(struct stat));
 		}
 		else if (S_ISLNK(nfr->s.st_mode)) {
-			nfr->l = malloc(sizeof(struct stat));
-			if (!nfr->l);
-			else if(stat(fpath, nfr->l)) {
-				free(nfr->l);
-				nfr->l = NULL;
-			}
-			else {
-				const int lp_len = readlink(fpath, lpath, PATH_MAX);
-				nfr->link_path = malloc(lp_len+1);
-				if (memcpy(nfr->link_path, lpath, lp_len+1)) {
-					nfr->link_path[lp_len] = 0;
-				}
-			}
-		}
-		else {
-			nfr->l = &nfr->s;
+			err = _scan_link(nfr, fpath);
 		}
 	}
 	closedir(dir);
-	return r;
+	return err;
 }
 
 int cmp_name_asc(const void* p1, const void* p2) {
