@@ -310,15 +310,23 @@ static void process_input(struct ui* const i, struct task* const t) {
 		break;
 	case CMD_EDIT_FILE:
 		if ((path = file_view_path_to_selected(i->pv))) {
-			if (is_dir(path)) failed(i, "edit", EISDIR, NULL);
-			editor(path);
+			if (S_ISREG(hfr(i->pv)->l->st_mode)) {
+				editor(path);
+			}
+			else {
+				failed(i, "edit", 0, "not regular file");
+			}
 			free(path);
 		}
 		break;
 	case CMD_OPEN_FILE:
 		if ((path = file_view_path_to_selected(i->pv))) {
-			if (is_dir(path)) failed(i, "open", EISDIR, NULL);
-			pager(path);
+			if (S_ISREG(hfr(i->pv)->l->st_mode)) {
+				pager(path);
+			}
+			else {
+				failed(i, "open", 0, "not regular file");
+			}
 			free(path);
 		}
 		break;
@@ -549,7 +557,9 @@ static void task_execute(struct ui* const i, struct task* const t) {
 	if (!t->paused && (err = do_task(t, 1024))) {
 		failed(i, task_strings[t->t][NOUN], err, NULL);
 		task_clean(t); // TODO
+		i->m = MODE_MANAGER;
 		wtimeout(stdscr, -1);
+		return;
 	}
 	char sdone[SIZE_BUF_SIZE];
 	char stota[SIZE_BUF_SIZE];
