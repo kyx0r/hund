@@ -1,44 +1,49 @@
 # Hund
-A terminal file manager.
-#### Current features
-- Vim-inspired command system
+A minimalistic terminal file manager.
+#### Features
+- Vim-inspired hotkeys
 - MC-inspired, minimalistic UI
 - UTF-8 support
-- Symlink support
-- Move/remove/copy/rename file/directory
-- Create directory
+- Move/remove/copy selected files
+- Rename multiple files/directories at once
+- Create multiple directories at once
+- Calculate volume of a directory
 - Hide/show hidden files
-- Change file permissions/owner/group
-- Find file in current directory
+- Change permissions/owner/group of a single file
+- Find file in current directory (find as you type)
 - Sort by name/date/size ascending/descending
+- Pause/resume/abort copy/move/remove operation
+- Visible progress of copy/move/remove operation
 - Licensed under GPL-3.0
 #### Environment Variables
-| variable | usage              | default |
+| Variable | Usage              | Default |
 | -------- | ------------------ | ------- |
-| $EDITOR  | `ed` - text editor | vi      |
-| $PAGER   | `o` - text pager   | less    |
+| $VISUAL  | text editor        | $EDITOR |
+| $EDITOR  | backup for $VISUAL | vi      |
+| $PAGER   | pager              | less    |
 #### Planned features
-- Open in external program, based on extension
-- Rename multiple files at once (somewhat like ranger)
-- Multiple file selection
-- Task queue of some sort (?)
-- Filter files
+- Chmod mask
 - Fancy file sorting
-- Extract archive
-- List archive (?)
+- Filter files
 - Configuration in a file
 - Color schemes
-- Support for terminals without color
-- ARM support
-- BSD and other UNIX support (?)
+- ACLs (at least detection)
+- Integrated terminal (under `:`)
+- Bookmarks
+- Extract archive
+#### Architecture/OS Support
+x86-64 + Arch Linux - Developed on, can be expected to work *best*
+x86-64 + FreeBSD - gcc's only problem is that it does not detect ctrl keys, clang does not detect any keys at all lol
+aarch64 on Raspberry PI 3 + Arch Linux ARM 64-bit - works just fine
 #### Dependencies & Requirements
 - ncurses
-- gcc or clang
-- make
+- gcc (preferably) or clang
+- GNUMake
+- glibc
 #### Commands
 Type `?` while in hund for help.
 #### License
 Hund is licensed under GPL-3.0.
 Type `?` while in hund for copyright notice.
 #### Name
-_Hund_ is a german word for _dog_.
+_Hund_ is a German word for _dog_.
