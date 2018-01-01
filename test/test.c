@@ -5,6 +5,7 @@
 #include "test.h"
 #include "../src/include/fs.h"
 #include "../src/include/file_view.h"
+#include "../src/include/task.h"
 #include "../src/include/utf8.h"
 
 int main() {
@@ -60,10 +61,16 @@ int main() {
 	current_dir(path4, cd);
 	TEST(strcmp(cd, "/") == 0, "");*/
 
+	TEST(!path_is_relative("/"), "absolute");
 	TEST(!path_is_relative("/etc/netctl"), "absolute");
 	TEST(!path_is_relative("~/.config"), "absolute");
 	TEST(path_is_relative("./netctl"), "relative");
 	TEST(path_is_relative("etc/netctl"), "relative");
+	TEST(path_is_relative("../netctl"), "relative");
+	TEST(path_is_relative("../"), "relative");
+	TEST(path_is_relative(".."), "relative");
+	TEST(path_is_relative("."), "relative");
+	TEST(path_is_relative("./"), "relative");
 
 	strcpy(path, "/dope/");
 	char dir5[] = "./wat/lol/../wut";
@@ -166,10 +173,10 @@ int main() {
 		TEST(!utf8_validate(sis[i]), "all invalid strings are invalid");
 	}
 
-	TEST(utf8_slice_length("łaka łaką", 2) == 3, "");
-	TEST(utf8_slice_length("qq", 2) == 2, "");
-	TEST(utf8_slice_length("", 2) == 0, "");
-	TEST(utf8_slice_length("a", 0) == 0, "");
+	TEST(utf8_Ng2nb("łaka łaką", 2) == 3, "");
+	TEST(utf8_Ng2nb("qq", 2) == 2, "");
+	TEST(utf8_Ng2nb("", 2) == 0, "");
+	TEST(utf8_Ng2nb("a", 0) == 0, "");
 
 	char inserted[20] = "łąkała";
 	utf8_insert(inserted, "ń", 2);
@@ -206,6 +213,10 @@ int main() {
 	build_new_path("/home/user/doc/dir",
 			"/home/user", "/home/root/.trash", "user", NULL, result);
 	TEST(!strcmp(result, "/home/root/.trash/doc/dir"), "");
+
+	build_new_path("/root",
+			"/", "/home", "root", NULL, result);
+	TEST(!strcmp(result, "/home/root"), "");
 
 	free(result);
 
