@@ -290,10 +290,16 @@ void pretty_size(off_t s, char* const buf) {
 	rest *= 1000;
 	rest /= 1024;
 	rest /= 10;
-	char r[2] = { '0' + (rest / 10), '0' + (rest % 10) };
-	if (r[1] != '0') snprintf(buf, SIZE_BUF_SIZE, "%u.%c%c%c", (unsigned)s, r[0], r[1], *unit);
-	else if (r[0] != '0') snprintf(buf, SIZE_BUF_SIZE, "%u.%c%c", (unsigned)s, r[0], *unit);
-	else snprintf(buf, SIZE_BUF_SIZE, "%u%c", (unsigned)s, *unit);
+	char r[2] = { rest / 10, rest % 10 };
+	int top = 0;
+	top += snprintf(buf+top, SIZE_BUF_SIZE-top, "%u", (unsigned)s);
+	if (r[0] || r[1]) {
+		top += snprintf(buf+top, SIZE_BUF_SIZE-top, ".%c", '0'+r[0]);
+	}
+	if (r[1]) {
+		top += snprintf(buf+top, SIZE_BUF_SIZE-top, "%c", '0'+r[1]);
+	}
+	snprintf(buf+top, SIZE_BUF_SIZE-top, "%c", *unit);
 }
 
 /*
@@ -545,7 +551,7 @@ int file_to_list(const int fd, struct string_list* const list) {
 		}
 		*nl = 0;
 		nlen = nl-name;
-		void* tmp_str = realloc(list->str, (list->len+1) * sizeof(char*));
+		void* tmp_str = realloc(list->str, (list->len+1)*sizeof(char*));
 		if (!tmp_str) {
 			int e = errno;
 			free_list(list);
@@ -553,7 +559,8 @@ int file_to_list(const int fd, struct string_list* const list) {
 		}
 		list->str = tmp_str;
 		if (nlen) {
-			list->str[list->len] = strncpy(malloc(nlen+1), name, nlen+1);
+			list->str[list->len] = malloc(nlen+1);
+			strncpy(list->str[list->len], name, nlen+1);
 		}
 		else {
 			list->str[list->len] = NULL;
