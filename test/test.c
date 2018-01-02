@@ -102,6 +102,18 @@ int main() {
 	TEST(!contains("qqlooolz", "looool"), "");
 	TEST(contains("/home/user/lols", "/"), "");
 
+	char buf[SIZE_BUF_SIZE];
+	pretty_size(100, buf);
+	TEST(!strcmp(buf, "100B"), "");
+	pretty_size(1023, buf);
+	TEST(!strcmp(buf, "1023B"), "");
+	pretty_size(1024, buf);
+	TEST(!strcmp(buf, "1K"), "");
+	pretty_size(1035, buf);
+	TEST(!strcmp(buf, "1.01K"), "");
+	pretty_size(1024+1023, buf);
+	TEST(!strcmp(buf, "1.99K"), "");
+
 	END_SECTION("fs");
 
 
