@@ -54,11 +54,12 @@ static const char* const task_strings[][3] = {
 enum tree_walk_state {
 	AT_NOWHERE = 0,
 	AT_EXIT, // finished reading tree
-	AT_INIT,
 	AT_FILE,
 	AT_LINK,
 	AT_DIR, // on dir (will enter this dir)
 	AT_DIR_END, // finished reading dir (will go up)
+	//AT_SPECIAL, // anything other than link, dir or regular file
+	//^^^^^^^^^^ TODO
 };
 
 struct dirtree {
@@ -76,11 +77,9 @@ struct tree_walk {
 	enum tree_walk_state tws;
 	bool tl; // Transparent Links
 	struct dirtree* dt;
-	char* wpath;
 
 	struct stat cs; // Current Stat
-	char* dname;
-	char* cpath; // current path; will contain path of file/dir at current step
+	char* cpath;
 };
 
 enum task_flags {
@@ -136,9 +135,7 @@ void build_new_path(const char* const, const char* const,
 		const char* const, const char* const, const char* const,
 		char* const);
 
-void tree_walk_start(struct tree_walk* const, const char* const);
-int tree_walk_down(struct tree_walk* const);
-void tree_walk_up(struct tree_walk* const);
+int tree_walk_start(struct tree_walk* const, const char* const, const bool);
 void tree_walk_end(struct tree_walk* const);
 int tree_walk_step(struct tree_walk* const);
 
