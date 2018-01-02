@@ -58,8 +58,7 @@ enum tree_walk_state {
 	AT_LINK,
 	AT_DIR, // on dir (will enter this dir)
 	AT_DIR_END, // finished reading dir (will go up)
-	//AT_SPECIAL, // anything other than link, dir or regular file
-	//^^^^^^^^^^ TODO
+	AT_SPECIAL, // anything other than link, dir or regular file
 };
 
 struct dirtree {
