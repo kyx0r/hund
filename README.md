@@ -28,13 +28,13 @@ A minimalistic terminal file manager.
 - Configuration in a file
 - Color schemes
 - ACLs (at least detection)
-- Integrated terminal (under `:`)
+- Integrated terminal
 - Bookmarks
 - Extract archive
 #### Architecture/OS Support
-x86-64 + Arch Linux - Developed on, can be expected to work *best*
-x86-64 + FreeBSD - gcc's only problem is that it does not detect ctrl keys, clang does not detect any keys at all lol
-aarch64 on Raspberry PI 3 + Arch Linux ARM 64-bit - works just fine
+- x86-64 + Arch Linux - Developed on, can be expected to work *best*
+- x86-64 + FreeBSD - gcc's only problem is that it does not detect ctrl keys, clang does not detect any keys at all lol
+- aarch64 (Raspberry PI 3) + Arch Linux ARM 64-bit - works just fine
 #### Dependencies & Requirements
 - ncurses
 - gcc (preferably) or clang
