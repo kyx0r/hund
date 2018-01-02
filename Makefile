@@ -1,13 +1,7 @@
 LD = gcc
 # TODO ld?
-CFLAGS += --std=c99 -Wall -Wextra -pedantic
+CFLAGS += --std=c99 -Wall -Wextra -pedantic -g
 LDFLAGS =
-DEBUG = true
-ifeq ($(DEBUG),true)
-	CFLAGS += -g
-else
-	CFLAGS += -O2 -Os -s
-endif
 LIBS = -lpanel -lncurses
 OBJDIR = obj
 OBJ = main.o fs.o ui.o file_view.o utf8.o task.o
