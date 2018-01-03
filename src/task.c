@@ -433,28 +433,26 @@ int do_task(struct task* const t, int c) {
 		tree_walk_start(&t->tw, path, false); // TODO error
 		free(path);
 	}
-	char new_path[PATH_MAX+1];
-	const size_t buf_size = BUFSIZ;
-	char buf[buf_size];
+	char new_path[PATH_MAX];
+	char buf[BUFSIZ];
 	int err;
 	while (t->tw.tws != AT_EXIT && c > 0) {
-		if ((err = _at_step(t, &c, new_path, buf, buf_size))) {
+		if ((err = _at_step(t, &c, new_path, buf, sizeof(buf)))) {
 			return err;
 		}
-		if (t->in == -1 && t->out == -1) {
-			if ((err = tree_walk_step(&t->tw)) && err != EACCES) {
-				return err; // TODO
-			}
+		if (t->in != -1 || t->out != -1) {
+			continue;
+		}
+		if ((err = tree_walk_step(&t->tw)) && err != EACCES) {
+			return err; // TODO
 		}
 	}
 	if (t->tw.tws == AT_EXIT) {
-		if (t->current_target+1 == t->targets.len) {
-			t->done = true;
+		t->current_target += 1;
+		t->done = t->current_target == t->targets.len;
+		t->tw.tws = AT_NOWHERE;
+		if (t->done) {
 			tree_walk_end(&t->tw);
-		}
-		else {
-			t->current_target += 1;
-			t->tw.tws = AT_NOWHERE;
 		}
 	}
 	return 0;
