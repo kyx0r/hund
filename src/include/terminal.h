@@ -31,6 +31,9 @@
 #include <string.h>
 #include <ctype.h>
 #include <errno.h>
+#include <sys/time.h>
+#include <sys/select.h>
+#include <sys/types.h>
 
 #include "utf8.h"
 
@@ -60,7 +63,7 @@ struct input {
 };
 
 struct s2i { // Sequence to Input
-	char seq[7];
+	char* seq;
 	enum input_type t : 8;
 };
 
@@ -113,10 +116,9 @@ static const char* const keynames[] = {
 	[I_ESCAPE] = "esc"
 };
 
-//TODO timeout (!!!)
-ssize_t xread(int, void*, ssize_t);
+ssize_t xread(int, void*, ssize_t, int);
 int start_raw_mode(struct termios* const);
 int stop_raw_mode(struct termios* const);
-struct input get_input(void);
+struct input get_input(int);
 
 #endif
