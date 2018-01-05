@@ -34,6 +34,7 @@
 
 #include "file_view.h"
 #include "utf8.h"
+#include "terminal.h"
 
 extern char** environ;
 
@@ -184,23 +185,6 @@ static const int theme_scheme[THEME_ELEM_NUM][3] = {
 	//[THEME_ENTRY_LNK_PATH_INV] = { 0, COLOR_RED, COLOR_BLACK },
 };
 
-enum input_type {
-	END = 0,
-	UTF8,
-	SPECIAL,
-	CTRL,
-};
-
-union input_data {
-	char utf[5];
-	int c; // ctrl code or special key
-};
-
-struct input {
-	enum input_type t : 8;
-	union input_data d;
-};
-
 #define INPUT_LIST_LENGTH 4
 
 struct input2cmd {
@@ -209,96 +193,95 @@ struct input2cmd {
 	enum command c : 8;
 };
 
-#define IS_CTRL(I,K) (((I).t == CTRL) && ((I).d.c == (K)))
-#define IS_SPEC(I,K) (((I).t == SPECIAL) && ((I).d.c == (K)))
+#define IS_CTRL(I,K) (((I).t == I_CTRL) && ((I).utf[0] == (K)))
 
-#define ENDK { .t = END }
-#define UTF8(K) { .t = UTF8, .d.utf = K }
-#define SPEC(K) { .t = SPECIAL, .d.c = (int)K }
-#define CTRL(K) { .t = CTRL, .d.c = (int)K }
+#define KEND { .t = I_NONE }
+#define KUTF8(K) { .t = I_UTF8, .utf = K }
+#define KSPEC(K) { .t = (K), .utf = { 0, 0, 0, 0 } }
+#define KCTRL(K) { .t = I_CTRL, .utf[0] = (K) }
 
 static struct input2cmd default_mapping[] = {
 	/* MODE MANGER */
-	{ { UTF8("q"), UTF8("q"), ENDK }, MODE_MANAGER, CMD_QUIT },
+	{ { KUTF8("q"), KUTF8("q"), KEND }, MODE_MANAGER, CMD_QUIT },
 
-	{ { UTF8("g"), UTF8("g"), ENDK }, MODE_MANAGER, CMD_ENTRY_FIRST },
-	{ { SPEC(KEY_HOME), ENDK }, MODE_MANAGER, CMD_ENTRY_FIRST },
+	{ { KUTF8("g"), KUTF8("g"), KEND }, MODE_MANAGER, CMD_ENTRY_FIRST },
+	{ { KSPEC(I_HOME), KEND }, MODE_MANAGER, CMD_ENTRY_FIRST },
 
-	{ { UTF8("G"), ENDK }, MODE_MANAGER, CMD_ENTRY_LAST },
-	{ { SPEC(KEY_END), ENDK }, MODE_MANAGER, CMD_ENTRY_LAST },
+	{ { KUTF8("G"), KEND }, MODE_MANAGER, CMD_ENTRY_LAST },
+	{ { KSPEC(I_END), KEND }, MODE_MANAGER, CMD_ENTRY_LAST },
 
-	{ { UTF8("j"), ENDK }, MODE_MANAGER, CMD_ENTRY_DOWN },
-	{ { CTRL('N'), ENDK }, MODE_MANAGER, CMD_ENTRY_DOWN },
-	{ { SPEC(KEY_DOWN), ENDK }, MODE_MANAGER, CMD_ENTRY_DOWN },
+	{ { KUTF8("j"), KEND }, MODE_MANAGER, CMD_ENTRY_DOWN },
+	{ { KCTRL('N'), KEND }, MODE_MANAGER, CMD_ENTRY_DOWN },
+	{ { KSPEC(I_ARROW_DOWN), KEND }, MODE_MANAGER, CMD_ENTRY_DOWN },
 
-	{ { UTF8("k"), ENDK }, MODE_MANAGER, CMD_ENTRY_UP },
-	{ { CTRL('P'), ENDK }, MODE_MANAGER, CMD_ENTRY_UP },
-	{ { SPEC(KEY_UP), ENDK }, MODE_MANAGER, CMD_ENTRY_UP },
+	{ { KUTF8("k"), KEND }, MODE_MANAGER, CMD_ENTRY_UP },
+	{ { KCTRL('P'), KEND }, MODE_MANAGER, CMD_ENTRY_UP },
+	{ { KSPEC(I_ARROW_UP), KEND }, MODE_MANAGER, CMD_ENTRY_UP },
 
-	{ { UTF8("c"), UTF8("p"), ENDK }, MODE_MANAGER, CMD_COPY },
+	{ { KUTF8("c"), KUTF8("p"), KEND }, MODE_MANAGER, CMD_COPY },
 
-	{ { UTF8("r"), UTF8("m"), ENDK }, MODE_MANAGER, CMD_REMOVE },
+	{ { KUTF8("r"), KUTF8("m"), KEND }, MODE_MANAGER, CMD_REMOVE },
 
-	{ { UTF8("r"), UTF8("n"), ENDK }, MODE_MANAGER, CMD_RENAME },
+	{ { KUTF8("r"), KUTF8("n"), KEND }, MODE_MANAGER, CMD_RENAME },
 
-	{ { UTF8("m"), UTF8("v"), ENDK }, MODE_MANAGER, CMD_MOVE },
+	{ { KUTF8("m"), KUTF8("v"), KEND }, MODE_MANAGER, CMD_MOVE },
 
-	{ { CTRL('I'), ENDK }, MODE_MANAGER, CMD_SWITCH_PANEL },
+	{ { KCTRL('I'), KEND }, MODE_MANAGER, CMD_SWITCH_PANEL },
 
-	{ { UTF8("r"), UTF8("r"), ENDK }, MODE_MANAGER, CMD_REFRESH },
-	{ { CTRL('L'), ENDK }, MODE_MANAGER, CMD_REFRESH },
+	{ { KUTF8("r"), KUTF8("r"), KEND }, MODE_MANAGER, CMD_REFRESH },
+	{ { KCTRL('L'), KEND }, MODE_MANAGER, CMD_REFRESH },
 
-	{ { UTF8("m"), UTF8("k"), ENDK }, MODE_MANAGER, CMD_CREATE_DIR },
+	{ { KUTF8("m"), KUTF8("k"), KEND }, MODE_MANAGER, CMD_CREATE_DIR },
 
-	{ { UTF8("u"), ENDK }, MODE_MANAGER, CMD_UP_DIR },
-	{ { SPEC(KEY_BACKSPACE), ENDK }, MODE_MANAGER, CMD_UP_DIR },
+	{ { KUTF8("u"), KEND }, MODE_MANAGER, CMD_UP_DIR },
+	{ { KSPEC(I_BACKSPACE), KEND }, MODE_MANAGER, CMD_UP_DIR },
 
-	{ { UTF8("i"), ENDK }, MODE_MANAGER, CMD_ENTER_DIR },
-	{ { CTRL('J'), ENDK }, MODE_MANAGER, CMD_ENTER_DIR },
+	{ { KUTF8("i"), KEND }, MODE_MANAGER, CMD_ENTER_DIR },
+	{ { KCTRL('J'), KEND }, MODE_MANAGER, CMD_ENTER_DIR },
 
-	{ { UTF8("o"), ENDK }, MODE_MANAGER, CMD_OPEN_FILE },
-	{ { UTF8("e"), UTF8("d"), ENDK }, MODE_MANAGER, CMD_EDIT_FILE },
+	{ { KUTF8("o"), KEND }, MODE_MANAGER, CMD_OPEN_FILE },
+	{ { KUTF8("e"), KUTF8("d"), KEND }, MODE_MANAGER, CMD_EDIT_FILE },
 
-	{ { UTF8("v"), ENDK }, MODE_MANAGER, CMD_SELECT_FILE },
-	{ { UTF8("V"), UTF8("a"), ENDK }, MODE_MANAGER, CMD_SELECT_ALL },
-	{ { UTF8("V"), UTF8("0"), ENDK }, MODE_MANAGER, CMD_SELECT_NONE },
+	{ { KUTF8("v"), KEND }, MODE_MANAGER, CMD_SELECT_FILE },
+	{ { KUTF8("V"), KUTF8("a"), KEND }, MODE_MANAGER, CMD_SELECT_ALL },
+	{ { KUTF8("V"), KUTF8("0"), KEND }, MODE_MANAGER, CMD_SELECT_NONE },
 
-	{ { UTF8("/"), ENDK }, MODE_MANAGER, CMD_FIND },
-	{ { CTRL('V'), ENDK }, MODE_MANAGER, CMD_DIR_VOLUME },
+	{ { KUTF8("/"), KEND }, MODE_MANAGER, CMD_FIND },
+	{ { KCTRL('V'), KEND }, MODE_MANAGER, CMD_DIR_VOLUME },
 
-	{ { UTF8("x"), ENDK }, MODE_MANAGER, CMD_TOGGLE_HIDDEN },
-	{ { CTRL('H'), ENDK }, MODE_MANAGER, CMD_TOGGLE_HIDDEN },
+	{ { KUTF8("x"), KEND }, MODE_MANAGER, CMD_TOGGLE_HIDDEN },
+	{ { KCTRL('H'), KEND }, MODE_MANAGER, CMD_TOGGLE_HIDDEN },
 
-	{ { UTF8("?"), ENDK }, MODE_MANAGER, CMD_HELP },
+	{ { KUTF8("?"), KEND }, MODE_MANAGER, CMD_HELP },
 
-	{ { UTF8("c"), UTF8("d"), ENDK }, MODE_MANAGER, CMD_CD },
+	{ { KUTF8("c"), KUTF8("d"), KEND }, MODE_MANAGER, CMD_CD },
 
-	{ { UTF8("c"), UTF8("h"), ENDK }, MODE_MANAGER, CMD_CHMOD },
+	{ { KUTF8("c"), KUTF8("h"), KEND }, MODE_MANAGER, CMD_CHMOD },
 
-	{ { UTF8("s"), UTF8("n"), UTF8("a"), ENDK }, MODE_MANAGER, CMD_SORT_BY_NAME_ASC },
-	{ { UTF8("s"), UTF8("n"), UTF8("d"), ENDK }, MODE_MANAGER, CMD_SORT_BY_NAME_DESC },
-	{ { UTF8("s"), UTF8("d"), UTF8("a"), ENDK }, MODE_MANAGER, CMD_SORT_BY_DATE_ASC },
-	{ { UTF8("s"), UTF8("d"), UTF8("d"), ENDK }, MODE_MANAGER, CMD_SORT_BY_DATE_DESC },
-	{ { UTF8("s"), UTF8("s"), UTF8("a"), ENDK }, MODE_MANAGER, CMD_SORT_BY_SIZE_ASC },
-	{ { UTF8("s"), UTF8("s"), UTF8("d"), ENDK }, MODE_MANAGER, CMD_SORT_BY_SIZE_DESC },
+	{ { KUTF8("s"), KUTF8("n"), KUTF8("a"), KEND }, MODE_MANAGER, CMD_SORT_BY_NAME_ASC },
+	{ { KUTF8("s"), KUTF8("n"), KUTF8("d"), KEND }, MODE_MANAGER, CMD_SORT_BY_NAME_DESC },
+	{ { KUTF8("s"), KUTF8("d"), KUTF8("a"), KEND }, MODE_MANAGER, CMD_SORT_BY_DATE_ASC },
+	{ { KUTF8("s"), KUTF8("d"), KUTF8("d"), KEND }, MODE_MANAGER, CMD_SORT_BY_DATE_DESC },
+	{ { KUTF8("s"), KUTF8("s"), KUTF8("a"), KEND }, MODE_MANAGER, CMD_SORT_BY_SIZE_ASC },
+	{ { KUTF8("s"), KUTF8("s"), KUTF8("d"), KEND }, MODE_MANAGER, CMD_SORT_BY_SIZE_DESC },
 
 	/* MODE CHMOD */
-	{ { UTF8("q"), UTF8("q"), ENDK }, MODE_CHMOD, CMD_RETURN },
-	{ { UTF8("c"), UTF8("h"), ENDK }, MODE_CHMOD, CMD_CHANGE },
-	{ { UTF8("c"), UTF8("o"), ENDK }, MODE_CHMOD, CMD_CHOWN },
-	{ { UTF8("c"), UTF8("g"), ENDK }, MODE_CHMOD, CMD_CHGRP },
-	{ { UTF8("u"), UTF8("i"), ENDK }, MODE_CHMOD, CMD_TOGGLE_UIOX },
-	{ { UTF8("g"), UTF8("i"), ENDK }, MODE_CHMOD, CMD_TOGGLE_GIOX },
-	{ { UTF8("o"), UTF8("s"), ENDK }, MODE_CHMOD, CMD_TOGGLE_SB },
-	{ { UTF8("u"), UTF8("r"), ENDK }, MODE_CHMOD, CMD_TOGGLE_UR },
-	{ { UTF8("u"), UTF8("w"), ENDK }, MODE_CHMOD, CMD_TOGGLE_UW },
-	{ { UTF8("u"), UTF8("x"), ENDK }, MODE_CHMOD, CMD_TOGGLE_UX },
-	{ { UTF8("g"), UTF8("r"), ENDK }, MODE_CHMOD, CMD_TOGGLE_GR },
-	{ { UTF8("g"), UTF8("w"), ENDK }, MODE_CHMOD, CMD_TOGGLE_GW },
-	{ { UTF8("g"), UTF8("x"), ENDK }, MODE_CHMOD, CMD_TOGGLE_GX },
-	{ { UTF8("o"), UTF8("r"), ENDK }, MODE_CHMOD, CMD_TOGGLE_OR },
-	{ { UTF8("o"), UTF8("w"), ENDK }, MODE_CHMOD, CMD_TOGGLE_OW },
-	{ { UTF8("o"), UTF8("x"), ENDK }, MODE_CHMOD, CMD_TOGGLE_OX },
+	{ { KUTF8("q"), KUTF8("q"), KEND }, MODE_CHMOD, CMD_RETURN },
+	{ { KUTF8("c"), KUTF8("h"), KEND }, MODE_CHMOD, CMD_CHANGE },
+	{ { KUTF8("c"), KUTF8("o"), KEND }, MODE_CHMOD, CMD_CHOWN },
+	{ { KUTF8("c"), KUTF8("g"), KEND }, MODE_CHMOD, CMD_CHGRP },
+	{ { KUTF8("u"), KUTF8("i"), KEND }, MODE_CHMOD, CMD_TOGGLE_UIOX },
+	{ { KUTF8("g"), KUTF8("i"), KEND }, MODE_CHMOD, CMD_TOGGLE_GIOX },
+	{ { KUTF8("o"), KUTF8("s"), KEND }, MODE_CHMOD, CMD_TOGGLE_SB },
+	{ { KUTF8("u"), KUTF8("r"), KEND }, MODE_CHMOD, CMD_TOGGLE_UR },
+	{ { KUTF8("u"), KUTF8("w"), KEND }, MODE_CHMOD, CMD_TOGGLE_UW },
+	{ { KUTF8("u"), KUTF8("x"), KEND }, MODE_CHMOD, CMD_TOGGLE_UX },
+	{ { KUTF8("g"), KUTF8("r"), KEND }, MODE_CHMOD, CMD_TOGGLE_GR },
+	{ { KUTF8("g"), KUTF8("w"), KEND }, MODE_CHMOD, CMD_TOGGLE_GW },
+	{ { KUTF8("g"), KUTF8("x"), KEND }, MODE_CHMOD, CMD_TOGGLE_GX },
+	{ { KUTF8("o"), KUTF8("r"), KEND }, MODE_CHMOD, CMD_TOGGLE_OR },
+	{ { KUTF8("o"), KUTF8("w"), KEND }, MODE_CHMOD, CMD_TOGGLE_OW },
+	{ { KUTF8("o"), KUTF8("x"), KEND }, MODE_CHMOD, CMD_TOGGLE_OX },
 
 	/* TODO
 	 * +x
@@ -309,21 +292,21 @@ static struct input2cmd default_mapping[] = {
 	 */
 
 	/* MODE WAIT */
-	{ { UTF8("q"), UTF8("q"), ENDK }, MODE_WAIT, CMD_TASK_QUIT },
-	{ { UTF8("p"), UTF8("p"), ENDK }, MODE_WAIT, CMD_TASK_PAUSE },
-	{ { UTF8("r"), UTF8("r"), ENDK }, MODE_WAIT, CMD_TASK_RESUME },
+	{ { KUTF8("q"), KUTF8("q"), KEND }, MODE_WAIT, CMD_TASK_QUIT },
+	{ { KUTF8("p"), KUTF8("p"), KEND }, MODE_WAIT, CMD_TASK_PAUSE },
+	{ { KUTF8("r"), KUTF8("r"), KEND }, MODE_WAIT, CMD_TASK_RESUME },
 
 
 	/* MODE HELP */
-	{ { UTF8("q"), ENDK }, MODE_HELP, CMD_HELP_QUIT },
+	{ { KUTF8("q"), KEND }, MODE_HELP, CMD_HELP_QUIT },
 
-	{ { UTF8("j"), ENDK }, MODE_HELP, CMD_HELP_DOWN },
-	{ { CTRL('N'), ENDK }, MODE_HELP, CMD_HELP_DOWN },
-	{ { SPEC(KEY_DOWN), ENDK }, MODE_HELP, CMD_HELP_DOWN },
+	{ { KUTF8("j"), KEND }, MODE_HELP, CMD_HELP_DOWN },
+	{ { KCTRL('N'), KEND }, MODE_HELP, CMD_HELP_DOWN },
+	{ { KSPEC(I_ARROW_DOWN), KEND }, MODE_HELP, CMD_HELP_DOWN },
 
-	{ { UTF8("k"), ENDK }, MODE_HELP, CMD_HELP_UP },
-	{ { CTRL('P'), ENDK }, MODE_HELP, CMD_HELP_UP },
-	{ { SPEC(KEY_UP), ENDK }, MODE_HELP, CMD_HELP_UP },
+	{ { KUTF8("k"), KEND }, MODE_HELP, CMD_HELP_UP },
+	{ { KCTRL('P'), KEND }, MODE_HELP, CMD_HELP_UP },
+	{ { KSPEC(I_ARROW_UP), KEND }, MODE_HELP, CMD_HELP_UP },
 };
 
 static const size_t default_mapping_length = (sizeof(default_mapping)/sizeof(struct input2cmd));
@@ -479,7 +462,6 @@ struct select_option {
 int ui_select(struct ui* const, const char* const q,
 		const struct select_option*, const size_t);
 
-struct input get_input(void);
 enum command get_cmd(struct ui* const);
 int fill_textbox(const struct ui* const, char* const,
 		char** const, const size_t);

@@ -4,8 +4,8 @@ CFLAGS += --std=c99 -Wall -Wextra -pedantic -g
 LDFLAGS =
 LIBS = -lpanel -lncurses
 OBJDIR = obj
-OBJ = main.o fs.o ui.o file_view.o utf8.o task.o
-TESTOBJ := test.o fs.o ui.o file_view.o utf8.o task.o
+OBJ = main.o fs.o ui.o file_view.o utf8.o task.o terminal.o
+TESTOBJ := test.o fs.o ui.o file_view.o utf8.o task.o terminal.o
 EXENAME = hund
 TESTEXENAME = test/testme
 TESTSCRIPTNAME = test/test.sh

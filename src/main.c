@@ -108,14 +108,14 @@ inline static bool _solve_conflicts(struct ui* const i,
 		struct string_list* const r) {
 	static const char* const question = "There are conflicts.";
 	static const struct select_option o[] = {
-		{ UTF8("s"), "skip" },
-		{ UTF8("r"), "rename" },
-		{ UTF8("m"), "merge" },
-		{ UTF8("a"), "abort" }
+		{ KUTF8("s"), "skip" },
+		{ KUTF8("r"), "rename" },
+		{ KUTF8("m"), "merge" },
+		{ KUTF8("a"), "abort" }
 	};
 	static const struct select_option m[] = {
-		{ UTF8("s"), "skip" },
-		{ UTF8("o"), "overwrite" },
+		{ KUTF8("s"), "skip" },
+		{ KUTF8("o"), "overwrite" },
 	};
 	int d = ui_select(i, question, o, 4);
 	if (!d) {
@@ -165,8 +165,8 @@ static void prepare_long_task(struct ui* const i, struct task* const t,
 	struct string_list renamed = { NULL, 0 };
 	file_view_selected_to_list(i->pv, &selected);
 	static const struct select_option o[] = {
-		{ UTF8("n"), "no" },
-		{ UTF8("y"), "yes" }
+		{ KUTF8("n"), "no" },
+		{ KUTF8("y"), "yes" }
 	};
 	enum task_flags tf = TF_RAW_LINKS;
 	if (tt == TASK_REMOVE && !ui_select(i, "Remove?", o, 2)) return;
@@ -201,9 +201,9 @@ static void process_input(struct ui* const i, struct task* const t) {
 	struct string_list sf = { NULL, 0 }; // Selected Files
 	struct string_list rf = { NULL, 0 }; // Renamed Files
 	static const struct select_option o[] = {
-		{ UTF8("n"), "no" },
-		{ UTF8("y"), "yes" },
-		{ UTF8("a"), "abort" }
+		{ KUTF8("n"), "no" },
+		{ KUTF8("y"), "yes" },
+		{ KUTF8("a"), "abort" }
 	};
 	const enum command cmd = get_cmd(i);
 	switch (cmd) {
