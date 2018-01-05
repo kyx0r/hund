@@ -420,6 +420,8 @@ struct ui {
 	char prch;
 	char* prompt;
 
+	int timeout;
+
 	PANEL* fvp[2];
 	struct file_view* fvs[2];
 	struct file_view* pv;

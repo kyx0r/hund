@@ -549,7 +549,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 
 /* Display message and clean task */
 static void task_finish(struct ui* const i, struct task* const t) {
-	wtimeout(stdscr, -1);
+	i->timeout = -1;
 	int err;
 	if ((err = file_view_scan_dir(i->pv))
 	   || (err = file_view_scan_dir(i->sv))) {
@@ -570,7 +570,7 @@ static void task_finish(struct ui* const i, struct task* const t) {
 }
 
 static void task_execute(struct ui* const i, struct task* const t) {
-	wtimeout(stdscr, 5);
+	i->timeout = 5;
 	int err;
 	if (!t->paused && (err = do_task(t, 1024))) {
 		failed(i, task_strings[t->t][NOUN], err, NULL);

@@ -104,6 +104,7 @@ struct ui ui_init(struct file_view* const pv,
 	i.m = MODE_MANAGER;
 	i.prch = ' ';
 	i.prompt = NULL;
+	i.timeout = -1;
 	i.mt = MSG_NONE;
 	i.helpy = 0;
 	i.run = i.ui_needs_refresh = true;
@@ -620,7 +621,7 @@ int ui_select(struct ui* const i, const char* const q,
 	wrefresh(stdscr);
 	struct input in;
 	for (;;) {
-		in = get_input();
+		in = get_input(i->timeout);
 		for (size_t j = 0; j < oc; ++j) {
 			if (!memcmp(&in, &o[j].i, sizeof(struct input))) return j;
 		}
@@ -636,9 +637,9 @@ int ui_select(struct ui* const i, const char* const q,
  */
 enum command get_cmd(struct ui* const i) {
 	memset(i->mks, 0, i->kml*sizeof(unsigned short));
-	struct input newinput = get_input();
+	struct input newinput = get_input(i->timeout);
 	if (newinput.t == I_NONE) return CMD_NONE;
-	else if (IS_CTRL(newinput, '[')) { // ESC
+	else if (newinput.t == I_ESCAPE || IS_CTRL(newinput, '[')) {
 		memset(i->il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
 		i->ili = 0;
 		return CMD_NONE;
@@ -704,7 +705,7 @@ int fill_textbox(const struct ui* const I,
 	curs_set(2);
 	move(I->scrh-1, utf8_width(buf)-utf8_width(*buftop)+1);
 	refresh();
-	struct input i = get_input();
+	struct input i = get_input(I->timeout);
 	curs_set(0);
 	if (i.t == I_NONE) return 1;
 	if (IS_CTRL(i, '[')) return -1;
