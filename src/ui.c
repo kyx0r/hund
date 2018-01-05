@@ -711,7 +711,7 @@ int fill_textbox(const struct ui* const I,
 	if (IS_CTRL(i, '[')) return -1;
 	else if (IS_CTRL(i, 'N')) return 2;
 	else if (IS_CTRL(i, 'P')) return -2;
-	else if ((IS_CTRL(i, 'J')) ||
+	else if ((IS_CTRL(i, 'J') || IS_CTRL(i, 'M')) ||
 	         (i.t == I_UTF8 &&
 	         (i.utf[0] == '\n' || i.utf[0] == '\r'))) {
 		if (*buftop != buf) return 0;

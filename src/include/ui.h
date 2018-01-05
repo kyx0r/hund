@@ -197,7 +197,7 @@ struct input2cmd {
 
 #define KEND { .t = I_NONE }
 #define KUTF8(K) { .t = I_UTF8, .utf = K }
-#define KSPEC(K) { .t = (K), .utf = { 0, 0, 0, 0 } }
+#define KSPEC(K) { .t = (K) }
 #define KCTRL(K) { .t = I_CTRL, .utf[0] = (K) }
 
 static struct input2cmd default_mapping[] = {
@@ -238,6 +238,7 @@ static struct input2cmd default_mapping[] = {
 
 	{ { KUTF8("i"), KEND }, MODE_MANAGER, CMD_ENTER_DIR },
 	{ { KCTRL('J'), KEND }, MODE_MANAGER, CMD_ENTER_DIR },
+	{ { KCTRL('M'), KEND }, MODE_MANAGER, CMD_ENTER_DIR },
 
 	{ { KUTF8("o"), KEND }, MODE_MANAGER, CMD_OPEN_FILE },
 	{ { KUTF8("e"), KUTF8("d"), KEND }, MODE_MANAGER, CMD_EDIT_FILE },

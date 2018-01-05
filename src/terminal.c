@@ -46,7 +46,7 @@ ssize_t xread(int fd, void* buf, ssize_t count, int timeout_ms) {
 static enum input_type which_key(char* const seq) {
 	int i = 0;
 	while (SKM[i].seq != NULL && SKM[i].t != I_NONE) {
-		if (!memcmp(SKM[i].seq, seq, 7)) return SKM[i].t;
+		if (!strcmp(SKM[i].seq, seq)) return SKM[i].t; // TODO FIXME
 		i += 1;
 	}
 	return I_NONE;
@@ -67,7 +67,6 @@ struct input get_input(int timeout_ms) {
 				xread(STDIN_FILENO, seq+3, 1, 0);
 			}
 		}
-		//fprintf(stderr, "%x%x%x%x\n", seq[0], seq[1], seq[2], seq[3]);
 		i.t = which_key(seq);
 	}
 	else if (seq[0] == 0x7f) {
@@ -96,6 +95,11 @@ struct input get_input(int timeout_ms) {
 			i.utf[b] = 0;
 		}
 	}
+	/*switch (i.t) {
+	case I_UTF8: fprintf(stderr, "%s\n", i.utf); break;
+	case I_CTRL: fprintf(stderr, "^%c\n", i.utf[0]); break;
+	default: fprintf(stderr, "%d %s\n", i.t, keynames[i.t]); break;
+	}*/
 	return i;
 }
 
