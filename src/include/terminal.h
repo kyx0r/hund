@@ -31,9 +31,8 @@
 #include <string.h>
 #include <ctype.h>
 #include <errno.h>
-#include <sys/time.h>
 #include <sys/select.h>
-#include <sys/types.h>
+#include <sys/ioctl.h>
 
 #include "utf8.h"
 
@@ -85,6 +84,8 @@ static const struct s2i SKM[] = {
 	{ "\x1bOB", I_ARROW_DOWN },
 	{ "\x1bOC", I_ARROW_RIGHT },
 	{ "\x1bOD", I_ARROW_LEFT },
+	{ "\x1bOH", I_HOME },
+	{ "\x1bOF", I_END },
 
 	{ "\x1b[1~", I_HOME },
 	{ "\x1b[3~", I_DELETE },
@@ -120,5 +121,42 @@ ssize_t xread(int, void*, ssize_t, int);
 int start_raw_mode(struct termios* const);
 int stop_raw_mode(struct termios* const);
 struct input get_input(int);
+
+enum char_attr {
+	ATTR_NORMAL = 0,
+	ATTR_BOLD = 1,
+	ATTR_FAINT = 2,
+	ATTR_ITALIC = 3,
+	ATTR_UNDERLINE = 4,
+	ATTR_BLINK = 5,
+	ATTR_INVERSE = 7,
+
+	ATTR_BLACK = '0',
+	ATTR_RED = '1',
+	ATTR_GREEN = '2',
+	ATTR_YELLOW = '3',
+	ATTR_BLUE = '4',
+	ATTR_MAGENTA = '5',
+	ATTR_CYAN = '6',
+	ATTR_WHITE = '7',
+	ATTR_DEFAULT = '9',
+
+	ATTR_FOREGROUND = 1<<8,
+	ATTR_BACKGROUND = 1<<9,
+	ATTR_COLOR_256 = 1<<10,
+	ATTR_COLOR_TRUE = 1<<11,
+};
+
+int char_attr(char* const, const size_t, const int,
+		const unsigned char* const);
+
+int move_cursor(const unsigned int, const unsigned int);
+int window_size(int* const, int* const);
+
+#define CSI_CLEAR_ALL "\x1b[2J", 4
+#define CSI_CLEAR_LINE "\x1b[K", 3
+#define CSI_CURSOR_TOP_LEFT "\x1b[H", 3
+#define CSI_CURSOR_SHOW "\x1b[?25h", 6
+#define CSI_CURSOR_HIDE "\x1b[?25l", 6
 
 #endif

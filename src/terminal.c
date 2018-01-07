@@ -21,6 +21,7 @@
 
 /*
  * TODO test
+ * TODO maybe move the select() code to get_input()???
  */
 ssize_t xread(int fd, void* buf, ssize_t count, int timeout_ms) {
 	struct timeval T = { 0, (suseconds_t)timeout_ms };
@@ -30,11 +31,10 @@ ssize_t xread(int fd, void* buf, ssize_t count, int timeout_ms) {
 		FD_ZERO(&rfds);
 		FD_SET(STDIN_FILENO, &rfds);
 	}
-
 	ssize_t rd;
 	do {
 		if (timeout_ms > 0) {
-			retval = select(1, &rfds, NULL, NULL, &T);
+			retval = select(STDIN_FILENO+1, &rfds, NULL, NULL, &T);
 			if (retval == -1 || !retval) return 0;
 		}
 		rd = read(fd, buf, count);
@@ -113,4 +113,44 @@ int start_raw_mode(struct termios* const before) {
 
 int stop_raw_mode(struct termios* const before) {
 	return (tcsetattr(STDIN_FILENO, TCSAFLUSH, before) ? errno : 0);
+}
+
+int char_attr(char* const buf, const size_t bufs,
+		const int F, const unsigned char* const v) {
+	if (F < 8) {
+		const char C = '0' + (F & 0x0000000f);
+		return snprintf(buf, bufs, "\x1b[%cm", C);
+	}
+	char fgbg = '3'; // TODO vvvv
+	if (F & ATTR_FOREGROUND) fgbg = '3';
+	else if (F & ATTR_BACKGROUND) fgbg = '4';
+	if (F & 0x7f) {
+		const char C = F & 0x0000007f;
+		return snprintf(buf, bufs, "\x1b[%c%cm", fgbg, C);
+	}
+	if (F & ATTR_COLOR_256) {
+		return snprintf(buf, bufs, "\x1b[%c8;5;%um", fgbg, v[0]);
+	}
+	if (F & ATTR_COLOR_TRUE) {
+		return snprintf(buf, bufs, "\x1b[%c8;2;%u;%u;%um",
+				fgbg, v[0], v[1], v[2]);
+	}
+	return 0;
+}
+
+int move_cursor(const unsigned int R, const unsigned int C) {
+	char buf[1+1+4+1+4+1+1];
+	size_t n = snprintf(buf, sizeof(buf), "\x1b[%u;%uH", R, C);
+	return (write(STDOUT_FILENO, buf, n) == -1 ? errno : 0);
+}
+
+int window_size(int* const R, int* const C) {
+	struct winsize ws;
+	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1) {
+		*R = *C = 0;
+		return errno;
+	}
+	*R = ws.ws_row;
+	*C = ws.ws_col;
+	return 0;
 }
