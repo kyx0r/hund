@@ -502,9 +502,12 @@ size_t imb(const char* a, const char* b) {
 
 /* Checks if STRing contains SUBString */
 bool contains(const char* const str, const char* const subs) {
-	const size_t sl = strnlen(subs, PATH_MAX);
-	for (size_t j = 0; strnlen(str+j, PATH_MAX) >= sl; ++j) {
-		if (sl == imb(str+j, subs)) return true;
+	const size_t subs_len = strnlen(subs, PATH_MAX);
+	const size_t str_len = strnlen(str, PATH_MAX);
+	if (subs_len > str_len) return false;
+	if (subs_len == str_len) return !memcmp(str, subs, str_len);
+	for (size_t j = 0; strnlen(str+j, PATH_MAX) >= subs_len; ++j) {
+		if (subs_len == imb(str+j, subs)) return true;
 	}
 	return false;
 }
