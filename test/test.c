@@ -7,6 +7,7 @@
 #include "../src/include/file_view.h"
 #include "../src/include/task.h"
 #include "../src/include/utf8.h"
+#include "../src/include/terminal.h"
 
 int main() {
 	SETUP_TESTS;
@@ -101,6 +102,12 @@ int main() {
 	TEST(!contains("qqloz", "lol"), "");
 	TEST(!contains("qqlooolz", "looool"), "");
 	TEST(contains("/home/user/lols", "/"), "");
+	TEST(contains("/home/user/loł", "ł"), "");
+	TEST(contains("anything", ""), "");
+	TEST(contains("", ""), "");
+	TEST(contains("", "\0"), "");
+	TEST(!contains("", "fug"), "");
+	TEST(!contains("", "?"), "");
 
 	char buf[SIZE_BUF_SIZE];
 	pretty_size(100, buf);
@@ -111,8 +118,47 @@ int main() {
 	TEST(!strcmp(buf, "1K"), "");
 	pretty_size(1035, buf);
 	TEST(!strcmp(buf, "1.01K"), "");
+	pretty_size(1024+512, buf);
+	TEST(!strcmp(buf, "1.5K"), "");
 	pretty_size(1024+1023, buf);
 	TEST(!strcmp(buf, "1.99K"), "");
+	pretty_size(2048, buf);
+	TEST(!strcmp(buf, "2K"), "");
+
+	pretty_size((off_t) 1, buf);
+	TEST(!strcmp(buf, "1B"), "");
+
+	pretty_size((off_t) 1<<10, buf);
+	TEST(!strcmp(buf, "1K"), "");
+
+	pretty_size((off_t) 1<<20, buf);
+	TEST(!strcmp(buf, "1M"), "");
+
+	pretty_size((off_t) 1<<30, buf);
+	TEST(!strcmp(buf, "1G"), "");
+
+	pretty_size((off_t) 1<<40, buf);
+	TEST(!strcmp(buf, "1T"), "");
+
+	pretty_size((off_t) 1<<50, buf);
+	TEST(!strcmp(buf, "1P"), "");
+
+	pretty_size((off_t) 1<<60, buf);
+	TEST(!strcmp(buf, "1E"), "");
+
+	off_t s = (off_t) 1 << 60;
+	s += (off_t) 1 << 59;
+	pretty_size(s, buf);
+	TEST(!strcmp(buf, "1.5E"), "");
+	s += (off_t) 1 << 58;
+	pretty_size(s, buf);
+	TEST(!strcmp(buf, "1.75E"), "");
+	s += (off_t) 1 << 57;
+	pretty_size(s, buf);
+	TEST(!strcmp(buf, "1.87E"), "");
+	s = 0x7fffffffffffffff;
+	pretty_size(s, buf);
+	TEST(!strcmp(buf, "7.99E"), "");
 
 	END_SECTION("fs");
 
@@ -144,28 +190,47 @@ int main() {
 	}
 	TEST(symmetric, "cp2b and b2cp are symmetric");
 
-	// Some Valid Strings
-	char* svs[] = {
-		"!@#$%^&*()_+",
-		"ascii is cool",
-		"Pchnąć w tę łódź jeża lub ośm skrzyń fig.",
-		"Zwölf große Boxkämpfer jagen Viktor quer über den Sylter Deich.",
-		"Любя, съешь щипцы, — вздохнёт мэр, — кайф жгуч.",
-		"Nechť již hříšné saxofony ďáblů rozzvučí síň úděsnými tóny waltzu, tanga a quickstepu.",
-		"Eble ĉiu kvazaŭdeca fuŝĥoraĵo ĝojigas homtipon.",
-		"Γαζίες καὶ μυρτιὲς δὲν θὰ βρῶ πιὰ στὸ χρυσαφὶ ξέφωτο.",
+	struct string_and_width {
+		char* s;
+		size_t w;
+	} svs[] = {
+		{ "", 0 },
+		{ "\0", 0 },
+		{ "\x1b", 1 },
+		{ " ", 1 },
+		{ "\t", 1 },
+		{ "\n", 1 },
+		{ "  ", 2 },
+		{ "wat", 3 },
+		{ "łąć", 3 },
+		{ "~!@#$%^&*()_+", 13 },
+		{ "`1234567890-=", 13 },
+		{ "[]\\;',./", 8 },
+		{ "{}|:\"<>?", 8 },
+		{ "qwertyuiop", 10 },
+		{ "πœę©ß←↓→óþ", 10 },
+		{ "asdfghjkl", 9 },
+		{ "ąśðæŋ’ə…ł", 9 },
+		{ "zxcvbnm", 7 },
+		{ "żźć„”ńµ", 7 },
+		{ "¬≠²³¢€½§·«»–≤≥", 14 },
+		{ "∨¡¿£¼‰∧≈¾±°—", 12 },
+		{ "ΩŒĘ®™¥↑↔ÓÞĄŚÐÆŊ•ƏŻŹĆ‘“Ń∞", 24 },
+		{ "÷", 1 },
+		{ "ascii is cool", 13 },
+		{ "Pchnąć w tę łódź jeża lub ośm skrzyń fig.", 41 },
+		{ "Zwölf große Boxkämpfer jagen Viktor quer über den Sylter Deich.", 63 },
+		{ "Любя, съешь щипцы, — вздохнёт мэр, — кайф жгуч.", 47 },
+		{ "Nechť již hříšné saxofony ďáblů rozzvučí síň úděsnými tóny waltzu, tanga a quickstepu.", 86 },
+		{ "Eble ĉiu kvazaŭdeca fuŝĥoraĵo ĝojigas homtipon.", 47 },
+		{ "Γαζίες καὶ μυρτιὲς δὲν θὰ βρῶ πιὰ στὸ χρυσαφὶ ξέφωτο.", 53 },
 	};
 
-	TEST(utf8_width("wat") == 3, "");
-	TEST(utf8_width("łąć") == 3, "");
-	TEST(utf8_width("łaka łaką") == 9, "");
-	TEST(utf8_width("Γαζίες καὶ μυρτιὲς δὲν θὰ βρῶ πιὰ στὸ χρυσαφὶ ξέφωτο.") == 53, "");
-	TEST(utf8_width("Eble ĉiu kvazaŭdeca fuŝĥoraĵo ĝojigas homtipon.") == 47, "");
-
-	for (size_t i = 0; i < sizeof(svs)/sizeof(char*); ++i) {
-		TEST(utf8_width(svs[i])<=strlen(svs[i]), "apparent width <= length; loose, but always true");
-		TEST(utf8_width(svs[i]) == utf8_ng_till(svs[i], svs[i]+strlen(svs[i])), "");
-		TEST(utf8_validate(svs[i]), "all valid strings are valid");
+	for (size_t i = 0; i < sizeof(svs)/sizeof(struct string_and_width); ++i) {
+		TEST(utf8_width(svs[i].s) <= strlen(svs[i].s), "apparent width <= length; loose, but always true");
+		TEST(utf8_width(svs[i].s) == svs[i].w, "");
+		TEST(utf8_width(svs[i].s) == utf8_ng_till(svs[i].s, svs[i].s+strlen(svs[i].s)), "");
+		TEST(utf8_validate(svs[i].s), "all valid strings are valid");
 	}
 
 	char* sis[] = {
@@ -205,6 +270,8 @@ int main() {
 
 	char inv[NAME_MAX];
 	cut_non_ascii("łąćwożrźks", inv, NAME_MAX);
+	TEST(!strcmp(inv, "works"), "");
+	cut_non_ascii("ΩŒĘwo®r≈ks", inv, NAME_MAX);
 	TEST(!strcmp(inv, "works"), "");
 
 
