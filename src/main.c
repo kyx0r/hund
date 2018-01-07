@@ -654,8 +654,8 @@ int main(int argc, char* argv[]) {
 	memset(fvs, 0, sizeof(fvs));
 	fvs[0].sorting = fvs[1].sorting = cmp_name_asc;
 
-	struct ui i = ui_init(&fvs[0], &fvs[1]);
-	I = &i;
+	struct ui i;
+	ui_init(&i, &fvs[0], &fvs[1]);
 	for (int v = 0; v < 2; ++v) {
 		if (!getcwd(fvs[v].wd, PATH_MAX)) {
 			fprintf(stderr, "could not read cwd; jumping to /\n");

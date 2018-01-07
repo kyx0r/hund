@@ -56,7 +56,7 @@ static enum theme_element mode2theme(const mode_t m, const mode_t n) {
 
 struct ui* I;
 static void handle_winch(int sig) {
-	(void)(sig);
+	if (sig != SIGWINCH) return;
 	endwin();
 	refresh();
 	clear();
@@ -64,9 +64,9 @@ static void handle_winch(int sig) {
 	ui_draw(I);
 }
 
-struct ui ui_init(struct file_view* const pv,
+void ui_init(struct ui* const i, struct file_view* const pv,
 		struct file_view* const sv) {
-	struct ui i;
+	I = i;
 	setlocale(LC_ALL, "");
 	initscr();
 	start_color();
@@ -94,38 +94,37 @@ struct ui ui_init(struct file_view* const pv,
 		init_pair(i, theme_scheme[i][1], theme_scheme[i][2]);
 	}
 
-	i.fvs[0] = i.pv = pv;
-	i.fvs[1] = i.sv = sv;
+	i->fvs[0] = i->pv = pv;
+	i->fvs[1] = i->sv = sv;
 	for (int x = 0; x < 2; ++x) {
 		WINDOW* tmpwin = newwin(1, 1, 0, 0);
-		i.fvp[x] = new_panel(tmpwin);
+		i->fvp[x] = new_panel(tmpwin);
 	}
-	i.scrw = i.scrh = 0;
-	i.m = MODE_MANAGER;
-	i.prch = ' ';
-	i.prompt = NULL;
-	i.timeout = -1;
-	i.mt = MSG_NONE;
-	i.helpy = 0;
-	i.run = i.ui_needs_refresh = true;
-	i.ili = 0;
-	memset(i.il, 0, INPUT_LIST_LENGTH*sizeof(struct input));
-	i.kml = default_mapping_length;
-	i.mks = calloc(default_mapping_length, sizeof(unsigned short));
-	i.kmap = default_mapping; // TODO ???
-	//i.kmap = malloc(default_mapping_length*sizeof(struct input2cmd));
+	i->scrw = i->scrh = 0;
+	i->m = MODE_MANAGER;
+	i->prch = ' ';
+	i->prompt = NULL;
+	i->timeout = -1;
+	i->mt = MSG_NONE;
+	i->helpy = 0;
+	i->run = i->ui_needs_refresh = true;
+	i->ili = 0;
+	memset(i->il, 0, INPUT_LIST_LENGTH*sizeof(struct input));
+	i->kml = default_mapping_length;
+	i->mks = calloc(default_mapping_length, sizeof(unsigned short));
+	i->kmap = default_mapping; // TODO ???
+	//i->kmap = malloc(default_mapping_length*sizeof(struct input2cmd));
 	/*for (size_t k = 0; k < default_mapping_length; ++k) {
-		memcpy(&i.kmap[k], &default_mapping[k], sizeof(struct input2cmd));
+		memcpy(&i->kmap[k], &default_mapping[k], sizeof(struct input2cmd));
 	}*/
-	memset(i.perm, 0, sizeof(i.perm));
-	memset(i.o, 0, sizeof(i.o));
-	memset(i.g, 0, sizeof(i.g));
+	memset(i->perm, 0, sizeof(i->perm));
+	memset(i->o, 0, sizeof(i->o));
+	memset(i->g, 0, sizeof(i->g));
 
 	struct sigaction sa;
 	memset(&sa, 0, sizeof(struct sigaction));
 	sa.sa_handler = handle_winch;
 	sigaction(SIGWINCH, &sa, NULL);
-	return i;
 }
 
 void ui_end(struct ui* const i) {

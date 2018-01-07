@@ -449,7 +449,8 @@ struct ui {
 	char group[LOGIN_NAME_MAX+1];
 };
 
-struct ui ui_init(struct file_view* const, struct file_view* const);
+void ui_init(struct ui* const, struct file_view* const,
+		struct file_view* const);
 void ui_end(struct ui* const);
 void ui_draw(struct ui* const);
 void ui_update_geometry(struct ui* const);
