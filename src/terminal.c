@@ -29,17 +29,22 @@ ssize_t xread(int fd, void* buf, ssize_t count, int timeout_ms) {
 	int retval;
 	if (timeout_ms > 0) {
 		FD_ZERO(&rfds);
-		FD_SET(STDIN_FILENO, &rfds);
+		FD_SET(fd, &rfds);
 	}
 	ssize_t rd;
 	do {
 		if (timeout_ms > 0) {
-			retval = select(STDIN_FILENO+1, &rfds, NULL, NULL, &T);
-			if (retval == -1 || !retval) return 0;
+			retval = select(fd+1, &rfds, NULL, NULL, &T);
+			if (retval == -1 || !retval) {
+				FD_CLR(fd, &rfds);
+				return 0;
+			}
+			FD_CLR(fd, &rfds);
 		}
 		rd = read(fd, buf, count);
 	} while (rd < 0 && errno == EINTR && errno == EAGAIN);
 	//fprintf(stderr, "buf: %x, len: %llu\n", *(char*)buf, rd);
+	FD_CLR(fd, &rfds);
 	return rd;
 }
 
@@ -53,18 +58,18 @@ static enum input_type which_key(char* const seq) {
 }
 
 struct input get_input(int timeout_ms) {
+	const int fd = STDIN_FILENO;
 	struct input i;
 	memset(i.utf, 0, 5);
 	i.t = I_NONE;
 	int utflen;
 	char seq[7];
 	memset(seq, 0, sizeof(seq));
-	if (xread(STDIN_FILENO, seq, 1, timeout_ms) == 1 && seq[0] == '\x1b') {
-		if (xread(STDIN_FILENO, seq+1, 1, 0) == 1
+	if (xread(fd, seq, 1, timeout_ms) == 1 && seq[0] == '\x1b') {
+		if (xread(fd, seq+1, 1, 0) == 1
 				&& (seq[1] == '[' || seq[1] == 'O')) {
-			if (xread(STDIN_FILENO, seq+2, 1, 0) == 1
-					&& isdigit(seq[2])) {
-				xread(STDIN_FILENO, seq+3, 1, 0);
+			if (xread(fd, seq+2, 1, 0) == 1 && isdigit(seq[2])) {
+				xread(fd, seq+3, 1, 0);
 			}
 		}
 		i.t = which_key(seq);
@@ -85,7 +90,7 @@ struct input get_input(int timeout_ms) {
 		int b;
 		i.utf[0] = seq[0];
 		for (b = 1; b < utflen; ++b) {
-			if (xread(STDIN_FILENO, i.utf+b, 1, 0) != 1) {
+			if (xread(fd, i.utf+b, 1, 0) != 1) {
 				i.t = I_NONE;
 				memset(i.utf, 0, 5);
 				return i;
@@ -104,15 +109,18 @@ struct input get_input(int timeout_ms) {
 }
 
 int start_raw_mode(struct termios* const before) {
-	if (tcgetattr(STDIN_FILENO, before)) return errno;
+	const int fd = STDIN_FILENO;
+	memset(before, 0, sizeof(struct termios));
+	if (tcgetattr(fd, before) == -1) return errno;
 	struct termios raw;
 	memcpy(&raw, before, sizeof(struct termios));
 	cfmakeraw(&raw);
-	return (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) ? errno : 0);
+	return (tcsetattr(fd, TCSAFLUSH, &raw) == -1 ? errno : 0);
 }
 
 int stop_raw_mode(struct termios* const before) {
-	return (tcsetattr(STDIN_FILENO, TCSAFLUSH, before) ? errno : 0);
+	const int fd = STDIN_FILENO;
+	return (tcsetattr(fd, TCSAFLUSH, before) == -1 ? errno : 0);
 }
 
 int char_attr(char* const buf, const size_t bufs,
