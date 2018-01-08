@@ -576,7 +576,7 @@ static void task_execute(struct ui* const i, struct task* const t) {
 		failed(i, task_strings[t->t][NOUN], err, NULL);
 		task_clean(t); // TODO
 		i->m = MODE_MANAGER;
-		wtimeout(stdscr, -1);
+		i->timeout = -1;
 		return;
 	}
 	char sdone[SIZE_BUF_SIZE];
@@ -683,6 +683,7 @@ int main(int argc, char* argv[]) {
 
 	struct task t;
 	memset(&t, 0, sizeof(struct task));
+	t.in = t.out = -1; // TODO
 
 	i.mt = MSG_INFO;
 	snprintf(i.msg, MSG_BUFFER_SIZE,
