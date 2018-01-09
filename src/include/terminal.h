@@ -131,6 +131,8 @@ enum char_attr {
 	ATTR_BLINK = 5,
 	ATTR_INVERSE = 7,
 
+	ATTR_NOT_UNDERLINE = 24,
+
 	ATTR_BLACK = '0',
 	ATTR_RED = '1',
 	ATTR_GREEN = '2',
@@ -152,6 +154,17 @@ int char_attr(char* const, const size_t, const int,
 
 int move_cursor(const unsigned int, const unsigned int);
 int window_size(int* const, int* const);
+
+struct append_buffer {
+	char* buf;
+	size_t top;
+	size_t capacity;
+};
+
+size_t append(struct append_buffer* const, const char* const, const size_t);
+size_t append_attr(struct append_buffer* const, const int,
+		const unsigned char* const);
+size_t fill(struct append_buffer* const, const char, const size_t);
 
 #define CSI_CLEAR_ALL "\x1b[2J", 4
 #define CSI_CLEAR_LINE "\x1b[K", 3
