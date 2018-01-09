@@ -24,8 +24,6 @@
 	#define _DEFAULT_SOURCE
 #endif
 
-#include <ncurses.h> // TODO
-#include <panel.h>
 #include <limits.h>
 #include <locale.h>
 #include <time.h>
@@ -154,7 +152,7 @@ enum theme_element {
 
 	THEME_ELEM_NUM
 };
-
+#if 0
 static const int theme_scheme[THEME_ELEM_NUM][3] = {
 	[THEME_OTHER] = { 0, COLOR_WHITE, COLOR_BLACK },
 	[THEME_PATHBAR] = { 0, COLOR_BLACK, COLOR_WHITE },
@@ -184,6 +182,7 @@ static const int theme_scheme[THEME_ELEM_NUM][3] = {
 	//[THEME_ENTRY_LNK_PATH] = { 0, COLOR_WHITE, COLOR_BLACK },
 	//[THEME_ENTRY_LNK_PATH_INV] = { 0, COLOR_RED, COLOR_BLACK },
 };
+#endif
 
 #define INPUT_LIST_LENGTH 4
 
@@ -409,6 +408,9 @@ static const char* const timefmt = "%Y-%m-%d %H:%M:%S";
 
 struct ui {
 	int scrh, scrw; // Last window dimensions
+	int pw[2]; // Panel Width
+	int ph; // Panel Height
+	int pxoff[2]; // Panel X OFFset
 
 	bool ui_needs_refresh;
 	bool run;
@@ -423,7 +425,9 @@ struct ui {
 
 	int timeout;
 
-	PANEL* fvp[2];
+	struct append_buffer B;
+	struct termios T;
+
 	struct file_view* fvs[2];
 	struct file_view* pv;
 	struct file_view* sv;
