@@ -125,21 +125,21 @@ int stop_raw_mode(struct termios* const before) {
 
 int char_attr(char* const buf, const size_t bufs,
 		const int F, const unsigned char* const v) {
-	if (F < 32) {
+	if ((F & 0x000000ff) < 32) {
 		return snprintf(buf, bufs, "\x1b[%dm", F);
 	}
 	char fgbg = '3'; // TODO vvvv
 	if (F & ATTR_FOREGROUND) fgbg = '3';
 	else if (F & ATTR_BACKGROUND) fgbg = '4';
-	if (F & 0x7f) {
+	if (F & 0x0000007f) {
 		const char C = F & 0x0000007f;
 		return snprintf(buf, bufs, "\x1b[%c%cm", fgbg, C);
 	}
 	if (F & ATTR_COLOR_256) {
-		return snprintf(buf, bufs, "\x1b[%c8;5;%um", fgbg, v[0]);
+		return snprintf(buf, bufs, "\x1b[%c8;5;%hhum", fgbg, v[0]);
 	}
 	if (F & ATTR_COLOR_TRUE) {
-		return snprintf(buf, bufs, "\x1b[%c8;2;%u;%u;%um",
+		return snprintf(buf, bufs, "\x1b[%c8;2;%hhu;%hhu;%hhum",
 				fgbg, v[0], v[1], v[2]);
 	}
 	return 0;
@@ -163,7 +163,7 @@ int window_size(int* const R, int* const C) {
 }
 
 size_t append(struct append_buffer* const ab, const char* const b, const size_t s) {
-	if (ab->capacity - ab->top < s) {
+	if ((ab->capacity - ab->top) < s) {
 		void* tmp = realloc(ab->buf, ab->top+s);
 		if (!tmp) return 0;
 		ab->buf = tmp;
@@ -176,7 +176,7 @@ size_t append(struct append_buffer* const ab, const char* const b, const size_t 
 
 size_t append_attr(struct append_buffer* const ab,
 		const int F, const unsigned char* const v) {
-	const size_t S = 1+1+1+1+1+1+1+4+1+4+1+4+1;
+	const size_t S = 1+1+1+1+1+1+1+3+1+3+1+3+1;
 	char attr[S];
 	int n = char_attr(attr, S, F, v);
 	return append(ab, attr, n);
