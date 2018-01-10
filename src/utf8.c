@@ -19,6 +19,8 @@
 
 #include "include/utf8.h"
 
+/* TODO fix some nomenclature mistakes */
+
 /* CodePoint To Bytes */
 void utf8_cp2b(char* const b, const codepoint_t cp) {
 	if (cp < (codepoint_t) 0x80) {
@@ -118,34 +120,43 @@ size_t utf8_cp2nb(const codepoint_t cp) {
 	return 0;
 }
 
+/* Glyph to width */
+size_t utf8_g2w(const codepoint_t cp) {
+	if (cp < 0x7f) return 1;
+	if (cp_in(zero_width, zero_width_len, cp)) return 0;
+	//if (cp_in(double_width, double_width_len, cp)) return 2;
+	return 1;
+}
+
 /* Apparent width */
 size_t utf8_width(const char* b) {
 	size_t g = 0;
 	size_t s;
 	while (*b && (s = utf8_g2nb(b)) != 0) {
+		g += utf8_g2w(utf8_b2cp(b));
 		b += s;
-		g += 1;
 	}
 	return g;
 }
 
-/* Calculates how much bytes take first g glyphs */
-size_t utf8_Ng2nb(const char* const b, size_t g) {
+/* Calculates how much bytes take will fill given width */
+size_t utf8_w2nb(const char* const b, size_t w) {
 	size_t r = 0;
-	for (size_t i = 0; i < g && *(b+r); ++i) {
+	while (*(b+r) && w > 0) {
 		r += utf8_g2nb(b+r);
+		w -= utf8_g2w(utf8_b2cp(b+r));
 	}
 	return r;
 }
 
-/* Number of glyphs till some address in that string */
-size_t utf8_ng_till(const char* a, const char* const b) {
-	size_t g = 0;
+/* Width till some address in that string */
+size_t utf8_wtill(const char* a, const char* const b) {
+	size_t w = 0;
 	while (b - a > 0) {
+		w += utf8_g2w(utf8_b2cp(a));
 		a += utf8_g2nb(a);
-		g += 1;
 	}
-	return g;
+	return w;
 }
 
 bool utf8_validate(const char* const b) {
@@ -199,4 +210,12 @@ void cut_non_ascii(const char* str, char* buf, size_t n) {
 		n -= 1;
 	}
 	*buf = 0; // null-terminator
+}
+
+bool cp_in(const struct range* const r, const size_t l, const codepoint_t cp) {
+	// TODO binary search?
+	for (size_t i = 0; i < l; ++i) {
+		if (r[i].s <= cp && cp <= r[i].e) return true;
+	}
+	return false;
 }
