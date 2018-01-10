@@ -8,6 +8,7 @@
 #include "../src/include/task.h"
 #include "../src/include/utf8.h"
 #include "../src/include/terminal.h"
+#include "../src/include/ui.h"
 
 int main() {
 	SETUP_TESTS;
@@ -194,12 +195,13 @@ int main() {
 		char* s;
 		size_t w;
 	} svs[] = {
+		{ "\xe2\x80\x8b", 0 },
+		// TODO more
+		{ "", 0 },
 		{ "", 0 },
 		{ "\0", 0 },
 		{ "\x1b", 1 },
 		{ " ", 1 },
-		{ "\t", 1 },
-		{ "\n", 1 },
 		{ "  ", 2 },
 		{ "wat", 3 },
 		{ "łąć", 3 },
@@ -229,7 +231,7 @@ int main() {
 	for (size_t i = 0; i < sizeof(svs)/sizeof(struct string_and_width); ++i) {
 		TEST(utf8_width(svs[i].s) <= strlen(svs[i].s), "apparent width <= length; loose, but always true");
 		TEST(utf8_width(svs[i].s) == svs[i].w, "");
-		TEST(utf8_width(svs[i].s) == utf8_ng_till(svs[i].s, svs[i].s+strlen(svs[i].s)), "");
+		TEST(utf8_width(svs[i].s) == utf8_wtill(svs[i].s, svs[i].s+strlen(svs[i].s)), "");
 		TEST(utf8_validate(svs[i].s), "all valid strings are valid");
 	}
 
@@ -250,10 +252,10 @@ int main() {
 		TEST(!utf8_validate(sis[i]), "all invalid strings are invalid");
 	}
 
-	TEST(utf8_Ng2nb("łaka łaką", 2) == 3, "");
-	TEST(utf8_Ng2nb("qq", 2) == 2, "");
-	TEST(utf8_Ng2nb("", 2) == 0, "");
-	TEST(utf8_Ng2nb("a", 0) == 0, "");
+	TEST(utf8_w2nb("łaka łaką", 2) == 3, "");
+	TEST(utf8_w2nb("qq", 2) == 2, "");
+	TEST(utf8_w2nb("", 2) == 0, "");
+	TEST(utf8_w2nb("a", 0) == 0, "");
 
 	char inserted[20] = "łąkała";
 	utf8_insert(inserted, "ń", 2);
@@ -266,7 +268,7 @@ int main() {
 	TEST(!strcmp(inserted, "ąńkała"), "");
 	utf8_remove(inserted, 4);
 	TEST(!strcmp(inserted, "ąńkaa"), "");
-	TEST(utf8_ng_till(inserted, inserted+5) == 3, "");
+	TEST(utf8_wtill(inserted, inserted+5) == 3, "");
 
 	char inv[NAME_MAX];
 	cut_non_ascii("łąćwożrźks", inv, NAME_MAX);
@@ -300,6 +302,36 @@ int main() {
 	free(result);
 
 	END_SECTION("task");
+
+
+	SECTION("terminal");
+
+	struct append_buffer ab;
+	memset(&ab, 0, sizeof(struct append_buffer));
+	ab.buf = calloc(100, sizeof(char));
+	ab.capacity = 100;
+
+	append(&ab, "lol", 3);
+	append(&ab, "pls", 3);
+	append(&ab, "pls", 0);
+	TEST(!memcmp(ab.buf, "lolpls", 6), "");
+	TEST(ab.top == 6, "");
+	TEST(ab.capacity == 100, "");
+
+	fill(&ab, ';', 3);
+	TEST(!memcmp(ab.buf, "lolpls;;;", 9), "");
+	TEST(ab.top == 9, "");
+	TEST(ab.capacity == 100, "");
+
+	fill(&ab, '.', 91);
+	TEST(ab.capacity == 100, "");
+
+	fill(&ab, ' ', 1);
+	TEST(ab.capacity == 101, "");
+
+	free(ab.buf);
+
+	END_SECTION("terminal");
 
 	END_TESTS;
 }
