@@ -123,8 +123,7 @@ static void _pathbars(struct ui* const i) {
 		strnlen(wd[1], PATH_MAX),
 	};
 	append(&i->B, CSI_CLEAR_LINE);
-	append_attr(&i->B, ATTR_FOREGROUND | ATTR_BLACK, NULL);
-	append_attr(&i->B, ATTR_BACKGROUND | ATTR_WHITE, NULL);
+	append_theme(&i->B, THEME_PATHBAR);
 	for (size_t p = 0; p < 2; ++p) {
 		append(&i->B, " ", 1);
 		if (wdw[p] <= i->pw[p]-2) {
@@ -133,7 +132,7 @@ static void _pathbars(struct ui* const i) {
 		}
 		else {
 			int sg = wdw[p] - i->pw[p]-2;
-			const size_t P = utf8_Ng2nb(wd[p], sg);
+			const size_t P = utf8_w2nb(wd[p], sg);
 			append(&i->B, wd[p], P);
 			append(&i->B, " ", 1);
 		}
@@ -142,14 +141,17 @@ static void _pathbars(struct ui* const i) {
 	append(&i->B, "\r\n", 2);
 }
 
-static void _entry(const struct ui* const i, const struct file_view* const fv,
+static void _entry(struct ui* const i, const struct file_view* const fv,
 		const size_t width, const fnum_t e) {
 	// TODO scroll filenames that are too long to fit in the panel width
 	// TODO cut out all characters that would spoil UI: \r \n \t \x1b ...
 	const struct file_record* const cfr = fv->file_list[e];
 	const bool hl = e == fv->selection && fv == i->pv;
-	const enum theme_element te = mode2theme(cfr->s.st_mode,
-			(cfr->l ? cfr->l->st_mode : 0)) + (hl ? 1 : 0);
+	const enum theme_element fsym = mode2theme(cfr->s.st_mode,
+			(cfr->l ? cfr->l->st_mode : 0));
+	// File SYMbol
+	const enum theme_element thel = fsym + (hl ? 1 : 0);
+	// THeme ELement
 	char* invname = NULL;
 	const bool valid = utf8_validate(cfr->file_name);
 	const char* const fn = (valid ? cfr->file_name : invname);
@@ -182,12 +184,23 @@ static void _entry(const struct ui* const i, const struct file_view* const fv,
 	else {
 		space = width - (1+fnw+1+slen);
 	}
-	//char open = theme_scheme[te][0];
-	if (hl) {
-		append_attr(&i->B, ATTR_FOREGROUND | ATTR_BLACK, NULL);
-		append_attr(&i->B, ATTR_BACKGROUND | ATTR_WHITE, NULL);
-	}
-	char open = ' ';
+
+	/*if (hl) {
+		if (!valid) fprintf(stderr, "invalid!\n");
+		fprintf(stderr, "%s, %.*s\n", fn, utf8_w2nb(fn, fn_slice), fn);
+		for (int x = 0; x < strlen(fn); x += utf8_g2nb(fn+x)) {
+			if (utf8_g2nb(fn+x) > 1) {
+				fprintf(stderr, "(U+%x)", utf8_b2cp(fn+x));
+			}
+			for (int y = 0; y < utf8_g2nb(fn+x); ++y) {
+				fprintf(stderr, "%02hhx", fn[x]);
+			}
+			fprintf(stderr, " ");
+		}
+		fprintf(stderr, "\n");
+	}*/
+
+	char open = file_symbols[fsym];
 	char close = ' ';
 	if (cfr->selected || (hl && !fv->num_selected)) { // TODO highlight: temponary
 		// TODO not very visible
@@ -195,9 +208,9 @@ static void _entry(const struct ui* const i, const struct file_view* const fv,
 		open = '[';
 		close = ']';
 	}
-	// TODO attron
+	append_theme(&i->B, thel);
 	append(&i->B, &open, 1);
-	append(&i->B, fn, utf8_Ng2nb(fn, fn_slice));
+	append(&i->B, fn, utf8_w2nb(fn, fn_slice));
 	fill(&i->B, ' ', space);
 	append(&i->B, sbuf, strlen(sbuf));
 	append(&i->B, &close, 1);
@@ -294,72 +307,15 @@ static void stringify_pug(mode_t m, uid_t u, gid_t g,
 	}
 }
 
-//static void _printw_statusbar(struct ui* const i, const int dr) {
-	// TODO FIXME
-	/*char status[32];
-	const fnum_t nhf = (i->pv->show_hidden ? 0 : i->pv->num_hidden);
-	const char hs = (i->pv->show_hidden ? 'H' : 'h');
-	snprintf(status, sizeof(status), "%uf %u%c %us", i->pv->num_files-nhf,
-			i->pv->num_hidden, hs, i->pv->num_selected);
-	const size_t cw = utf8_width(status);
-	const size_t uw = utf8_width(i->user);
-	const size_t gw = utf8_width(i->group);
-	const size_t sw = uw+1+gw+1+10+1+TIME_SIZE+1;
-	const size_t padding = i->scrw-cw-sw;
-
-	wattron(stdscr, COLOR_PAIR(THEME_STATUSBAR));
-	mvwprintw(stdscr, dr, 0, " %s%*c", status, padding, ' ');
-	size_t top = 1+cw+padding;
-
-	if (i->o[0] != i->o[1]) wattron(stdscr, A_UNDERLINE);
-	mvwprintw(stdscr, dr, top, "%s", i->user);
-	if (i->o[0] != i->o[1]) wattroff(stdscr, A_UNDERLINE);
-	top += uw;
-
-	mvwprintw(stdscr, dr, top, " ");
-	top += 1;
-
-	if (i->g[0] != i->g[1]) wattron(stdscr, A_UNDERLINE);
-	mvwprintw(stdscr, dr, top, "%s", i->group);
-	if (i->g[0] != i->g[1]) wattroff(stdscr, A_UNDERLINE);
-	top += gw;
-
-	mvwprintw(stdscr, dr, top, " ");
-	top += 1;
-
-	mvwprintw(stdscr, dr, top, "%c", i->perms[0]);
-	top += 1;
-	for (size_t p = 1; p < 10; ++p) {
-		const mode_t m[2] = {
-			(i->perm[0] & 0777) & (0400 >> (p-1)),
-			(i->perm[1] & 0777) & (0400 >> (p-1))
-		};
-		const bool diff = m[0] != m[1];
-		if (diff) wattron(stdscr, A_UNDERLINE);
-		mvwprintw(stdscr, dr, top, "%c", i->perms[p]);
-		if (diff) wattroff(stdscr, A_UNDERLINE);
-		top += 1;
-	}
-
-	mvwprintw(stdscr, dr, top, " %s ", i->time);
-	top += TIME_SIZE-1;
-
-	wattroff(stdscr, COLOR_PAIR(THEME_STATUSBAR));*/
-//}
-
 static void _statusbar(struct ui* const i) {
+	// TODO test
 	int n;
-	char attr[32]; // TODO size
 	char status[32]; // TODO size
 
-	n = char_attr(attr, sizeof(attr), ATTR_FOREGROUND | ATTR_BLACK, NULL);
-	append(&i->B, attr, n);
-	n = char_attr(attr, sizeof(attr), ATTR_BACKGROUND | ATTR_WHITE, NULL);
-	append(&i->B, attr, n);
+	append_theme(&i->B, THEME_STATUSBAR);
 
 	fill(&i->B, ' ', 1);
 
-	// <TODO>
 	const struct file_record* const _hfr = hfr(i->pv);
 	if (_hfr) {
 		const time_t lt = _hfr->s.st_mtim.tv_sec;
@@ -367,7 +323,7 @@ static void _statusbar(struct ui* const i) {
 		strftime(i->time, TIME_SIZE, timefmt, tt);
 	}
 	else {
-		strcpy(i->time, "0000-00-00 00:00:00");
+		strcpy(i->time, "0000-00-00 00:00:00"); // TODO
 	}
 
 	const fnum_t nhf = (i->pv->show_hidden ? 0 : i->pv->num_hidden);
@@ -402,8 +358,7 @@ static void _statusbar(struct ui* const i) {
 	append(&i->B, i->time, strlen(i->time));
 	fill(&i->B, ' ', 1);
 
-	n = char_attr(attr, sizeof(attr), ATTR_NORMAL, NULL);
-	append(&i->B, attr, n);
+	append_attr(&i->B, ATTR_NORMAL, NULL);
 	append(&i->B, "\r\n", 3);
 }
 
@@ -540,10 +495,10 @@ static void _bottombar(struct ui* const i) {
 		case MSG_ERROR: cp = THEME_ERROR; break;
 		default: break;
 		}
-		//wattron(stdscr, COLOR_PAIR(cp));
+		append_theme(&i->B, cp);
 		append(&i->B, i->msg, strlen(i->msg));
+		append_attr(&i->B, ATTR_NORMAL, NULL);
 		fill(&i->B, ' ', i->scrw-utf8_width(i->msg));
-		//wattroff(stdscr, COLOR_PAIR(cp));
 		i->mt = MSG_NONE;
 	}
 	else if (i->prompt) { // TODO
@@ -586,6 +541,10 @@ void ui_draw(struct ui* const i) {
 	else if (i->m == MODE_CHMOD) {
 		stringify_pug(i->perm[1], i->o[1], i->g[1],
 				i->perms, i->user, i->group);
+		_pathbars(i);
+		_panels(i);
+		_statusbar(i);
+		_bottombar(i);
 	}
 	write(STDOUT_FILENO, i->B.buf, i->B.top);
 }
@@ -731,6 +690,12 @@ enum command get_cmd(struct ui* const i) {
 			return i->kmap[mi].c;
 		}
 	}
+	else if (i->ili >= INPUT_LIST_LENGTH) {
+		// TODO test it. ili would sometimes exceed INPUT_LIST_LENGTH
+		i->ili = 0;
+		memset(i->il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
+		memset(i->mks, 0, i->kml*sizeof(unsigned short));
+	}
 	return CMD_NONE;
 }
 
@@ -759,13 +724,13 @@ int fill_textbox(const struct ui* const I,
 		if (*buftop != buf) return 0;
 	}
 	else if (i.t == I_UTF8 && (size_t)(*buftop - buf) < bsize) {
-		utf8_insert(buf, i.utf, utf8_ng_till(buf, *buftop));
+		utf8_insert(buf, i.utf, utf8_wtill(buf, *buftop));
 		*buftop += utf8_g2nb(i.utf);
 	}
 	else if (IS_CTRL(i, 'H') || i.t == I_BACKSPACE) {
 		if (*buftop != buf) {
 			const size_t before = strnlen(buf, bsize);
-			utf8_remove(buf, utf8_ng_till(buf, *buftop)-1);
+			utf8_remove(buf, utf8_wtill(buf, *buftop)-1);
 			*buftop -= before - strnlen(buf, bsize);
 		}
 		else if (!strnlen(buf, bsize)) {
@@ -773,7 +738,7 @@ int fill_textbox(const struct ui* const I,
 		}
 	}
 	else if (IS_CTRL(i, 'D') || i.t == I_DELETE) {
-		utf8_remove(buf, utf8_ng_till(buf, *buftop));
+		utf8_remove(buf, utf8_wtill(buf, *buftop));
 	}
 	else if (IS_CTRL(i, 'A') || i.t == I_HOME) {
 		*buftop = buf;
@@ -796,7 +761,7 @@ int fill_textbox(const struct ui* const I,
 	}
 	else if (IS_CTRL(i, 'B') || i.t == I_ARROW_LEFT) {
 		if (*buftop - buf) {
-			const size_t gt = utf8_ng_till(buf, *buftop);
+			const size_t gt = utf8_wtill(buf, *buftop);
 			*buftop = buf;
 			for (size_t i = 0; i < gt-1; ++i) {
 				*buftop += utf8_g2nb(*buftop);
@@ -858,4 +823,14 @@ int spawn(char* const arg[]) {
 	start_raw_mode(&I->T);
 	ui_draw(I);
 	return ret;
+}
+
+size_t append_theme(struct append_buffer* const ab,
+		const enum theme_element te) {
+	size_t n = 0;
+	n += append_attr(ab, theme_scheme[te].fg | ATTR_FOREGROUND,
+			theme_scheme[te].fg_color);
+	n += append_attr(ab, theme_scheme[te].bg | ATTR_BACKGROUND,
+			theme_scheme[te].bg_color);
+	return n;
 }

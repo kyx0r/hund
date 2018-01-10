@@ -152,6 +152,55 @@ enum theme_element {
 
 	THEME_ELEM_NUM
 };
+
+struct theme_attrs {
+	int fg, bg;
+	unsigned char fg_color[3], bg_color[3];
+};
+
+static const char file_symbols[] = {
+	[THEME_ENTRY_BLK_UNS] = '+',
+	[THEME_ENTRY_CHR_UNS] = '-',
+	[THEME_ENTRY_FIFO_UNS] = '|',
+	[THEME_ENTRY_REG_UNS] = ' ',
+	[THEME_ENTRY_REG_EXE_UNS] = '*',
+	[THEME_ENTRY_DIR_UNS] = '/',
+	[THEME_ENTRY_SOCK_UNS] = '=',
+	[THEME_ENTRY_LNK_DIR_UNS] = '~',
+	[THEME_ENTRY_LNK_OTH_UNS] = '@',
+};
+
+static const struct theme_attrs theme_scheme[THEME_ELEM_NUM] = {
+	[THEME_OTHER] = { ATTR_BLACK, ATTR_WHITE, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_PATHBAR] = { ATTR_BLACK, ATTR_WHITE, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_STATUSBAR] = { ATTR_BLACK, ATTR_WHITE, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_ERROR] = { ATTR_BLACK, ATTR_RED, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_INFO] = { ATTR_WHITE, ATTR_BLACK, { 0, 0, 0 }, { 0, 0, 0 } },
+	//[THEME_HINT_KEY] = { 0, COLOR_WHITE, COLOR_BLACK },
+	//[THEME_HINT_DESC] = { 0, COLOR_BLACK, COLOR_WHITE },
+	[THEME_ENTRY_BLK_UNS] = { ATTR_RED, ATTR_BLACK, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_ENTRY_BLK_SEL] = { ATTR_BLACK, ATTR_RED, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_ENTRY_CHR_UNS] = { ATTR_YELLOW, ATTR_BLACK, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_ENTRY_CHR_SEL] = { ATTR_BLACK, ATTR_YELLOW, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_ENTRY_FIFO_UNS] = { ATTR_GREEN, ATTR_BLACK, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_ENTRY_FIFO_SEL] = { ATTR_BLACK, ATTR_GREEN, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_ENTRY_REG_UNS] = { ATTR_WHITE, ATTR_BLACK, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_ENTRY_REG_SEL] = { ATTR_BLACK, ATTR_WHITE, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_ENTRY_REG_EXE_UNS] = { ATTR_MAGENTA, ATTR_BLACK, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_ENTRY_REG_EXE_SEL] = { ATTR_BLACK, ATTR_MAGENTA, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_ENTRY_DIR_UNS] = { ATTR_CYAN, ATTR_BLACK, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_ENTRY_DIR_SEL] = { ATTR_BLACK, ATTR_CYAN, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_ENTRY_SOCK_UNS] = { ATTR_GREEN, ATTR_BLACK, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_ENTRY_SOCK_SEL] = { ATTR_BLACK, ATTR_GREEN, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_ENTRY_LNK_DIR_UNS] = { ATTR_CYAN, ATTR_BLACK, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_ENTRY_LNK_DIR_SEL] = { ATTR_BLACK, ATTR_CYAN, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_ENTRY_LNK_OTH_UNS] = { ATTR_WHITE, ATTR_BLACK, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_ENTRY_LNK_OTH_SEL] = { ATTR_BLACK, ATTR_WHITE, { 0, 0, 0 }, { 0, 0, 0 } },
+	//[THEME_ENTRY_LNK_PATH] = { 0, COLOR_WHITE, COLOR_BLACK },
+	//[THEME_ENTRY_LNK_PATH_INV] = { 0, COLOR_RED, COLOR_BLACK },
+
+};
+
 #if 0
 static const int theme_scheme[THEME_ELEM_NUM][3] = {
 	[THEME_OTHER] = { 0, COLOR_WHITE, COLOR_BLACK },
@@ -442,6 +491,7 @@ struct ui {
 	int ili;
 
 	char* path; // path of chmodded file
+
 	// [0] = old value
 	// [1] = new/edited value
 	mode_t perm[2]; // permissions of chmodded file
@@ -480,5 +530,7 @@ void failed(struct ui* const, const char* const,
 		const int, const char* const);
 
 int spawn(char* const[]);
+
+size_t append_theme(struct append_buffer* const, const enum theme_element);
 
 #endif
