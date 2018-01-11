@@ -362,54 +362,47 @@ static void _statusbar(struct ui* const i) {
 	append(&i->B, "\r\n", 3);
 }
 
-void _printw_cmd_and_keyseqs(const int dr, const enum command c,
+void _cmd_and_keyseqs(struct ui* const i, const enum command c,
 		const struct input2cmd* const k[], const size_t ki) {
-	(void)(dr);
-	(void)(c);
-	(void)(k);
-	(void)(ki);
-	// TODO
-	// TODO what if SPACE (ascii 32) is set?
-	/*size_t x = 0;
-	size_t align = 0;
+	// TODO some valid inputs such as SPACE are invisible
 	const int maxsequences = INPUT_LIST_LENGTH-1;
-	const size_t seqlen = 6; // TODO FIXME may not always be enough (for more complicated inputs)
-	const size_t seqwid = 8;
+	const size_t seqwid = 8; // TODO may not be enough
+	size_t W = 0;
+	append(&i->B, CSI_CLEAR_LINE);
 	for (size_t s = 0; s < ki; ++s) {
 		const struct input2cmd* const seq = k[s];
-		size_t i = 0;
-		align = 0;
-		while (seq->i[i].t != I_NONE) {
-			const struct input* const v = &seq->i[i];
-			size_t wi;
-			attron(A_BOLD);
+		size_t j = 0;
+		size_t w = 0;
+		while (seq->i[j].t != I_NONE) {
+			const struct input* const v = &seq->i[j];
+			append_attr(&i->B, ATTR_BOLD, NULL);
 			switch (v->t) {
 			case I_UTF8:
-				mvwprintw(w, dr, x, "%s", v->utf);
-				wi = utf8_width(v->utf);
-				x += wi;
-				align += wi;
+				//append_attr(B, ATTR_UNDERLINE, NULL);
+				append(&i->B, v->utf, strlen(v->utf));
+				//append_attr(B, ATTR_NOT_UNDERLINE, NULL);
+				w += utf8_width(v->utf);
 				break;
 			case I_CTRL:
-				mvwprintw(w, dr, x, "^%c", v->utf[0]);
-				x += 2;
-				align += 2;
+				fill(&i->B, '^', 1);
+				fill(&i->B, v->utf[0], 1);
+				w += 2;
 				break;
 			default:
-				mvwprintw(w, dr, x, "%.*s",
-						seqlen, keynames[v->t]);
-				wi = strnlen(keynames[v->t], seqlen);
-				x += wi;
-				align += wi;
+				append(&i->B, keynames[v->t],
+						strlen(keynames[v->t]));
+				w += utf8_width(keynames[v->t]);
 				break;
 			}
-			attroff(A_BOLD);
-			i += 1;
+			append_attr(&i->B, ATTR_NOT_BOLD_OR_FAINT, NULL);
+			j += 1;
 		}
-		x += seqwid - align;
+		W += 1;
+		fill(&i->B, ' ', seqwid - w);
 	}
-	x += ((maxsequences-ki)*seqwid);
-	mvwprintw(w, dr, x, "%s", cmd_help[c]);*/
+	fill(&i->B, ' ', (maxsequences-W) * seqwid);
+	//fill(&i->B, ' ', i->scrw-(maxsequences*seqwid)-utf8_width(cmd_help[c]));
+	append(&i->B, cmd_help[c], strlen(cmd_help[c]));
 }
 
 void _find_all_keyseqs4cmd(const struct ui* const i, const enum command c,
@@ -423,17 +416,19 @@ void _find_all_keyseqs4cmd(const struct ui* const i, const enum command c,
 	}
 }
 
-#if 0
-static void ui_draw_help(struct ui* const i) {
-	WINDOW* const hw = stdscr;
-	wclear(hw);
-	int dr = -i->helpy; // TODO
+static void _help(struct ui* const i) {
+	// TODO detect when to stop
+	int dr = -i->helpy;
 	for (size_t m = 0; m < MODE_NUM; ++m) {
 		/* MODE TITLE */
-		wattron(hw, A_BOLD);
-		mvwprintw(hw, dr, 0, "%s%*c", mode_strings[m],
-				i->scrw-strlen(mode_strings[m]), ' ');
-		wattroff(hw, A_BOLD);
+		if (dr < i->scrh) {
+			append_attr(&i->B, ATTR_BOLD, NULL);
+			const size_t ml = strlen(mode_strings[m]);
+			append(&i->B, mode_strings[m], ml);
+			append_attr(&i->B, ATTR_NOT_BOLD_OR_FAINT, NULL);
+			fill(&i->B, ' ', i->scrw-ml);
+			append(&i->B, "\r\n", 2);
+		}
 		dr += 1;
 
 		/* LIST OF AVAILABLE KEYS */
@@ -442,37 +437,47 @@ static void ui_draw_help(struct ui* const i) {
 		for (size_t c = CMD_NONE+1; c < CMD_NUM; ++c) {
 			_find_all_keyseqs4cmd(i, c, m, k, &ki);
 			if (ki) { // ^^^ may output empty array
-				_printw_cmd_and_keyseqs(hw, dr, c, k, ki);
+				if (dr < i->scrh) {
+					_cmd_and_keyseqs(i, c, k, ki);
+					append(&i->B, "\r\n", 2);
+				}
 				dr += 1;
 			}
 		}
 		/* EMPTY LINE PADDING */
-		mvwprintw(hw, dr, 0, "%*c", i->scrw, ' ');
+		if (dr < i->scrh) {
+			fill(&i->B, ' ', i->scrw);
+			append(&i->B, "\r\n", 2);
+		}
 		dr += 1;
 	}
+	i->B.top -= 2; // TODO don't append \r\n on last line
 
 	/* COPYRIGHT NOTICE */
-	wattron(hw, A_BOLD);
+	append_attr(&i->B, ATTR_BOLD, NULL);
 	int cnl = 0; // Copytight Notice Line
 	while (copyright_notice[cnl]) {
 		const char* const cr = copyright_notice[cnl];
-		mvwprintw(hw, dr, 0, "%s%*c", cr, i->scrw-utf8_width(cr), ' ');
+		if (dr < i->scrh) {
+			append(&i->B, cr, strlen(cr));
+			fill(&i->B, ' ', i->scrw-utf8_width(cr));
+		}
 		dr += 1;
 		cnl += 1;
 	}
-	wattroff(hw, A_BOLD);
-	wrefresh(hw);
+	append_attr(&i->B, ATTR_NOT_BOLD_OR_FAINT, NULL);
 }
 
-#endif
 static void _panels(struct ui* const i) {
 	fnum_t e[2] = {
 		_start_search_index(i->fvs[0], i->fvs[0]->num_hidden, i->ph-1),
 		_start_search_index(i->fvs[1], i->fvs[1]->num_hidden, i->ph-1),
 	};
 	for (int L = 0; L < i->ph; ++L) {
+		append(&i->B, CSI_CLEAR_LINE);
 		for (int p = 0; p < 2; ++p) {
-			while (e[p] < i->fvs[p]->num_files && !visible(i->fvs[p], e[p])) {
+			while (e[p] < i->fvs[p]->num_files
+					&& !visible(i->fvs[p], e[p])) {
 				e[p] += 1;
 			}
 			if (e[p] >= i->fvs[p]->num_files) {
@@ -488,6 +493,8 @@ static void _panels(struct ui* const i) {
 }
 
 static void _bottombar(struct ui* const i) {
+	//append(&i->B, "\x1b[1G", 4);
+	append(&i->B, CSI_CLEAR_LINE);
 	if (i->mt) {
 		int cp = 0;
 		switch (i->mt) {
@@ -504,7 +511,10 @@ static void _bottombar(struct ui* const i) {
 	else if (i->prompt) { // TODO
 		append(&i->B, &i->prch, 1);
 		append(&i->B, i->prompt, strlen(i->prompt));
-		fill(&i->B, ' ', i->scrw-utf8_width(i->prompt)-1);
+		const int padding = i->scrw-utf8_width(i->prompt)-1;
+		if (padding > 0) {
+			fill(&i->B, ' ', padding);
+		}
 	}
 	else if (i->m == MODE_CHMOD) {
 		append(&i->B, "-- CHMOD --", 11);
@@ -518,9 +528,9 @@ void ui_draw(struct ui* const i) {
 	append(&i->B, CSI_CURSOR_HIDE);
 	append(&i->B, CSI_CURSOR_TOP_LEFT);
 	if (i->m == MODE_HELP) {
-		//_help(i);
+		_help(i);
 	}
-	else if (i->m == MODE_MANAGER) {
+	else if (i->m == MODE_MANAGER || i->m == MODE_WAIT) { // TODO mode wait
 		const struct file_record* const _hfr = hfr(i->pv);
 		if (_hfr) {
 			stringify_pug(_hfr->s.st_mode, _hfr->s.st_uid,
@@ -591,42 +601,41 @@ void chmod_close(struct ui* const i) {
 
 int ui_select(struct ui* const i, const char* const q,
 		const struct select_option* o, const size_t oc) {
-	// TODO utf8_width
-	return 0;
-#if 0
-	int top = 0;
-	char hints[128];
-	memset(hints, 0, sizeof(hints));
+	int T = 0;
+	char P[500];
+	i->prch = ' ';
+	i->prompt = P;
+	T += snprintf(P+T, sizeof(P)-T, "%s ", q);
 	for (size_t j = 0; j < oc; ++j) {
-		if (j) {
-			top += snprintf(hints+top, sizeof(hints)-top, ", ");
-		}
+		if (j) T += snprintf(P+T, sizeof(P)-T, ", ");
 		switch (o[j].i.t) {
 		case I_UTF8:
-			top += snprintf(hints+top, sizeof(hints)-top,
-					"%s=%s", o[j].i.utf, o[j].h);
+			T += snprintf(P+T, sizeof(P)-T, "%s", o[j].i.utf);
 			break;
 		case I_CTRL:
-			top += snprintf(hints+top, sizeof(hints)-top,
-					"^%c=%s", (char)o[j].i.utf[0], o[j].h);
+			T += snprintf(P+T, sizeof(P)-T, "^%c", o[j].i.utf[0]);
 			break;
 		default:
-			top += snprintf(hints+top, sizeof(hints)-top,
-					"%s=%s", keynames[o[j].i.t], o[j].h);
+			T += snprintf(P+T, sizeof(P)-T,
+					"%s", keynames[o[j].i.t]);
 			break;
 		}
+		T += snprintf(P+T, sizeof(P)-T, "=%s", o[j].h);
 	}
-	mvwprintw(stdscr, i->scrh-1, 0, "%s %s%*c", q, hints,
-			i->scrw-(strlen(q)+strlen(hints)+1));
-	wrefresh(stdscr);
+	ui_draw(i);
+	// TODO only need to redraw bottombar
+	// ...but on the other hand it's called only once here
 	struct input in;
 	for (;;) {
 		in = get_input(i->timeout);
 		for (size_t j = 0; j < oc; ++j) {
-			if (!memcmp(&in, &o[j].i, sizeof(struct input))) return j;
+			if (!memcmp(&in, &o[j].i, sizeof(struct input))) {
+				i->prompt = NULL;
+				return j;
+			}
 		}
 	}
-#endif
+	//return 0; // unreachable
 }
 
 /* Find matching mappings
@@ -779,7 +788,7 @@ int prompt(struct ui* const i, char* const t,
 	int r;
 	do {
 		r = fill_textbox(i, t, &t_top, t_size);
-		ui_draw(i); // TODO only redraw hintbar
+		ui_draw(i); // TODO only redraw bottombar
 	} while (r && r != -1);
 	i->prompt = NULL;
 	return r;
