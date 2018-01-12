@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2017 by Michał Czarnecki <czarnecky@va.pl>
+ *  Copyright (C) 2017-2018 by Michał Czarnecki <czarnecky@va.pl>
  *
  *  This file is part of the Hund.
  *
@@ -75,7 +75,7 @@ struct input get_input(int timeout_ms) {
 		i.t = which_key(seq);
 	}
 	else if (seq[0] == 0x7f) {
-#if defined(__linux__) || defined(__linux)
+#if defined(__linux__) || defined(__linux) // TODO more
 		i.t = I_BACKSPACE;
 #else
 		i.t = I_DELETE;

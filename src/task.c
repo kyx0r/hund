@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2017 by Michał Czarnecki <czarnecky@va.pl>
+ *  Copyright (C) 2017-2018 by Michał Czarnecki <czarnecky@va.pl>
  *
  *  This file is part of the Hund.
  *
