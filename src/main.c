@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2017 by Michał Czarnecki <czarnecky@va.pl>
+ *  Copyright (C) 2017-2018 by Michał Czarnecki <czarnecky@va.pl>
  *
  *  This file is part of the Hund.
  *
@@ -35,17 +35,11 @@
  * GENERAL TODO
  * 1. Likes to segfault while doing anything on root's/special files.
  * 2. Messages may be blocked by other messages
- * 3. Okay,
- *    - PATH_MAX (4096) includes null-terminator
- *    - NAME_MAX (255) does not
- *    - LOGIN_NAME_MAX (32) does not
  * 8. Configuration of copy/move/remove operation
- *    - merge on conflict
  *    - copy raw links
  *    - dereference links
  * 9. Error handling.
  * 10. Transfer speed and % done
- * 11. Select needs to be less ambiguous (hints, like y=yes, a=abort, ^N=next)
  * 13. Actions like estimating volume or renaming
  *     should have visible progress too
  * 14. IDEA: Detecting file formats -> display name of a program that
@@ -600,7 +594,7 @@ extern struct ui* I;
 
 int main(int argc, char* argv[]) {
 	static const char* const help = \
-	"Usage: hund [OPTION] [left panel] [right panel]\n"
+	"Usage: hund [OPTION...] [left panel] [right panel]\n"
 	"Options:\n"
 	"  -c, --chdir=PATH      change initial directory\n"
 	"  -h, --help            display this help message\n"
