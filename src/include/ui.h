@@ -201,38 +201,6 @@ static const struct theme_attrs theme_scheme[THEME_ELEM_NUM] = {
 
 };
 
-#if 0
-static const int theme_scheme[THEME_ELEM_NUM][3] = {
-	[THEME_OTHER] = { 0, COLOR_WHITE, COLOR_BLACK },
-	[THEME_PATHBAR] = { 0, COLOR_BLACK, COLOR_WHITE },
-	[THEME_STATUSBAR] = { 0, COLOR_BLACK, COLOR_WHITE },
-	[THEME_ERROR] = { 0, COLOR_BLACK, COLOR_RED },
-	[THEME_INFO] = { 0, COLOR_WHITE, COLOR_BLACK },
-	[THEME_HINT_KEY] = { 0, COLOR_WHITE, COLOR_BLACK },
-	[THEME_HINT_DESC] = { 0, COLOR_BLACK, COLOR_WHITE },
-	[THEME_ENTRY_BLK_UNS] = { '+', COLOR_RED, COLOR_BLACK },
-	[THEME_ENTRY_BLK_SEL] = { '+', COLOR_BLACK, COLOR_RED },
-	[THEME_ENTRY_CHR_UNS] = { '-', COLOR_YELLOW, COLOR_BLACK },
-	[THEME_ENTRY_CHR_SEL] = { '-', COLOR_BLACK, COLOR_YELLOW },
-	[THEME_ENTRY_FIFO_UNS] = { '|', COLOR_GREEN, COLOR_BLACK },
-	[THEME_ENTRY_FIFO_SEL] = { '|', COLOR_BLACK, COLOR_GREEN },
-	[THEME_ENTRY_REG_UNS] = { ' ', COLOR_WHITE, COLOR_BLACK },
-	[THEME_ENTRY_REG_SEL] = { ' ', COLOR_BLACK, COLOR_WHITE },
-	[THEME_ENTRY_REG_EXE_UNS] = { '*', COLOR_MAGENTA, COLOR_BLACK },
-	[THEME_ENTRY_REG_EXE_SEL] = { '*', COLOR_BLACK, COLOR_MAGENTA },
-	[THEME_ENTRY_DIR_UNS] = { '/', COLOR_CYAN, COLOR_BLACK },
-	[THEME_ENTRY_DIR_SEL] = { '/', COLOR_BLACK, COLOR_CYAN },
-	[THEME_ENTRY_SOCK_UNS] = { '=', COLOR_GREEN, COLOR_BLACK },
-	[THEME_ENTRY_SOCK_SEL] = { '=', COLOR_BLACK, COLOR_GREEN },
-	[THEME_ENTRY_LNK_DIR_UNS] = { '~', COLOR_CYAN, COLOR_BLACK },
-	[THEME_ENTRY_LNK_DIR_SEL] = { '~', COLOR_BLACK, COLOR_CYAN },
-	[THEME_ENTRY_LNK_OTH_UNS] = { '@', COLOR_WHITE, COLOR_BLACK },
-	[THEME_ENTRY_LNK_OTH_SEL] = { '@', COLOR_BLACK, COLOR_WHITE },
-	//[THEME_ENTRY_LNK_PATH] = { 0, COLOR_WHITE, COLOR_BLACK },
-	//[THEME_ENTRY_LNK_PATH_INV] = { 0, COLOR_RED, COLOR_BLACK },
-};
-#endif
-
 #define INPUT_LIST_LENGTH 4
 
 struct input2cmd {
@@ -471,6 +439,7 @@ struct ui {
 
 	char prch;
 	char* prompt;
+	int prompt_cursor_pos;
 
 	int timeout;
 
@@ -521,7 +490,7 @@ int ui_select(struct ui* const, const char* const q,
 		const struct select_option*, const size_t);
 
 enum command get_cmd(struct ui* const);
-int fill_textbox(const struct ui* const, char* const,
+int fill_textbox(struct ui* const, char* const,
 		char** const, const size_t);
 
 int prompt(struct ui* const, char* const, char*, const size_t);

@@ -75,6 +75,7 @@ void ui_init(struct ui* const i, struct file_view* const pv,
 	i->m = MODE_MANAGER;
 	i->prch = ' ';
 	i->prompt = NULL;
+	i->prompt_cursor_pos = 1;
 	i->timeout = -1;
 	i->mt = MSG_NONE;
 	i->helpy = 0;
@@ -557,6 +558,10 @@ void ui_draw(struct ui* const i) {
 		_bottombar(i);
 	}
 	write(STDOUT_FILENO, i->B.buf, i->B.top);
+	if (i->prompt) {
+		write(STDOUT_FILENO, CSI_CURSOR_SHOW);
+		move_cursor(i->scrh, i->prompt_cursor_pos+1);
+	}
 }
 
 void ui_update_geometry(struct ui* const i) {
@@ -716,13 +721,9 @@ enum command get_cmd(struct ui* const i) {
  * Additionally:
  * returns 2 on ^N and -2 on ^P
  */
-int fill_textbox(const struct ui* const I,
+int fill_textbox(struct ui* const I,
 		char* const buf, char** const buftop, const size_t bsize) {
-	write(STDOUT_FILENO, CSI_CURSOR_SHOW);
-	move_cursor(I->scrh-1, utf8_width(buf)-utf8_width(*buftop)+1); // TODO
 	struct input i = get_input(I->timeout);
-	write(STDOUT_FILENO, CSI_CURSOR_HIDE);
-
 	if (i.t == I_NONE) return 1;
 	if (IS_CTRL(i, '[')) return -1;
 	else if (IS_CTRL(i, 'N')) return 2;
@@ -777,6 +778,7 @@ int fill_textbox(const struct ui* const I,
 			}
 		}
 	}
+	I->prompt_cursor_pos = utf8_width(buf)-utf8_width(*buftop)+1;
 	return 1;
 }
 
