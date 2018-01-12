@@ -607,7 +607,7 @@ void chmod_close(struct ui* const i) {
 int ui_select(struct ui* const i, const char* const q,
 		const struct select_option* o, const size_t oc) {
 	int T = 0;
-	char P[500];
+	char P[500]; // TODO
 	i->prch = ' ';
 	i->prompt = P;
 	T += snprintf(P+T, sizeof(P)-T, "%s ", q);

@@ -44,6 +44,7 @@
  *     should have visible progress too
  * 14. IDEA: Detecting file formats -> display name of a program that
  *      would open highlighted file
+ * 15. IDEA: if finding, offer selecting files
  */
 
 static int editor(char* const path) {
@@ -93,6 +94,34 @@ inline static void open_find(struct ui* const i) {
 		ui_draw(i);
 	} while (r && r != -1);
 	i->prompt = NULL;
+}
+
+inline static void estimate_volume_for_selected(struct file_view* const fv) {
+	// TODO
+	int sink_fc = 0, sink_dc = 0;
+	fnum_t f = 0, s = 0;
+	char* const opath = strncpy(malloc(PATH_MAX), fv->wd, PATH_MAX);
+	const bool sc = !fv->num_selected; // Single Selection
+	if (sc) {
+		fv->num_selected = 1;
+		fv->file_list[fv->selection]->selected = true;
+	}
+	for (; f < fv->num_files && s < fv->num_selected; ++f) {
+		const struct stat* const S = fv->file_list[f]->l;
+		if (!fv->file_list[f]->selected
+		    || (S && !S_ISDIR(S->st_mode))) continue;
+		append_dir(opath, fv->file_list[f]->file_name);
+		fv->file_list[f]->dir_volume = 0;
+		estimate_volume(opath, &fv->file_list[f]->dir_volume,
+				&sink_fc, &sink_dc); // TODO
+		up_dir(opath);
+	}
+	free(opath);
+	if (sc) {
+		fv->num_selected = 0;
+		fv->file_list[fv->selection]->selected = false;
+		next_entry(fv);
+	}
 }
 
 /* Only solves copy/move/remove conflicts */
@@ -186,7 +215,6 @@ static void process_input(struct ui* const i, struct task* const t) {
 	char *path = NULL, *cdp = NULL, *name = NULL,
 	     *opath = NULL, *npath = NULL;
 	int err = 0;
-	int sink_fc, sink_dc; // TODO FIXME
 	struct file_record* fr = NULL; // File Record
 	char tmpn[] = "/tmp/hund.XXXXXXXX";
 	int tmpfd;
@@ -445,17 +473,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		free_list(&rf);
 		break;
 	case CMD_DIR_VOLUME:
-		// TODO don't perform on non-dirs
-		// TODO
-		// TODO multiple selection
-		if (i->pv->file_list[i->pv->selection]->dir_volume == -1) {
-			opath = file_view_path_to_selected(i->pv);
-			i->pv->file_list[i->pv->selection]->dir_volume = 0;
-			estimate_volume(opath, &i->pv->file_list[i->pv->selection]->dir_volume,
-					&sink_fc, &sink_dc); // TODO
-			free(opath);
-		}
-		next_entry(i->pv);
+		estimate_volume_for_selected(i->pv);
 		break;
 	case CMD_SELECT_FILE:
 		fr = hfr(i->pv);
@@ -537,7 +555,8 @@ static void process_input(struct ui* const i, struct task* const t) {
 		file_view_change_sorting(i->pv, cmp_size_desc);
 		i->ui_needs_refresh = true;
 		break;
-	default: break;
+	default:
+		break;
 	}
 }
 
