@@ -14,6 +14,8 @@ A minimalistic terminal file manager.
 - Sort by name/date/size ascending/descending
 - Pause/resume/abort copy/move/remove operation
 - Visible progress of copy/move/remove operation
+- Can be statically linked
+- Not _too_ big; ~3.5K SLOC
 - Licensed under GPL-3.0
 #### Environment Variables
 | Variable | Usage              | Default |
@@ -22,6 +24,7 @@ A minimalistic terminal file manager.
 | $EDITOR  | backup for $VISUAL | vi      |
 | $PAGER   | pager              | less    |
 #### Planned features
+- Wide character support
 - Chmod mask
 - Fancy file sorting
 - Filter files
@@ -36,10 +39,9 @@ A minimalistic terminal file manager.
 - x86-64 + FreeBSD - gcc's only problem is that it does not detect ctrl keys, clang does not detect any keys at all lol
 - aarch64 (Raspberry PI 3) + Arch Linux ARM 64-bit - works just fine
 #### Dependencies & Requirements
-- ncurses
-- gcc (preferably) or clang
+- gcc, clang or musl-gcc
 - GNUMake
-- glibc
+- clib of choice (glibc and musl were tested)
 #### Commands
 Type `?` while in hund for help.
 #### License
