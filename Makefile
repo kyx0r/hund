@@ -1,8 +1,7 @@
-LD = gcc
-# TODO ld?
+CC = gcc #musl-gcc, clang
+LD = gcc #musl-gcc -static
 CFLAGS += --std=c99 -Wall -Wextra -pedantic -g
 LDFLAGS =
-LIBS = -lpanel -lncurses
 OBJDIR = obj
 OBJ = main.o fs.o ui.o file_view.o utf8.o task.o terminal.o
 TESTOBJ := test.o fs.o ui.o file_view.o utf8.o task.o terminal.o
