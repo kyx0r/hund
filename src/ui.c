@@ -28,6 +28,7 @@
  * UI TODO NOTES
  * 1. TODO selection is not very visible
  * 2. TODO scroll too long filenames
+ * 3. Change panel split with < >
  */
 
 static enum theme_element mode2theme(const mode_t m, const mode_t n) {
@@ -64,18 +65,14 @@ static void handle_winch(int sig) {
 
 void ui_init(struct ui* const i, struct file_view* const pv,
 		struct file_view* const sv) {
-	I = i;
 	setlocale(LC_ALL, "");
-	start_raw_mode(&i->T); // TODO
-	write(STDOUT_FILENO, CSI_CURSOR_HIDE);
-
 	i->fvs[0] = i->pv = pv;
 	i->fvs[1] = i->sv = sv;
 	i->scrw = i->scrh = 0;
 	i->m = MODE_MANAGER;
 	i->prch = ' ';
 	i->prompt = NULL;
-	i->prompt_cursor_pos = 1;
+	i->prompt_cursor_pos = -1;
 	i->timeout = -1;
 	i->mt = MSG_NONE;
 	i->helpy = 0;
@@ -93,10 +90,18 @@ void ui_init(struct ui* const i, struct file_view* const pv,
 	memset(i->o, 0, sizeof(i->o));
 	memset(i->g, 0, sizeof(i->g));
 
+	I = i;
+	int err;
 	struct sigaction sa;
 	memset(&sa, 0, sizeof(struct sigaction));
 	sa.sa_handler = handle_winch;
-	sigaction(SIGWINCH, &sa, NULL);
+	if ((err = start_raw_mode(&i->T))
+	   || (err = sigaction(SIGWINCH, &sa, NULL))) {
+		fprintf(stderr, "failed to initalize screen: (%d) %s\n",
+				err, strerror(err));
+		exit(EXIT_FAILURE);
+	}
+	write(STDOUT_FILENO, CSI_CURSOR_HIDE);
 }
 
 void ui_end(struct ui* const i) {
@@ -104,7 +109,12 @@ void ui_end(struct ui* const i) {
 	write(STDOUT_FILENO, CSI_CLEAR_ALL);
 	write(STDOUT_FILENO, CSI_CURSOR_SHOW);
 	free(i->B.buf);
-	stop_raw_mode(&i->T); // TODO err
+	int err;
+	if ((err = stop_raw_mode(&i->T))) {
+		fprintf(stderr, "failed to deinitalize screen: (%d) %s\n",
+				err, strerror(err));
+		exit(EXIT_FAILURE);
+	}
 	memset(i, 0, sizeof(struct ui));
 }
 
@@ -145,25 +155,23 @@ static void _pathbars(struct ui* const i) {
 static void _entry(struct ui* const i, const struct file_view* const fv,
 		const size_t width, const fnum_t e) {
 	// TODO scroll filenames that are too long to fit in the panel width
-	// TODO cut out all characters that would spoil UI: \r \n \t \x1b ...
+	// TODO signal invalid filenames
 	const struct file_record* const cfr = fv->file_list[e];
 	const bool hl = e == fv->selection && fv == i->pv;
+
+	// File SYMbol
 	const enum theme_element fsym = mode2theme(cfr->s.st_mode,
 			(cfr->l ? cfr->l->st_mode : 0));
-	// File SYMbol
-	const enum theme_element thel = fsym + (hl ? 1 : 0);
 	// THeme ELement
-	char* invname = NULL;
-	const bool valid = utf8_validate(cfr->file_name);
-	const char* const fn = (valid ? cfr->file_name : invname);
-	if (!valid) {
-		invname = malloc(NAME_MAX+1);
-		cut_non_ascii(cfr->file_name, invname, NAME_MAX);
-	}
+	const enum theme_element thel = fsym + (hl ? 1 : 0);
+
+	char name[NAME_MAX+1];
+	cut_unwanted(cfr->file_name, name, '.', NAME_MAX+1);
 
 	char sbuf[SIZE_BUF_SIZE];
 	size_t slen = 0;
 	sbuf[0] = 0;
+
 	if (cfr->l) { // TODO signal broken symlink
 		if (S_ISREG(cfr->l->st_mode)) {
 			pretty_size(cfr->l->st_size, sbuf);
@@ -175,51 +183,30 @@ static void _entry(struct ui* const i, const struct file_view* const fv,
 		}
 	}
 
-	const size_t fnw = utf8_width(fn);
-	size_t fn_slice = fnw;
-	size_t space = 0;
-	if (width < 1+fnw+1+slen+1) {
-		fn_slice = width - (1+1+slen+1);
-		space = 1;
-	}
-	else {
-		space = width - (1+fnw+1+slen);
-	}
-
-	/*if (hl) {
-		if (!valid) fprintf(stderr, "invalid!\n");
-		fprintf(stderr, "%s, %.*s\n", fn, utf8_w2nb(fn, fn_slice), fn);
-		for (int x = 0; x < strlen(fn); x += utf8_g2nb(fn+x)) {
-			if (utf8_g2nb(fn+x) > 1) {
-				fprintf(stderr, "(U+%x)", utf8_b2cp(fn+x));
-			}
-			for (int y = 0; y < utf8_g2nb(fn+x); ++y) {
-				fprintf(stderr, "%02hhx", fn[x]);
-			}
-			fprintf(stderr, " ");
-		}
-		fprintf(stderr, "\n");
-	}*/
+	const size_t name_allowed = width - (1+SIZE_BUF_SIZE+1);
+	const size_t name_width = utf8_width(name);
+	const size_t name_draw = (name_width < name_allowed ? name_width : name_allowed);
+	const size_t space = name_allowed - name_draw;
 
 	char open = file_symbols[fsym];
 	char close = ' ';
-	if (cfr->selected || (hl && !fv->num_selected)) { // TODO highlight: temponary
-		// TODO not very visible
-		// maybe just indent selected?
+	if (cfr->selected || (hl && !fv->num_selected)) {
 		open = '[';
 		close = ']';
 	}
+
 	append_theme(&i->B, thel);
 	append(&i->B, &open, 1);
-	append(&i->B, fn, utf8_w2nb(fn, fn_slice));
+	append(&i->B, name, utf8_w2nb(name, name_draw));
 	fill(&i->B, ' ', space);
-	append(&i->B, sbuf, strlen(sbuf));
+	fill(&i->B, ' ', SIZE_BUF_SIZE-slen);
+	append(&i->B, sbuf, slen);
 	append(&i->B, &close, 1);
 	append_attr(&i->B, ATTR_NORMAL, NULL);
-	if (!valid) free(invname);
 }
 
-/* - Max Entries = how many entries I need to fill
+/*
+ * - Max Entries = how many entries I need to fill
  * all available space in file view
  * (selection excluded - it's always drawn)
  *
@@ -309,14 +296,8 @@ static void stringify_pug(mode_t m, uid_t u, gid_t g,
 }
 
 static void _statusbar(struct ui* const i) {
-	// TODO test
-	int n;
-	char status[32]; // TODO size
-
 	append_theme(&i->B, THEME_STATUSBAR);
-
 	fill(&i->B, ' ', 1);
-
 	const struct file_record* const _hfr = hfr(i->pv);
 	if (_hfr) {
 		const time_t lt = _hfr->s.st_mtim.tv_sec;
@@ -324,13 +305,13 @@ static void _statusbar(struct ui* const i) {
 		strftime(i->time, TIME_SIZE, timefmt, tt);
 	}
 	else {
-		strcpy(i->time, "0000-00-00 00:00:00"); // TODO
+		strcpy(i->time, "0000-00-00 00:00:00");
 	}
-
+	char status[10+2+10+2+10+1+1];
 	const fnum_t nhf = (i->pv->show_hidden ? 0 : i->pv->num_hidden);
-	const char hs = (i->pv->show_hidden ? 'H' : 'h');
-	n = snprintf(status, sizeof(status), "%uf %u%c %us", i->pv->num_files-nhf,
-			i->pv->num_hidden, hs, i->pv->num_selected);
+	int n = snprintf(status, sizeof(status), "%uf %u%c %us",
+			i->pv->num_files-nhf, i->pv->num_hidden,
+			(i->pv->show_hidden ? 'H' : 'h'), i->pv->num_selected);
 
 	const size_t cw = utf8_width(status);
 	const size_t uw = utf8_width(i->user);
@@ -358,7 +339,6 @@ static void _statusbar(struct ui* const i) {
 	fill(&i->B, ' ', 1);
 	append(&i->B, i->time, strlen(i->time));
 	fill(&i->B, ' ', 1);
-
 	append_attr(&i->B, ATTR_NORMAL, NULL);
 	append(&i->B, "\r\n", 3);
 }
@@ -402,7 +382,6 @@ void _cmd_and_keyseqs(struct ui* const i, const enum command c,
 		fill(&i->B, ' ', seqwid - w);
 	}
 	fill(&i->B, ' ', (maxsequences-W) * seqwid);
-	//fill(&i->B, ' ', i->scrw-(maxsequences*seqwid)-utf8_width(cmd_help[c]));
 	append(&i->B, cmd_help[c], strlen(cmd_help[c]));
 }
 
@@ -452,7 +431,7 @@ static void _help(struct ui* const i) {
 		}
 		dr += 1;
 	}
-	i->B.top -= 2; // TODO don't append \r\n on last line
+	i->B.top -= 2; // last line
 
 	/* COPYRIGHT NOTICE */
 	append_attr(&i->B, ATTR_BOLD, NULL);
@@ -494,7 +473,6 @@ static void _panels(struct ui* const i) {
 }
 
 static void _bottombar(struct ui* const i) {
-	//append(&i->B, "\x1b[1G", 4);
 	append(&i->B, CSI_CLEAR_LINE);
 	if (i->mt) {
 		int cp = 0;
@@ -509,8 +487,8 @@ static void _bottombar(struct ui* const i) {
 		fill(&i->B, ' ', i->scrw-utf8_width(i->msg));
 		i->mt = MSG_NONE;
 	}
-	else if (i->prompt) { // TODO
-		append(&i->B, &i->prch, 1);
+	else if (i->prompt) {
+		fill(&i->B, i->prch, 1);
 		append(&i->B, i->prompt, strlen(i->prompt));
 		const int padding = i->scrw-utf8_width(i->prompt)-1;
 		if (padding > 0) {
@@ -558,7 +536,7 @@ void ui_draw(struct ui* const i) {
 		_bottombar(i);
 	}
 	write(STDOUT_FILENO, i->B.buf, i->B.top);
-	if (i->prompt) {
+	if (i->prompt && i->prompt_cursor_pos >= 0) {
 		write(STDOUT_FILENO, CSI_CURSOR_SHOW);
 		move_cursor(i->scrh, i->prompt_cursor_pos+1);
 	}
@@ -628,8 +606,6 @@ int ui_select(struct ui* const i, const char* const q,
 		T += snprintf(P+T, sizeof(P)-T, "=%s", o[j].h);
 	}
 	ui_draw(i);
-	// TODO only need to redraw bottombar
-	// ...but on the other hand it's called only once here
 	struct input in;
 	for (;;) {
 		in = get_input(i->timeout);
@@ -643,7 +619,8 @@ int ui_select(struct ui* const i, const char* const q,
 	//return 0; // unreachable
 }
 
-/* Find matching mappings
+/*
+ * Find matching mappings
  *
  * If input is ESC or no matches,
  * clear ili, and hint/matching table.
@@ -701,6 +678,7 @@ enum command get_cmd(struct ui* const i) {
 			i->ili = 0;
 			// Not clearing mks on full match to preserve this information for hints
 			// Instead, mks is cleared when entered get_cmd()
+			// TODO
 			return i->kmap[mi].c;
 		}
 	}
@@ -713,7 +691,8 @@ enum command get_cmd(struct ui* const i) {
 	return CMD_NONE;
 }
 
-/* Gets input to buffer
+/*
+ * Gets input to buffer
  * Responsible for cursor movement (buftop) and guarding buffer bounds (bsize)
  * If text is ready (enter pressed) returns 0,
  * If aborted, returns -1.
@@ -786,6 +765,7 @@ int prompt(struct ui* const i, char* const t,
 		char* t_top, const size_t t_size) {
 	i->prch = '>';
 	i->prompt = t;
+	i->prompt_cursor_pos = 0;
 	ui_draw(i);
 	int r;
 	do {
@@ -793,6 +773,7 @@ int prompt(struct ui* const i, char* const t,
 		ui_draw(i); // TODO only redraw bottombar
 	} while (r && r != -1);
 	i->prompt = NULL;
+	i->prompt_cursor_pos = -1;
 	return r;
 }
 
@@ -811,9 +792,9 @@ void failed(struct ui* const i, const char* const f,
 int spawn(char* const arg[]) {
 	// TODO errors
 	// TODO that global...
+	int ret = 0, status = 0, nullfd;
 	write(STDOUT_FILENO, CSI_CLEAR_ALL);
-	stop_raw_mode(&I->T);
-	int ret = 0, status, nullfd;
+	if ((ret = stop_raw_mode(&I->T))) return ret;
 	pid_t pid = fork();
 	if (pid == 0) {
 		nullfd = open("/dev/null", O_WRONLY, 0100);
@@ -831,7 +812,7 @@ int spawn(char* const arg[]) {
 	else {
 		while (waitpid(pid, &status, 0) == -1);
 	}
-	start_raw_mode(&I->T);
+	ret = start_raw_mode(&I->T);
 	ui_draw(I);
 	return ret;
 }

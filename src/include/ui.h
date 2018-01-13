@@ -65,6 +65,9 @@ enum command {
 	CMD_ENTRY_UP,
 	CMD_ENTRY_DOWN,
 
+	CMD_SCREEN_UP,
+	CMD_SCREEN_DOWN,
+
 	CMD_ENTRY_FIRST,
 	CMD_ENTRY_LAST,
 
@@ -226,6 +229,9 @@ static struct input2cmd default_mapping[] = {
 	{ { KUTF8("G"), KEND }, MODE_MANAGER, CMD_ENTRY_LAST },
 	{ { KSPEC(I_END), KEND }, MODE_MANAGER, CMD_ENTRY_LAST },
 
+	{ { KCTRL('B'), KEND }, MODE_MANAGER, CMD_SCREEN_UP },
+	{ { KCTRL('F'), KEND }, MODE_MANAGER, CMD_SCREEN_DOWN },
+
 	{ { KUTF8("j"), KEND }, MODE_MANAGER, CMD_ENTRY_DOWN },
 	{ { KCTRL('N'), KEND }, MODE_MANAGER, CMD_ENTRY_DOWN },
 	{ { KSPEC(I_ARROW_DOWN), KEND }, MODE_MANAGER, CMD_ENTRY_DOWN },
@@ -343,6 +349,9 @@ static const char* const cmd_help[] = {
 
 	[CMD_ENTRY_UP] = "Go to previous entry.",
 	[CMD_ENTRY_DOWN] = "Go to next entry.",
+
+	[CMD_SCREEN_UP] = "Scroll 1 screen up.",
+	[CMD_SCREEN_DOWN] = "Scroll 1 screen down.",
 
 	[CMD_ENTRY_FIRST] = "Go to the top file in directory.",
 	[CMD_ENTRY_LAST] = "Go to the bottom file in directory.",
