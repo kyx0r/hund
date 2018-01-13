@@ -7,7 +7,7 @@ A minimalistic terminal file manager.
 - Move/remove/copy selected files
 - Rename multiple files/directories at once
 - Create multiple directories at once
-- Calculate volume of a directory
+- Calculate volume of directories
 - Hide/show hidden files
 - Change permissions/owner/group of a single file
 - Find file in current directory (find as you type)
@@ -35,8 +35,9 @@ A minimalistic terminal file manager.
 - Bookmarks
 - Extract archive
 #### Architecture/OS Support
-- x86-64 + Arch Linux - Developed on, can be expected to work *best*
-- x86-64 + FreeBSD - gcc's only problem is that it does not detect ctrl keys, clang does not detect any keys at all lol
+- x86-64 + Arch Linux - Developed on. Can be expected to work *best*
+	- Alpine Linux works too
+- x86-64 + FreeBSD - works!
 - aarch64 (Raspberry PI 3) + Arch Linux ARM 64-bit - works just fine
 #### Dependencies & Requirements
 - gcc, clang or musl-gcc
