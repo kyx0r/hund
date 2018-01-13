@@ -38,7 +38,7 @@ bool utf8_validate(const char* const);
 void utf8_insert(char*, const char* const, const size_t);
 void utf8_remove(char* const, const size_t);
 
-void cut_non_ascii(const char*, char*, size_t);
+void cut_unwanted(const char*, char*, const char, size_t);
 
 struct range {
 	codepoint_t s, e;

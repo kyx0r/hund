@@ -199,14 +199,20 @@ void utf8_remove(char* const a, const size_t j) {
 	memmove(t, t+rl, strlen(t));
 }
 
-/* Copies only ASCII characters to buf */
-void cut_non_ascii(const char* str, char* buf, size_t n) {
+/* Copies only valid utf8 characters and non-control ascii to buf */
+void cut_unwanted(const char* str, char* buf, const char c, size_t n) {
 	while (*str && n) {
-		if (utf8_g2nb(str) == 1) {
-			*buf = *str;
+		const size_t nb = utf8_g2nb(str);
+		if (!nb || (nb == 1 && *str < ' ')) {
+			*buf = c;
 			buf += 1;
+			str += 1;
 		}
-		str += 1;
+		else {
+			memcpy(buf, str, nb);
+			buf += nb;
+			str += nb;
+		}
 		n -= 1;
 	}
 	*buf = 0; // null-terminator
