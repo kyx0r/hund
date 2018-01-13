@@ -256,6 +256,8 @@ int main() {
 	TEST(utf8_w2nb("qq", 2) == 2, "");
 	TEST(utf8_w2nb("", 2) == 0, "");
 	TEST(utf8_w2nb("a", 0) == 0, "");
+	TEST(utf8_w2nb("a", 666) == 1, "");
+	TEST(utf8_w2nb("łłłłł", 666) == 10, "");
 
 	char inserted[20] = "łąkała";
 	utf8_insert(inserted, "ń", 2);
@@ -271,11 +273,10 @@ int main() {
 	TEST(utf8_wtill(inserted, inserted+5) == 3, "");
 
 	char inv[NAME_MAX];
-	cut_non_ascii("łąćwożrźks", inv, NAME_MAX);
+	cut_unwanted("works", inv, 'x', NAME_MAX);
 	TEST(!strcmp(inv, "works"), "");
-	cut_non_ascii("ΩŒĘwo®r≈ks", inv, NAME_MAX);
-	TEST(!strcmp(inv, "works"), "");
-
+	cut_unwanted("\xffwor\e\b\a\nks", inv, '.', NAME_MAX);
+	TEST(!strcmp(inv, ".wor....ks"), "");
 
 	END_SECTION("utf8");
 
