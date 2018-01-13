@@ -330,6 +330,12 @@ static void process_input(struct ui* const i, struct task* const t) {
 	case CMD_ENTRY_UP:
 		prev_entry(i->pv);
 		break;
+	case CMD_SCREEN_DOWN:
+		jump_n_entries(i->pv, i->ph-1);
+		break;
+	case CMD_SCREEN_UP:
+		jump_n_entries(i->pv, -(i->ph-1));
+		break;
 	case CMD_ENTER_DIR:
 		err = file_view_enter_selected_dir(i->pv);
 		if (err && err != ENOTDIR) failed(i, "enter dir", err, NULL);

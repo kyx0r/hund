@@ -147,6 +147,37 @@ void last_entry(struct file_view* const fv) {
 	}
 }
 
+void jump_n_entries(struct file_view* const fv, const int n) {
+	// TODO optimize
+	if (!fv->num_files) {
+		fv->selection = 0;
+	}
+	fnum_t N;
+	if (n < 0) {
+		N = -n;
+		if (fv->selection < N) {
+			first_entry(fv);
+		}
+		else {
+			for (int i = 0; i < -n; ++i) {
+				prev_entry(fv);
+			}
+		}
+
+	}
+	else if (n > 0) {
+		N = n;
+		if (fv->num_files - fv->selection < N) {
+			last_entry(fv);
+		}
+		else {
+			for (int i = 0; i < n; ++i) {
+				next_entry(fv);
+			}
+		}
+	}
+}
+
 void delete_file_list(struct file_view* const fv) {
 	file_list_clean(&fv->file_list, &fv->num_files);
 	fv->selection = fv->num_hidden = 0;
@@ -154,7 +185,7 @@ void delete_file_list(struct file_view* const fv) {
 
 bool file_on_list(struct file_view* const fv, const char* const name) {
 	fnum_t i = 0;
-	while (i < fv->num_files &&	strcmp(fv->file_list[i]->file_name, name)) {
+	while (i < fv->num_files && strcmp(fv->file_list[i]->file_name, name)) {
 		i += 1;
 	}
 	return i != fv->num_files;
@@ -163,7 +194,7 @@ bool file_on_list(struct file_view* const fv, const char* const name) {
 /* Finds and highlighs file with given name */
 void file_highlight(struct file_view* const fv, const char* const name) {
 	fnum_t i = 0;
-	while (i < fv->num_files &&	strcmp(fv->file_list[i]->file_name, name)) {
+	while (i < fv->num_files && strcmp(fv->file_list[i]->file_name, name)) {
 		i += 1;
 	}
 	if (i != fv->num_files) {
@@ -181,7 +212,7 @@ bool file_find(struct file_view* const fv, const char* const name,
 	if (start <= end) {
 		for (fnum_t i = start; i <= end; ++i) {
 			if (visible(fv, i) &&
-					contains(fv->file_list[i]->file_name, name)) {
+			    contains(fv->file_list[i]->file_name, name)) {
 				fv->selection = i;
 				return true;
 			}
@@ -216,6 +247,9 @@ int file_view_enter_selected_dir(struct file_view* const fv) {
 	int err = file_view_scan_dir(fv);
 	if (err) {
 		delete_file_list(fv);
+		file_view_up_dir(fv);
+		// TODO ^^^ would be better if it was checked
+		// before any changes to file_view
 		return err;
 	}
 	file_view_sort(fv);
