@@ -115,6 +115,7 @@ inline static void estimate_volume_for_selected(struct file_view* const fv) {
 		estimate_volume(opath, &fv->file_list[f]->dir_volume,
 				&sink_fc, &sink_dc); // TODO
 		up_dir(opath);
+		s += 1;
 	}
 	free(opath);
 	if (sc) {
@@ -482,14 +483,15 @@ static void process_input(struct ui* const i, struct task* const t) {
 		estimate_volume_for_selected(i->pv);
 		break;
 	case CMD_SELECT_FILE:
-		fr = hfr(i->pv);
-		if ((fr->selected = !fr->selected)) {
-			i->pv->num_selected += 1;
+		if ((fr = hfr(i->pv))) {
+			if ((fr->selected = !fr->selected)) {
+				i->pv->num_selected += 1;
+			}
+			else {
+				i->pv->num_selected -= 1;
+			}
+			next_entry(i->pv);
 		}
-		else {
-			i->pv->num_selected -= 1;
-		}
-		next_entry(i->pv);
 		break;
 	case CMD_SELECT_ALL:
 		i->pv->num_selected = 0;
