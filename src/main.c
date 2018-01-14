@@ -40,8 +40,6 @@
  *    - dereference links
  * 9. Error handling.
  * 10. Transfer speed and % done
- * 13. Actions like estimating volume or renaming
- *     should have visible progress too
  * 14. IDEA: Detecting file formats -> display name of a program that
  *      would open highlighted file
  * 15. IDEA: if finding, offer selecting files
@@ -96,8 +94,9 @@ inline static void open_find(struct ui* const i) {
 	i->prompt = NULL;
 }
 
+#if 0
 inline static void estimate_volume_for_selected(struct file_view* const fv) {
-	// TODO
+	// TODO REDO
 	int sink_fc = 0, sink_dc = 0;
 	fnum_t f = 0, s = 0;
 	char* const opath = strncpy(malloc(PATH_MAX), fv->wd, PATH_MAX);
@@ -112,8 +111,8 @@ inline static void estimate_volume_for_selected(struct file_view* const fv) {
 		    || (S && !S_ISDIR(S->st_mode))) continue;
 		append_dir(opath, fv->file_list[f]->file_name);
 		fv->file_list[f]->dir_volume = 0;
-		estimate_volume(opath, &fv->file_list[f]->dir_volume,
-				&sink_fc, &sink_dc); // TODO
+		/*estimate_volume(opath, &fv->file_list[f]->dir_volume,
+				&sink_fc, &sink_dc); // TODO*/
 		up_dir(opath);
 		s += 1;
 	}
@@ -124,6 +123,7 @@ inline static void estimate_volume_for_selected(struct file_view* const fv) {
 		next_entry(fv);
 	}
 }
+#endif
 
 /* Only solves copy/move/remove conflicts */
 inline static bool _solve_conflicts(struct ui* const i,
@@ -205,9 +205,6 @@ static void prepare_long_task(struct ui* const i, struct task* const t,
 	}
 	task_new(t, tt, i->pv->wd, i->sv->wd, &selected, &renamed);
 	t->tf = tf;
-	estimate_volume_for_list(i->pv->wd, &selected,
-			&(t->size_total), &(t->files_total),
-			&(t->dirs_total));
 	i->m = MODE_WAIT;
 }
 
@@ -324,6 +321,9 @@ static void process_input(struct ui* const i, struct task* const t) {
 		tmp = i->pv;
 		i->pv = i->sv;
 		i->sv = tmp;
+		if (!visible(i->pv, i->pv->selection)) {
+			first_entry(i->pv);
+		}
 		break;
 	case CMD_ENTRY_DOWN:
 		next_entry(i->pv);
@@ -480,10 +480,10 @@ static void process_input(struct ui* const i, struct task* const t) {
 		free_list(&rf);
 		break;
 	case CMD_DIR_VOLUME:
-		estimate_volume_for_selected(i->pv);
+		//estimate_volume_for_selected(i->pv);
 		break;
 	case CMD_SELECT_FILE:
-		if ((fr = hfr(i->pv))) {
+		if ((fr = hfr(i->pv)) && visible(i->pv, i->pv->selection)) {
 			if ((fr->selected = !fr->selected)) {
 				i->pv->num_selected += 1;
 			}
@@ -593,7 +593,10 @@ static void task_finish(struct ui* const i, struct task* const t) {
 static void task_execute(struct ui* const i, struct task* const t) {
 	i->timeout = 5;
 	int err;
-	if (!t->paused && (err = do_task(t, 1024))) {
+	if (!t->estimated) {
+		task_estimate(t, 1024); // TODO error
+	}
+	else if (!t->paused && (err = do_task(t, 1024))) {
 		failed(i, task_strings[t->t][NOUN], err, NULL);
 		task_clean(t); // TODO
 		i->m = MODE_MANAGER;
@@ -605,16 +608,39 @@ static void task_execute(struct ui* const i, struct task* const t) {
 	pretty_size(t->size_done, sdone);
 	pretty_size(t->size_total, stota);
 	i->mt = MSG_INFO;
-	int top = 0;
-	top += snprintf(i->msg+top, MSG_BUFFER_SIZE-top,
+	snprintf(i->msg, MSG_BUFFER_SIZE,
 		"%s %s: %d/%df, %d/%dd, %s/%s",
 		(t->paused ? "||" : ">>"),
 		task_strings[t->t][ING],
 		t->files_done, t->files_total,
 		t->dirs_done, t->dirs_total,
 		sdone, stota);
-	snprintf(i->msg+top, MSG_BUFFER_SIZE-top, ", %.*s", i->scrw-top,
-			t->tw.cpath+current_dir_i(t->tw.cpath));
+}
+
+static int _init_wd(struct file_view fvs[2], char* init_wd[2]) {
+	for (int v = 0; v < 2; ++v) {
+		if (!getcwd(fvs[v].wd, PATH_MAX)) {
+			fprintf(stderr, "could not read cwd; jumping to /\n");
+			strncpy(fvs[v].wd, "/", 2);
+		}
+		if (init_wd[v]) { // Apply argument-passed paths
+			char* const e = strndup(init_wd[v], PATH_MAX);
+			if (enter_dir(fvs[v].wd, e)) {
+				fprintf(stderr, "path too long: limit is %d;"
+						" jumping to /\n", PATH_MAX);
+				strncpy(fvs[v].wd, "/", 2);
+				// TODO break if user suppiles path ending with /
+				// TODO remove /
+			}
+			free(e);
+		}
+
+		int r = file_view_scan_dir(&fvs[v]);
+		if (r) return r;
+		file_view_sort(&fvs[v]);
+		first_entry(&fvs[v]);
+	}
+	return 0;
 }
 
 extern struct ui* I;
@@ -648,7 +674,8 @@ int main(int argc, char* argv[]) {
 		case 'h':
 			printf("%s\n", help);
 			exit(EXIT_SUCCESS);
-		default: exit(EXIT_FAILURE);
+		default:
+			exit(EXIT_FAILURE);
 		}
 	}
 
@@ -671,35 +698,18 @@ int main(int argc, char* argv[]) {
 		optind += 1;
 	}
 
+	int err = 0;
+
 	struct file_view fvs[2];
 	memset(fvs, 0, sizeof(fvs));
 	fvs[0].sorting = fvs[1].sorting = cmp_name_asc;
 
 	struct ui i;
 	ui_init(&i, &fvs[0], &fvs[1]);
-	for (int v = 0; v < 2; ++v) {
-		if (!getcwd(fvs[v].wd, PATH_MAX)) {
-			fprintf(stderr, "could not read cwd; jumping to /\n");
-			strncpy(fvs[v].wd, "/", 2);
-		}
-		if (init_wd[v]) { // Apply argument-passed paths
-			char* const e = strndup(init_wd[v], PATH_MAX);
-			if (enter_dir(fvs[v].wd, e)) {
-				fprintf(stderr, "path too long: limit is %d;"
-						" jumping to /\n", PATH_MAX);
-				strncpy(fvs[v].wd, "/", 2);
-			}
-			free(e);
-		}
-		int r = file_view_scan_dir(&fvs[v]);
-		if (r) {
-			ui_end(&i);
-			fprintf(stderr, "cannot scan directory '%s': %s (%d)\n",
-					fvs[v].wd, strerror(r), r);
-			exit(EXIT_FAILURE);
-		}
-		file_view_sort(&fvs[v]);
-		first_entry(&fvs[v]);
+	if ((err = _init_wd(fvs, init_wd))) {
+		fprintf(stderr, "failed to initalize: (%d) %s\n",
+				err, strerror(err));
+		exit(EXIT_FAILURE);
 	}
 
 	struct task t;

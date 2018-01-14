@@ -111,6 +111,7 @@ struct task {
 
 	struct tree_walk tw;
 	int in, out; // when copying, fd of old and new files are held here
+	bool estimated;
 	ssize_t size_total, size_done;
 	int files_total, files_done;
 	int dirs_total, dirs_done;
@@ -121,14 +122,9 @@ void task_new(struct task* const, const enum task_type,
 		const struct string_list* const,
 		const struct string_list* const);
 
+int task_estimate(struct task* const, int c);
+
 void task_clean(struct task* const);
-
-int estimate_volume(char*, ssize_t* const, int* const, int* const);
-
-void estimate_volume_for_list(const char* const,
-		const struct string_list* const,
-		ssize_t* const, int* const,
-		int* const);
 
 void build_new_path(const char* const, const char* const,
 		const char* const, const char* const, const char* const,
