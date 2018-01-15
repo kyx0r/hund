@@ -23,17 +23,17 @@
  * TODO test
  * TODO maybe move the select() code to get_input()???
  */
-ssize_t xread(int fd, void* buf, ssize_t count, int timeout_ms) {
-	struct timeval T = { 0, (suseconds_t)timeout_ms };
+ssize_t xread(int fd, void* buf, ssize_t count, int timeout_us) {
+	struct timeval T = { 0, (suseconds_t)timeout_us };
 	fd_set rfds;
 	int retval;
-	if (timeout_ms > 0) {
+	if (timeout_us > 0) {
 		FD_ZERO(&rfds);
 		FD_SET(fd, &rfds);
 	}
 	ssize_t rd;
 	do {
-		if (timeout_ms > 0) {
+		if (timeout_us > 0) {
 			retval = select(fd+1, &rfds, NULL, NULL, &T);
 			if (retval == -1 || !retval) {
 				FD_CLR(fd, &rfds);
@@ -43,7 +43,6 @@ ssize_t xread(int fd, void* buf, ssize_t count, int timeout_ms) {
 		}
 		rd = read(fd, buf, count);
 	} while (rd < 0 && errno == EINTR && errno == EAGAIN);
-	//fprintf(stderr, "buf: %x, len: %llu\n", *(char*)buf, rd);
 	FD_CLR(fd, &rfds);
 	return rd;
 }
@@ -57,7 +56,7 @@ static enum input_type which_key(char* const seq) {
 	return I_NONE;
 }
 
-struct input get_input(int timeout_ms) {
+struct input get_input(int timeout_us) {
 	const int fd = STDIN_FILENO;
 	struct input i;
 	memset(i.utf, 0, 5);
@@ -65,8 +64,9 @@ struct input get_input(int timeout_ms) {
 	int utflen;
 	char seq[7];
 	memset(seq, 0, sizeof(seq));
-	if (xread(fd, seq, 1, timeout_ms) == 1 && seq[0] == '\x1b') {
-		if (xread(fd, seq+1, 1, 0) == 1
+	if (xread(fd, seq, 1, timeout_us) == 1 && seq[0] == '\x1b') {
+		// this tiny timeout    V enables xread to capture escape key alone
+		if (xread(fd, seq+1, 1, 1) == 1
 				&& (seq[1] == '[' || seq[1] == 'O')) {
 			if (xread(fd, seq+2, 1, 0) == 1 && isdigit(seq[2])) {
 				xread(fd, seq+3, 1, 0);
@@ -100,11 +100,6 @@ struct input get_input(int timeout_ms) {
 			i.utf[b] = 0;
 		}
 	}
-	/*switch (i.t) {
-	case I_UTF8: fprintf(stderr, "%s\n", i.utf); break;
-	case I_CTRL: fprintf(stderr, "^%c\n", i.utf[0]); break;
-	default: fprintf(stderr, "%d %s\n", i.t, keynames[i.t]); break;
-	}*/
 	return i;
 }
 
@@ -119,8 +114,7 @@ int start_raw_mode(struct termios* const before) {
 }
 
 int stop_raw_mode(struct termios* const before) {
-	const int fd = STDIN_FILENO;
-	return (tcsetattr(fd, TCSAFLUSH, before) == -1 ? errno : 0);
+	return (tcsetattr(STDIN_FILENO, TCSAFLUSH, before) == -1 ? errno : 0);
 }
 
 int char_attr(char* const buf, const size_t bufs,
