@@ -44,6 +44,9 @@
  *      would open highlighted file
  * 15. IDEA: if finding, offer selecting files
  * 16. Dir scanning via task?
+ * 17. Recursive chmod
+ * 18. ln -> create link to highlighted file in the other panel
+ * 19. dup panel
  */
 
 static int editor(char* const path) {
@@ -75,26 +78,31 @@ inline static void open_find(struct ui* const i) {
 	int r;
 	const fnum_t S = i->pv->selection;
 	const fnum_t N = i->pv->num_files;
-	do {
+	for (;;) {
 		r = fill_textbox(i, t, &t_top, NAME_MAX);
-		if (r == -1) {
+		//fprintf(stderr, "r = %d\n", r);
+		if (!r) {
+			break;
+		}
+		else if (r == -1) {
 			i->pv->selection = S;
+			break;
 		}
 		else if (r == 2 || r == -2 || t_top != t) {
 			fnum_t s = 0; // Start
 			fnum_t e = N-1; // End
-			if (r == 2 && S < N-1) {
-				s = S+1;
+			if (r == 2 && i->pv->selection < N-1) {
+				s = i->pv->selection+1;
 				e = N-1;
 			}
-			else if (r == -2 && S > 0) {
-				s = S-1;
+			else if (r == -2 && i->pv->selection > 0) {
+				s = i->pv->selection-1;
 				e = 0;
 			}
 			file_find(i->pv, t, s, e);
 		}
 		ui_draw(i);
-	} while (r && r != -1);
+	}
 	i->prompt = NULL;
 }
 
@@ -360,7 +368,8 @@ static void process_input(struct ui* const i, struct task* const t) {
 		break;
 	case CMD_EDIT_FILE:
 		if ((path = file_view_path_to_selected(i->pv))) {
-			if (S_ISREG(hfr(i->pv)->s.st_mode)) {
+			const mode_t m = hfr(i->pv)->s.st_mode;
+			if (S_ISREG(m) || S_ISLNK(m)) {
 				editor(path);
 			}
 			else {
