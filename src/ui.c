@@ -29,6 +29,7 @@
  * 1. TODO selection is not very visible
  * 2. TODO scroll too long filenames
  * 3. Change panel split with < >
+ * 4. Consistent theme colors
  */
 
 static enum theme_element mode2theme(const mode_t m) {
@@ -46,12 +47,12 @@ static enum theme_element mode2theme(const mode_t m) {
 	}
 }
 
-struct ui* I;
+struct ui* global_i;
 static void handle_winch(int sig) {
 	if (sig != SIGWINCH) return;
 	write(STDOUT_FILENO, CSI_CLEAR_ALL);
-	ui_update_geometry(I);
-	ui_draw(I);
+	ui_update_geometry(global_i);
+	ui_draw(global_i);
 }
 
 void ui_init(struct ui* const i, struct file_view* const pv,
@@ -81,7 +82,7 @@ void ui_init(struct ui* const i, struct file_view* const pv,
 	memset(i->o, 0, sizeof(i->o));
 	memset(i->g, 0, sizeof(i->g));
 
-	I = i;
+	global_i = i;
 	int err;
 	struct sigaction sa;
 	memset(&sa, 0, sizeof(struct sigaction));
@@ -112,32 +113,32 @@ void ui_end(struct ui* const i) {
 static void _pathbars(struct ui* const i) {
 	// TODO
 	//const struct passwd* const pwd = getpwuid(geteuid());
-	const char* const wd[2] = {
+	const char* wd[2] = {
 		i->fvs[0]->wd,
 		i->fvs[1]->wd
 	};
 	const int wdw[2] = {
 		utf8_width(wd[0]),
-		utf8_width(wd[1]),
+		utf8_width(wd[1])
 	};
-	const int wdl[2] = {
+	int wdl[2] = {
 		strnlen(wd[0], PATH_MAX),
-		strnlen(wd[1], PATH_MAX),
+		strnlen(wd[1], PATH_MAX)
 	};
 	append(&i->B, CSI_CLEAR_LINE);
 	append_theme(&i->B, THEME_PATHBAR);
 	for (size_t p = 0; p < 2; ++p) {
-		append(&i->B, " ", 1);
-		if (wdw[p] <= i->pw[p]-2) {
-			append(&i->B, wd[p], wdl[p]);
-			fill(&i->B, ' ', i->pw[p]-wdw[p]-1);
+		size_t padding = 0;
+		fill(&i->B, ' ', 1);
+		if (wdw[p] > i->pw[p]-2) {
+			wd[p] += utf8_w2nb(wd[p], wdw[p] - (i->pw[p]-2));
+			wdl[p] = utf8_w2nb(wd[p], i->pw[p]-2);
 		}
 		else {
-			int sg = wdw[p] - i->pw[p]-2;
-			const size_t P = utf8_w2nb(wd[p], sg);
-			append(&i->B, wd[p], P);
-			append(&i->B, " ", 1);
+			padding = (i->pw[p]-2) - wdw[p];
 		}
+		append(&i->B, wd[p], wdl[p]);
+		fill(&i->B, ' ', padding+1);
 	}
 	append_attr(&i->B, ATTR_NORMAL, NULL);
 	append(&i->B, "\r\n", 2);
@@ -159,12 +160,13 @@ static void _entry(struct ui* const i, const struct file_view* const fv,
 	cut_unwanted(cfr->file_name, name, '.', NAME_MAX+1);
 
 	char sbuf[SIZE_BUF_SIZE];
-	size_t slen = 0;
-	sbuf[0] = 0;
+	pretty_size(cfr->s.st_size, sbuf);
+	const size_t slen = strnlen(sbuf, SIZE_BUF_SIZE-1);
 
 	const size_t name_allowed = width - (1+SIZE_BUF_SIZE+1);
 	const size_t name_width = utf8_width(name);
-	const size_t name_draw = (name_width < name_allowed ? name_width : name_allowed);
+	const size_t name_draw = (name_width < name_allowed
+			? name_width : name_allowed);
 	const size_t space = name_allowed - name_draw;
 
 	char open = file_symbols[fsym];
@@ -175,12 +177,12 @@ static void _entry(struct ui* const i, const struct file_view* const fv,
 	}
 
 	append_theme(&i->B, thel);
-	append(&i->B, &open, 1);
+	fill(&i->B, open, 1);
 	append(&i->B, name, utf8_w2nb(name, name_draw));
 	fill(&i->B, ' ', space);
 	fill(&i->B, ' ', SIZE_BUF_SIZE-slen);
 	append(&i->B, sbuf, slen);
-	append(&i->B, &close, 1);
+	fill(&i->B, close, 1);
 	append_attr(&i->B, ATTR_NORMAL, NULL);
 }
 
@@ -231,7 +233,7 @@ static fnum_t _start_search_index(const struct file_view* const s,
 }
 
 /* PUG = Permissions User Group */
-static void stringify_pug(mode_t m, uid_t u, gid_t g,
+static void stringify_pug(const mode_t m, const uid_t u, const gid_t g,
 		char perms[10],
 		char user[LOGIN_NAME_MAX+1],
 		char group[LOGIN_NAME_MAX+1]) {
@@ -316,10 +318,10 @@ static void _statusbar(struct ui* const i) {
 		if (diff) append_attr(&i->B, ATTR_NOT_UNDERLINE, NULL);
 	}
 	fill(&i->B, ' ', 1);
-	append(&i->B, i->time, strlen(i->time));
+	append(&i->B, i->time, strnlen(i->time, TIME_SIZE));
 	fill(&i->B, ' ', 1);
 	append_attr(&i->B, ATTR_NORMAL, NULL);
-	append(&i->B, "\r\n", 3);
+	append(&i->B, "\r\n", 2);
 }
 
 void _cmd_and_keyseqs(struct ui* const i, const enum command c,
@@ -434,12 +436,12 @@ static void _panels(struct ui* const i) {
 	};
 	for (int L = 0; L < i->ph; ++L) {
 		append(&i->B, CSI_CLEAR_LINE);
-		for (int p = 0; p < 2; ++p) {
-			while (e[p] < i->fvs[p]->num_files
-					&& !visible(i->fvs[p], e[p])) {
+		for (size_t p = 0; p < 2; ++p) {
+			const fnum_t nf = i->fvs[p]->num_files;
+			while (e[p] < nf && !visible(i->fvs[p], e[p])) {
 				e[p] += 1;
 			}
-			if (e[p] >= i->fvs[p]->num_files) {
+			if (e[p] >= nf) {
 				fill(&i->B, ' ', i->pw[p]);
 			}
 			else {
@@ -467,6 +469,7 @@ static void _bottombar(struct ui* const i) {
 		i->mt = MSG_NONE;
 	}
 	else if (i->prompt) {
+		// TODO control prompt width
 		fill(&i->B, i->prch, 1);
 		append(&i->B, i->prompt, strlen(i->prompt));
 		const int padding = i->scrw-utf8_width(i->prompt)-1;
@@ -489,15 +492,16 @@ void ui_draw(struct ui* const i) {
 		_help(i);
 	}
 	else if (i->m == MODE_MANAGER || i->m == MODE_WAIT) { // TODO mode wait
-		const struct file_record* const _hfr = hfr(i->pv);
-		if (_hfr) {
-			stringify_pug(_hfr->s.st_mode, _hfr->s.st_uid,
-					_hfr->s.st_gid, i->perms, i->user, i->group);
+		const struct file_record* const H = hfr(i->pv);
+		if (H) {
+			stringify_pug(H->s.st_mode, H->s.st_uid,
+					H->s.st_gid, i->perms,
+					i->user, i->group);
 		}
 		else {
 			memset(i->perms, '-', 10);
-			strcpy(i->user, "-");
-			strcpy(i->group, "-");
+			memcpy(i->user, "-", 2);
+			memcpy(i->group, "-", 2);
 			// TODO maybe better just display nothing?
 			// but then _statusbar() must be modified
 		}
@@ -683,7 +687,7 @@ int fill_textbox(struct ui* const I,
 		char* const buf, char** const buftop, const size_t bsize) {
 	struct input i = get_input(I->timeout);
 	if (i.t == I_NONE) return 1;
-	if (IS_CTRL(i, '[')) return -1;
+	if (IS_CTRL(i, '[') || i.t == I_ESCAPE) return -1;
 	else if (IS_CTRL(i, 'N')) return 2;
 	else if (IS_CTRL(i, 'P')) return -2;
 	else if ((IS_CTRL(i, 'J') || IS_CTRL(i, 'M')) ||
@@ -773,7 +777,7 @@ int spawn(char* const arg[]) {
 	// TODO that global...
 	int ret = 0, status = 0, nullfd;
 	write(STDOUT_FILENO, CSI_CLEAR_ALL);
-	if ((ret = stop_raw_mode(&I->T))) return ret;
+	if ((ret = stop_raw_mode(&global_i->T))) return ret;
 	pid_t pid = fork();
 	if (pid == 0) {
 		nullfd = open("/dev/null", O_WRONLY, 0100);
@@ -791,8 +795,8 @@ int spawn(char* const arg[]) {
 	else {
 		while (waitpid(pid, &status, 0) == -1);
 	}
-	ret = start_raw_mode(&I->T);
-	ui_draw(I);
+	ret = start_raw_mode(&global_i->T);
+	ui_draw(global_i);
 	return ret;
 }
 
