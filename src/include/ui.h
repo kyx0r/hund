@@ -146,12 +146,8 @@ enum theme_element {
 	THEME_ENTRY_DIR_SEL,
 	THEME_ENTRY_SOCK_UNS,
 	THEME_ENTRY_SOCK_SEL,
-	THEME_ENTRY_LNK_DIR_UNS,
-	THEME_ENTRY_LNK_DIR_SEL,
-	THEME_ENTRY_LNK_OTH_UNS,
-	THEME_ENTRY_LNK_OTH_SEL,
-	//THEME_ENTRY_LNK_PATH,
-	//THEME_ENTRY_LNK_PATH_INV,
+	THEME_ENTRY_LNK_UNS,
+	THEME_ENTRY_LNK_SEL,
 
 	THEME_ELEM_NUM
 };
@@ -169,8 +165,7 @@ static const char file_symbols[] = {
 	[THEME_ENTRY_REG_EXE_UNS] = '*',
 	[THEME_ENTRY_DIR_UNS] = '/',
 	[THEME_ENTRY_SOCK_UNS] = '=',
-	[THEME_ENTRY_LNK_DIR_UNS] = '~',
-	[THEME_ENTRY_LNK_OTH_UNS] = '@',
+	[THEME_ENTRY_LNK_UNS] = '~',
 };
 
 static const struct theme_attrs theme_scheme[THEME_ELEM_NUM] = {
@@ -195,10 +190,8 @@ static const struct theme_attrs theme_scheme[THEME_ELEM_NUM] = {
 	[THEME_ENTRY_DIR_SEL] = { ATTR_BLACK, ATTR_CYAN, { 0, 0, 0 }, { 0, 0, 0 } },
 	[THEME_ENTRY_SOCK_UNS] = { ATTR_GREEN, ATTR_BLACK, { 0, 0, 0 }, { 0, 0, 0 } },
 	[THEME_ENTRY_SOCK_SEL] = { ATTR_BLACK, ATTR_GREEN, { 0, 0, 0 }, { 0, 0, 0 } },
-	[THEME_ENTRY_LNK_DIR_UNS] = { ATTR_CYAN, ATTR_BLACK, { 0, 0, 0 }, { 0, 0, 0 } },
-	[THEME_ENTRY_LNK_DIR_SEL] = { ATTR_BLACK, ATTR_CYAN, { 0, 0, 0 }, { 0, 0, 0 } },
-	[THEME_ENTRY_LNK_OTH_UNS] = { ATTR_WHITE, ATTR_BLACK, { 0, 0, 0 }, { 0, 0, 0 } },
-	[THEME_ENTRY_LNK_OTH_SEL] = { ATTR_BLACK, ATTR_WHITE, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_ENTRY_LNK_UNS] = { ATTR_BLUE, ATTR_BLACK, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_ENTRY_LNK_SEL] = { ATTR_BLACK, ATTR_BLUE, { 0, 0, 0 }, { 0, 0, 0 } },
 	//[THEME_ENTRY_LNK_PATH] = { 0, COLOR_WHITE, COLOR_BLACK },
 	//[THEME_ENTRY_LNK_PATH_INV] = { 0, COLOR_RED, COLOR_BLACK },
 
@@ -450,7 +443,7 @@ struct ui {
 	char* prompt;
 	int prompt_cursor_pos;
 
-	int timeout;
+	int timeout; // microseconds
 
 	struct append_buffer B;
 	struct termios T;

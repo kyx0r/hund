@@ -33,40 +33,11 @@ void file_list_clean(struct file_record*** const fl, fnum_t* const nf) {
 	if (!*nf) return;
 	for (fnum_t i = 0; i < *nf; ++i) {
 		free((*fl)[i]->file_name);
-		free((*fl)[i]->link_path);
-		if ((*fl)[i]->l != &(*fl)[i]->s) {
-			free((*fl)[i]->l);
-		}
 		free((*fl)[i]);
 	}
 	free(*fl);
 	*fl = NULL;
 	*nf = 0;
-}
-
-/*
- * On errors, cleans up link-stuff.
- * Returns errno.
- */
-int _scan_link(struct file_record* const nfr, const char* const fpath) {
-	struct stat ls;
-	char lpath[PATH_MAX];
-	if (stat(fpath, &ls) || !(nfr->l = malloc(sizeof(struct stat)))) {
-		nfr->l = NULL;
-		return errno;
-	}
-	else {
-		memcpy(nfr->l, &ls, sizeof(struct stat));
-		const int lp_len = readlink(fpath, lpath, PATH_MAX);
-		if (lp_len == -1 || !(nfr->link_path = malloc(lp_len+1))) {
-			free(nfr->l);
-			nfr->l = NULL;
-			return errno;
-		}
-		memcpy(nfr->link_path, lpath, lp_len);
-		nfr->link_path[lp_len] = 0;
-	}
-	return 0;
 }
 
 /* Cleans up old data and scans working directory,
@@ -133,16 +104,11 @@ int scan_dir(const char* const wd, struct file_record*** const fl,
 			break;
 		}
 		strncpy(nfr->file_name, de->d_name, namelen+1);
-		nfr->link_path = NULL;
-		nfr->l = &nfr->s;
 		strncpy(fpath, wd, PATH_MAX);
-		if ((err = append_dir(fpath, nfr->file_name)));
-		else if (lstat(fpath, &nfr->s)) {
+		if ((err = append_dir(fpath, nfr->file_name))
+		   || lstat(fpath, &nfr->s)) {
 			err = errno;
 			memset(&nfr->s, 0, sizeof(struct stat));
-		}
-		else if (S_ISLNK(nfr->s.st_mode)) {
-			err = _scan_link(nfr, fpath);
 		}
 	}
 	closedir(dir);
@@ -332,7 +298,8 @@ int enter_dir(char* const path, const char* const dir) {
 		if (dir[0] == '~') {
 			struct passwd* pwd = getpwuid(geteuid());
 			strncpy(path, pwd->pw_dir, PATH_MAX);
-			strncat(path, dir+1, PATH_MAX-strnlen(pwd->pw_dir, PATH_MAX));
+			const size_t pwl = strnlen(pwd->pw_dir, PATH_MAX);
+			strncat(path, dir+1, PATH_MAX-pwl);
 		}
 		else {
 			strncpy(path, dir, PATH_MAX);
@@ -410,37 +377,6 @@ int up_dir(char* const path) {
 	}
 	return 0;
 }
-
-/* Finds substring home in path and changes it to ~
- * /home/user/.config becomes ~/.config
- * Return values:
- * 0 if found home in path and changed
- * -1 if not found home in path; path unchanged
- */
-/*int prettify_path(char* const path, const char* const home) {
-	const int hlen = strnlen(home, PATH_MAX);
-	const int plen = strnlen(path, PATH_MAX);
-	if (!memcmp(path, home, hlen)) {
-		path[0] = '~';
-		memmove(path+1, path+hlen, plen-hlen+1);
-		return 0;
-	}
-	return -1;
-}*/
-
-// Places current directory in dir[]
-/*void current_dir(const char* const path, char* const dir) {
-	const int plen = strnlen(path, PATH_MAX);
-	int i = plen-1; // i will point last slash in path
-	while (path[i] != '/' && i >= 0) {
-		i -= 1;
-	}
-	if (!i && plen == 1) {
-		memcpy(dir, "/", 2);
-		return;
-	}
-	memcpy(dir, path+i+1, strlen(path+i));
-}*/
 
 bool path_is_relative(const char* const path) {
 	return path[0] != '/' && path[0] != '~';
@@ -593,7 +529,7 @@ void list_copy(struct string_list* const dst_list,
 	dst_list->len = src_list->len;
 	dst_list->str = malloc(dst_list->len*sizeof(char*));
 	for (fnum_t i = 0; i < dst_list->len; ++i) {
-		dst_list->str[i] = strdup(src_list->str[i]); // TODO
+		dst_list->str[i] = strdup(src_list->str[i]);
 	}
 }
 
@@ -621,7 +557,7 @@ bool duplicates_on_list(const struct string_list* const list) {
 			if (f == g) continue;
 			if (list->str[f]
 			    && list->str[g]
-				&& !strcmp(list->str[f], list->str[g])) return true;
+			    && !strcmp(list->str[f], list->str[g])) return true;
 		}
 	}
 	return false;

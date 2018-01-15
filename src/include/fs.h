@@ -73,15 +73,9 @@ static const char* const perm2rwx[] = {
 
 typedef unsigned int fnum_t; // Number of Files
 
-/*
- * If file is a symlink, l will point heap-allocated stat of the pointed file.
- * Otherwise it will point &s.
- */
 struct file_record {
 	char* file_name;
-	char* link_path;
 	struct stat s;
-	struct stat* l;
 	ssize_t dir_volume;
 	bool selected;
 };
@@ -92,7 +86,7 @@ struct file_record {
 		|| ((M & S_IFMT) == S_IFSOCK))
 
 #define DOTDOT(N) (!strncmp((N), ".", 2) || !strncmp((N), "..", 3))
-#define EXECUTABLE(M,N) ((M & 0111) | (N & 0111))
+#define EXECUTABLE(M) (M & 0111)
 
 bool same_fs(const char* const, const char* const);
 
@@ -115,7 +109,7 @@ void sort_file_list(int (*)(const void*, const void*),
 int link_copy(const char* const, const char* const, const char* const);
 int link_copy_raw(const char* const, const char* const);
 
-#define SIZE_BUF_SIZE (3+1+2+1+1)
+#define SIZE_BUF_SIZE (4+1+2+1+1)
 void pretty_size(off_t, char* buf);
 
 #define MKDIR_DEFAULT_PERM (S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
@@ -123,8 +117,6 @@ void pretty_size(off_t, char* buf);
 int append_dir(char* const, const char* const);
 int enter_dir(char* const, const char* const);
 int up_dir(char* const);
-//int prettify_path(char* const, const char* const);
-//void current_dir(const char* const, char* const);
 bool path_is_relative(const char* const);
 
 int prettify_path_i(const char* const, const char* const);

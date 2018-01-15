@@ -31,26 +31,17 @@
  * 3. Change panel split with < >
  */
 
-static enum theme_element mode2theme(const mode_t m, const mode_t n) {
+static enum theme_element mode2theme(const mode_t m) {
 	switch (m & S_IFMT) {
 	case S_IFBLK: return THEME_ENTRY_BLK_UNS;
 	case S_IFCHR: return THEME_ENTRY_CHR_UNS;
 	case S_IFIFO: return THEME_ENTRY_FIFO_UNS;
 	case S_IFREG:
-		if (EXECUTABLE(m, 0)) return THEME_ENTRY_REG_EXE_UNS;
+		if (EXECUTABLE(m)) return THEME_ENTRY_REG_EXE_UNS;
 		return THEME_ENTRY_REG_UNS;
 	case S_IFDIR: return THEME_ENTRY_DIR_UNS;
 	case S_IFSOCK: return THEME_ENTRY_SOCK_UNS;
-	case S_IFLNK:
-		switch (n & S_IFMT) {
-		case S_IFBLK:
-		case S_IFCHR:
-		case S_IFIFO:
-		case S_IFREG:
-		case S_IFSOCK:
-		default: return THEME_ENTRY_LNK_OTH_UNS;
-		case S_IFDIR: return THEME_ENTRY_LNK_DIR_UNS;
-		}
+	case S_IFLNK: return THEME_ENTRY_LNK_UNS;
 	default: return THEME_ENTRY_REG_UNS;
 	}
 }
@@ -160,8 +151,7 @@ static void _entry(struct ui* const i, const struct file_view* const fv,
 	const bool hl = e == fv->selection && fv == i->pv;
 
 	// File SYMbol
-	const enum theme_element fsym = mode2theme(cfr->s.st_mode,
-			(cfr->l ? cfr->l->st_mode : 0));
+	const enum theme_element fsym = mode2theme(cfr->s.st_mode);
 	// THeme ELement
 	const enum theme_element thel = fsym + (hl ? 1 : 0);
 
@@ -171,17 +161,6 @@ static void _entry(struct ui* const i, const struct file_view* const fv,
 	char sbuf[SIZE_BUF_SIZE];
 	size_t slen = 0;
 	sbuf[0] = 0;
-
-	if (cfr->l) { // TODO signal broken symlink
-		if (S_ISREG(cfr->l->st_mode)) {
-			pretty_size(cfr->l->st_size, sbuf);
-			slen = strnlen(sbuf, SIZE_BUF_SIZE);
-		}
-		else if (S_ISDIR(cfr->l->st_mode) && cfr->dir_volume != -1) {
-			pretty_size(cfr->dir_volume, sbuf);
-			slen = strnlen(sbuf, SIZE_BUF_SIZE);
-		}
-	}
 
 	const size_t name_allowed = width - (1+SIZE_BUF_SIZE+1);
 	const size_t name_width = utf8_width(name);
@@ -296,8 +275,6 @@ static void stringify_pug(mode_t m, uid_t u, gid_t g,
 }
 
 static void _statusbar(struct ui* const i) {
-	append_theme(&i->B, THEME_STATUSBAR);
-	fill(&i->B, ' ', 1);
 	const struct file_record* const _hfr = hfr(i->pv);
 	if (_hfr) {
 		const time_t lt = _hfr->s.st_mtim.tv_sec;
@@ -319,6 +296,8 @@ static void _statusbar(struct ui* const i) {
 	const size_t sw = uw+1+gw+1+10+1+TIME_SIZE+1;
 	const size_t padding = i->scrw-cw-sw;
 
+	append_theme(&i->B, THEME_STATUSBAR);
+	fill(&i->B, ' ', 1);
 	append(&i->B, status, n);
 	fill(&i->B, ' ', padding);
 	append(&i->B, i->user, strnlen(i->user, LOGIN_NAME_MAX));

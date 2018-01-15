@@ -237,10 +237,8 @@ bool file_find(struct file_view* const fv, const char* const name,
 int file_view_enter_selected_dir(struct file_view* const fv) {
 	if (!fv->num_files || !visible(fv, fv->selection)) return 0;
 	const char* const fn = fv->file_list[fv->selection]->file_name;
-	const struct stat* rst = &fv->file_list[fv->selection]->s;
-	const struct stat* lst = fv->file_list[fv->selection]->l;
-	if (!lst) return ENOENT;
-	if (S_ISDIR(rst->st_mode) || S_ISDIR(lst->st_mode)) {
+	const mode_t m = fv->file_list[fv->selection]->s.st_mode;
+	if (S_ISDIR(m) || S_ISLNK(m)) {
 		if (enter_dir(fv->wd, fn)) return ENAMETOOLONG;
 	}
 	else return ENOTDIR;
@@ -380,6 +378,5 @@ void remove_conflicting(struct file_view* const fv,
 
 /* Highlighted File Record */
 struct file_record* hfr(const struct file_view* const fv) {
-	return (fv->num_files ?
-			fv->file_list[fv->selection] : NULL);
+	return (fv->num_files ? fv->file_list[fv->selection] : NULL);
 }
