@@ -59,6 +59,8 @@ enum command {
 	CMD_CREATE_DIR,
 	CMD_RENAME,
 
+	CMD_LINK,
+
 	CMD_UP_DIR,
 	CMD_ENTER_DIR,
 
@@ -72,11 +74,13 @@ enum command {
 	CMD_ENTRY_LAST,
 
 	CMD_CD,
+	CMD_PAGER,
 	CMD_OPEN_FILE,
 	CMD_EDIT_FILE,
 
 	CMD_REFRESH,
 	CMD_SWITCH_PANEL,
+	CMD_DUP_PANEL,
 
 	CMD_DIR_VOLUME,
 	CMD_TOGGLE_HIDDEN,
@@ -169,7 +173,7 @@ static const char file_symbols[] = {
 };
 
 static const struct theme_attrs theme_scheme[THEME_ELEM_NUM] = {
-	[THEME_OTHER] = { ATTR_BLACK, ATTR_WHITE, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_OTHER] = { ATTR_BLACK, ATTR_BLACK, { 0, 0, 0 }, { 0, 0, 0 } },
 	[THEME_PATHBAR] = { ATTR_BLACK, ATTR_WHITE, { 0, 0, 0 }, { 0, 0, 0 } },
 	[THEME_STATUSBAR] = { ATTR_BLACK, ATTR_WHITE, { 0, 0, 0 }, { 0, 0, 0 } },
 	[THEME_ERROR] = { ATTR_BLACK, ATTR_RED, { 0, 0, 0 }, { 0, 0, 0 } },
@@ -241,7 +245,11 @@ static struct input2cmd default_mapping[] = {
 
 	{ { KUTF8("m"), KUTF8("v"), KEND }, MODE_MANAGER, CMD_MOVE },
 
+	{ { KUTF8("l"), KUTF8("n"), KEND}, MODE_MANAGER, CMD_LINK },
+
 	{ { KCTRL('I'), KEND }, MODE_MANAGER, CMD_SWITCH_PANEL },
+
+	{ { KUTF8("z"), KEND }, MODE_MANAGER, CMD_DUP_PANEL },
 
 	{ { KUTF8("r"), KUTF8("r"), KEND }, MODE_MANAGER, CMD_REFRESH },
 	{ { KCTRL('L'), KEND }, MODE_MANAGER, CMD_REFRESH },
@@ -255,6 +263,7 @@ static struct input2cmd default_mapping[] = {
 	{ { KCTRL('J'), KEND }, MODE_MANAGER, CMD_ENTER_DIR },
 	{ { KCTRL('M'), KEND }, MODE_MANAGER, CMD_ENTER_DIR },
 
+	{ { KUTF8("p"), KEND }, MODE_MANAGER, CMD_PAGER },
 	{ { KUTF8("o"), KEND }, MODE_MANAGER, CMD_OPEN_FILE },
 	{ { KUTF8("e"), KUTF8("d"), KEND }, MODE_MANAGER, CMD_EDIT_FILE },
 
@@ -337,6 +346,8 @@ static const char* const cmd_help[] = {
 	[CMD_CREATE_DIR] = "Create new directories.",
 	[CMD_RENAME] = "Rename selected files.",
 
+	[CMD_LINK] = "Create links to highlighted files.",
+
 	[CMD_UP_DIR] = "Go up in directory tree.",
 	[CMD_ENTER_DIR] = "Enter highlighted directory.",
 
@@ -350,11 +361,13 @@ static const char* const cmd_help[] = {
 	[CMD_ENTRY_LAST] = "Go to the bottom file in directory.",
 
 	[CMD_CD] = "Jump to some directory.",
-	[CMD_OPEN_FILE] = "Open selected file in pager.",
+	[CMD_PAGER] = "Open selected file in pager.",
+	[CMD_OPEN_FILE] = "Open selected file.",
 	[CMD_EDIT_FILE] = "Open selected file in text editor.",
 
 	[CMD_REFRESH] = "Rescan directories and redraw UI.",
 	[CMD_SWITCH_PANEL] = "Switch active panel.",
+	[CMD_DUP_PANEL] = "Open current directory in the other panel.",
 
 	[CMD_DIR_VOLUME] = "Calcualte volume of highlighted directory.",
 	[CMD_TOGGLE_HIDDEN] = "Toggle between hiding/showing hidden files.",

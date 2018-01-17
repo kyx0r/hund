@@ -26,7 +26,6 @@
 
 /*
  * UI TODO NOTES
- * 1. TODO selection is not very visible
  * 2. TODO scroll too long filenames
  * 3. Change panel split with < >
  * 4. Consistent theme colors
@@ -121,24 +120,22 @@ static void _pathbars(struct ui* const i) {
 		utf8_width(wd[0]),
 		utf8_width(wd[1])
 	};
-	int wdl[2] = {
-		strnlen(wd[0], PATH_MAX),
-		strnlen(wd[1], PATH_MAX)
-	};
 	append(&i->B, CSI_CLEAR_LINE);
 	append_theme(&i->B, THEME_PATHBAR);
 	for (size_t p = 0; p < 2; ++p) {
 		size_t padding = 0;
-		fill(&i->B, ' ', 1);
+		size_t wdl;
 		if (wdw[p] > i->pw[p]-2) {
 			wd[p] += utf8_w2nb(wd[p], wdw[p] - (i->pw[p]-2));
-			wdl[p] = utf8_w2nb(wd[p], i->pw[p]-2);
+			wdl = utf8_w2nb(wd[p], i->pw[p]-2);
 		}
 		else {
 			padding = (i->pw[p]-2) - wdw[p];
+			wdl = strnlen(wd[p], PATH_MAX);
 		}
-		append(&i->B, wd[p], wdl[p]);
-		fill(&i->B, ' ', padding+1);
+		fill(&i->B, ' ', 1);
+		append(&i->B, wd[p], wdl);
+		fill(&i->B, ' ', 1+padding);
 	}
 	append_attr(&i->B, ATTR_NORMAL, NULL);
 	append(&i->B, "\r\n", 2);
@@ -288,9 +285,12 @@ static void _statusbar(struct ui* const i) {
 	}
 	char status[10+2+10+2+10+1+1];
 	const fnum_t nhf = (i->pv->show_hidden ? 0 : i->pv->num_hidden);
-	int n = snprintf(status, sizeof(status), "%uf %u%c %us",
-			i->pv->num_files-nhf, i->pv->num_hidden,
-			(i->pv->show_hidden ? 'H' : 'h'), i->pv->num_selected);
+	int n = snprintf(status, sizeof(status),
+			"%uf %u%c %us",
+			i->pv->num_files-nhf,
+			i->pv->num_hidden,
+			(i->pv->show_hidden ? 'H' : 'h'),
+			i->pv->num_selected);
 
 	const size_t cw = utf8_width(status);
 	const size_t uw = utf8_width(i->user);
@@ -442,7 +442,9 @@ static void _panels(struct ui* const i) {
 				e[p] += 1;
 			}
 			if (e[p] >= nf) {
+				append_theme(&i->B, THEME_OTHER);
 				fill(&i->B, ' ', i->pw[p]);
+				append_attr(&i->B, ATTR_NORMAL, NULL);
 			}
 			else {
 				_entry(i, i->fvs[p], i->pw[p], e[p]);
@@ -685,7 +687,7 @@ enum command get_cmd(struct ui* const i) {
  */
 int fill_textbox(struct ui* const I,
 		char* const buf, char** const buftop, const size_t bsize) {
-	struct input i = get_input(I->timeout);
+	const struct input i = get_input(I->timeout);
 	if (i.t == I_NONE) return 1;
 	if (IS_CTRL(i, '[') || i.t == I_ESCAPE) return -1;
 	else if (IS_CTRL(i, 'N')) return 2;
@@ -778,6 +780,8 @@ int spawn(char* const arg[]) {
 	int ret = 0, status = 0, nullfd;
 	write(STDOUT_FILENO, CSI_CLEAR_ALL);
 	if ((ret = stop_raw_mode(&global_i->T))) return ret;
+	global_i->mt = MSG_INFO;
+	strcpy(global_i->msg, "external program is running...");
 	pid_t pid = fork();
 	if (pid == 0) {
 		nullfd = open("/dev/null", O_WRONLY, 0100);
@@ -795,6 +799,7 @@ int spawn(char* const arg[]) {
 	else {
 		while (waitpid(pid, &status, 0) == -1);
 	}
+	global_i->msg[0] = 0;
 	ret = start_raw_mode(&global_i->T);
 	ui_draw(global_i);
 	return ret;

@@ -38,34 +38,43 @@
  * 8. Configuration of copy/move/remove operation
  *    - copy raw links
  *    - dereference links
- * 9. Error handling.
- * 10. Transfer speed and % done
  * 14. IDEA: Detecting file formats -> display name of a program that
- *      would open highlighted file
+ *     would open highlighted file
  * 15. IDEA: if finding, offer selecting files
  * 16. Dir scanning via task?
  * 17. Recursive chmod
  * 18. ln -> create link to highlighted file in the other panel
- * 19. dup panel
+ * 20. estimating volume should also gather number of symlinks, size etc,
+ *     so that it asks about links only if dir contains links
  */
 
-static int editor(char* const path) {
+static char* get_editor(void) {
+	char* ed = getenv("VISUAL");
+	if (!ed) ed = getenv("EDITOR");
+	if (!ed) ed = "vi";
+	return ed;
+}
+
+static int open_file_with(char* const p, char* const f) {
 	char exeimg[PATH_MAX];
 	strcpy(exeimg, "/usr/bin");
-	const char* ed = getenv("VISUAL");
-	if (!ed) ed = getenv("EDITOR");
-	append_dir(exeimg, ed ? ed : "vi");
-	char* const arg[] = { exeimg, path, NULL };
+	append_dir(exeimg, p);
+	char* const arg[] = { exeimg, f, NULL };
 	return spawn(arg);
 }
 
-static int pager(char* const path) {
-	char exeimg[PATH_MAX];
-	strcpy(exeimg, "/usr/bin");
-	char* const pager = getenv("PAGER");
-	append_dir(exeimg, pager ? pager : "less");
-	char* const arg[] = { exeimg, path, NULL };
-	return spawn(arg);
+static void open_selected_with(struct ui* const i, char* const w) {
+	char* path;
+	if ((path = file_view_path_to_selected(i->pv))) {
+		const mode_t m = hfr(i->pv)->s.st_mode;
+		if (S_ISREG(m) || S_ISLNK(m)) {
+			open_file_with(w, path);
+		}
+		else {
+			failed(i, "edit", 0, "not regular file");
+		}
+		free(path);
+	}
 }
 
 inline static void open_find(struct ui* const i) {
@@ -80,7 +89,6 @@ inline static void open_find(struct ui* const i) {
 	const fnum_t N = i->pv->num_files;
 	for (;;) {
 		r = fill_textbox(i, t, &t_top, NAME_MAX);
-		//fprintf(stderr, "r = %d\n", r);
 		if (!r) {
 			break;
 		}
@@ -167,7 +175,7 @@ inline static bool _solve_conflicts(struct ui* const i,
 			int tmpfd = mkstemp(tmpn);
 			list_to_file(r, tmpfd);
 
-			editor(tmpn);
+			open_file_with(get_editor(), tmpn);
 			file_to_list(tmpfd, r); // TODO err
 
 			close(tmpfd);
@@ -337,6 +345,19 @@ static void process_input(struct ui* const i, struct task* const t) {
 			first_entry(i->pv);
 		}
 		break;
+	case CMD_DUP_PANEL:
+		// TODO
+		strncpy(i->sv->wd, i->pv->wd, PATH_MAX);
+		if ((err = file_view_scan_dir(i->sv))) {
+			delete_file_list(i->sv);
+			file_view_up_dir(i->sv);
+		}
+		else {
+			file_view_sort(i->sv);
+			i->sv->selection = i->pv->selection;
+			i->sv->show_hidden = i->pv->show_hidden;
+		}
+		break;
 	case CMD_ENTRY_DOWN:
 		next_entry(i->pv);
 		break;
@@ -366,28 +387,15 @@ static void process_input(struct ui* const i, struct task* const t) {
 	case CMD_REMOVE:
 		prepare_long_task(i, t, TASK_REMOVE);
 		break;
+	case CMD_PAGER:
+		name = getenv("PAGER");
+		open_selected_with(i, (name ? name : "less"));
+		break;
 	case CMD_EDIT_FILE:
-		if ((path = file_view_path_to_selected(i->pv))) {
-			const mode_t m = hfr(i->pv)->s.st_mode;
-			if (S_ISREG(m) || S_ISLNK(m)) {
-				editor(path);
-			}
-			else {
-				failed(i, "edit", 0, "not regular file");
-			}
-			free(path);
-		}
+		open_selected_with(i, get_editor());
 		break;
 	case CMD_OPEN_FILE:
-		if ((path = file_view_path_to_selected(i->pv))) {
-			if (S_ISREG(hfr(i->pv)->s.st_mode)) {
-				pager(path);
-			}
-			else {
-				failed(i, "open", 0, "not regular file");
-			}
-			free(path);
-		}
+		open_selected_with(i, "xdg-open"); // TODO
 		break;
 	case CMD_CD:
 		path = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
@@ -415,7 +423,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		break;
 	case CMD_CREATE_DIR:
 		tmpfd = mkstemp(tmpn);
-		editor(tmpn);
+		open_file_with(get_editor(), tmpn);
 		file_to_list(tmpfd, &files);
 		for (fnum_t f = 0; f < files.len; ++f) {
 			if (!files.str[f]) continue; // Blank lines are ignored
@@ -445,7 +453,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		bool unsolved;
 		do {
 			free_list(&rf);
-			editor(tmpn);
+			open_file_with(get_editor(), tmpn);
 			file_to_list(tmpfd, &rf);
 			if ((unsolved = duplicates_on_list(&rf))) {
 				if (!ui_select(i, "There are conflicts. Retry?", o, 2)) {
@@ -491,6 +499,8 @@ static void process_input(struct ui* const i, struct task* const t) {
 		unlink(tmpn);
 		free_list(&sf);
 		free_list(&rf);
+		break;
+	case CMD_LINK:
 		break;
 	case CMD_DIR_VOLUME:
 		//estimate_volume_for_selected(i->pv);
@@ -630,30 +640,22 @@ static void task_execute(struct ui* const i, struct task* const t) {
 		sdone, stota);
 }
 
-static int _init_wd(struct file_view fvs[2], char* init_wd[2]) {
+static int _init_wd(struct file_view fvs[2], char* const init_wd[2]) {
+	int e = 0;
 	for (int v = 0; v < 2; ++v) {
-		if (!getcwd(fvs[v].wd, PATH_MAX)) {
-			fprintf(stderr, "could not read cwd; jumping to /\n");
+		const char* const d = (init_wd[v] ? init_wd[v] : "");
+		const bool cwd = getcwd(fvs[v].wd, PATH_MAX);
+		if (!cwd || (e = enter_dir(fvs[v].wd, d))) {
 			strncpy(fvs[v].wd, "/", 2);
 		}
-		if (init_wd[v]) { // Apply argument-passed paths
-			char* const e = strndup(init_wd[v], PATH_MAX);
-			if (enter_dir(fvs[v].wd, e)) {
-				fprintf(stderr, "path too long: limit is %d;"
-						" jumping to /\n", PATH_MAX);
-				strncpy(fvs[v].wd, "/", 2);
-				// TODO break if user suppiles path ending with /
-				// TODO remove /
-			}
-			free(e);
-		}
-
-		int r = file_view_scan_dir(&fvs[v]);
-		if (r) return r;
+		// TODO breaks if user suppiles path ending with /
+		// TODO remove /
+		e = file_view_scan_dir(&fvs[v]);
+		if (e) return e;
 		file_view_sort(&fvs[v]);
 		first_entry(&fvs[v]);
 	}
-	return 0;
+	return e;
 }
 
 extern struct ui* I;
@@ -730,8 +732,7 @@ int main(int argc, char* argv[]) {
 	t.in = t.out = -1; // TODO
 
 	i.mt = MSG_INFO;
-	snprintf(i.msg, MSG_BUFFER_SIZE,
-			"Type ? for help and license notice.");
+	strcpy(i.msg, "Type ? for help and license notice.");
 	while (i.run) {
 		if (i.ui_needs_refresh) {
 			ui_update_geometry(&i);
