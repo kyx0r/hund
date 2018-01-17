@@ -39,29 +39,25 @@ int main() {
 	r = enter_dir(path, "..");
 	TEST(r == 0 && strcmp(path, "/usr") == 0, "up_dir used");
 
+	r = enter_dir(path, "..");
+	TEST(r == 0 && strcmp(path, "/") == 0, "");
+
+	r = enter_dir(path, "..");
+	TEST(r == 0 && strcmp(path, "/") == 0, "");
+
+	r = enter_dir(path, "lol/../wat");
+	TEST(r == 0 && strcmp(path, "/wat") == 0, "");
+
 	memset(path, 0, sizeof(path));
 	path[0] = '/';
 	memset(path+1, 'a', PATH_MAX-3); // 1 to leave null-terminator, 1 for /, 1 for b
 	r = enter_dir(path, "b");
-	TEST(r == 0 && strlen(path) == PATH_MAX, "path filled");
+	TEST(r && strlen(path) == PATH_MAX-2, "path filled");
 
 	r = enter_dir(path, "end");
-	TEST(r && strlen(path) == PATH_MAX, "respect PATH_MAX; leave path unchanged");
+	TEST(r && strlen(path) == PATH_MAX-2, "respect PATH_MAX; leave path unchanged");
 	r = append_dir(path, "end");
-	TEST(r && strlen(path) == PATH_MAX, "respect PATH_MAX; leave path unchanged");
-
-	/*char path4[PATH_MAX] = "/bin";
-	char cd[NAME_MAX];
-	current_dir(path4, cd);
-	TEST(strcmp(cd, "bin") == 0, "");
-
-	enter_dir(path4, "wat");
-	current_dir(path4, cd);
-	TEST(strcmp(cd, "wat") == 0, "");
-
-	strcpy(path4, "/");
-	current_dir(path4, cd);
-	TEST(strcmp(cd, "/") == 0, "");*/
+	TEST(r && strlen(path) == PATH_MAX-2, "respect PATH_MAX; leave path unchanged");
 
 	TEST(!path_is_relative("/"), "absolute");
 	TEST(!path_is_relative("/etc/netctl"), "absolute");
@@ -81,11 +77,6 @@ int main() {
 
 	enter_dir(path, "/home/user");
 	TEST(strcmp(path, "/home/user") == 0, "");
-
-	/*char path6[PATH_MAX];
-	enter_dir(path6, "~");
-	struct passwd* pwd = get_pwd();
-	TEST(strcmp(path6, pwd->pw_dir) == 0, "");*/
 
 	char path7[PATH_MAX+1] = "/home/user/images/memes";
 	int e = append_dir(path7, "lol");
@@ -125,6 +116,9 @@ int main() {
 	TEST(!strcmp(buf, "1.99K"), "");
 	pretty_size(2048, buf);
 	TEST(!strcmp(buf, "2K"), "");
+
+	pretty_size(1024*1000, buf);
+	TEST(!strcmp(buf, "1000K"), "");
 
 	pretty_size((off_t) 1, buf);
 	TEST(!strcmp(buf, "1B"), "");
