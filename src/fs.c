@@ -40,13 +40,12 @@ void file_list_clean(struct file_record*** const fl, fnum_t* const nf) {
 	*nf = 0;
 }
 
-/* Cleans up old data and scans working directory,
+/*
+ * Cleans up old data and scans working directory,
  * putting data into variables passed in arguments.
  *
  * On ENOMEM: cleans everything
- * On stat/lstat errors: zeroes failed fields
  * TODO test
- * TODO segfaults on dead links
  *
  * wd = Working Directory
  * fl = File List
@@ -245,7 +244,7 @@ int link_copy_raw(const char* const src, const char* const dst) {
 }
 
 void pretty_size(off_t s, char* const buf) {
-	static const char units[] = { 'B', 'K', 'M', 'G', 'T', 'P', 'E', 'Z' };
+	static const char* const units = "BKMGTPEZ";
 	const char* unit = units;
 	unsigned rest = 0;
 	while (s >= 1024) {
@@ -289,9 +288,8 @@ int append_dir(char* const path, const char* const dir) {
 }
 
 /*
- * path[] must be absolute and not prettified
- * dir[] does not have to be single file, can be a path
  * Returns ENAMETOOLONG if PATH_MAX would be exceeded; leaves path unchanged
+ * TODO PATH_MAX
  */
 int enter_dir(char* const path, const char* const dir) {
 	if (!path_is_relative(dir)) {
@@ -306,55 +304,34 @@ int enter_dir(char* const path, const char* const dir) {
 		}
 		return 0;
 	}
-	const size_t plen = strnlen(path, PATH_MAX);
-	/* path[] may contain '/' at the end
-	 * enter_dir appends entries with '/' PREpended;
-	 * path[] = '/a/b/c/' -> '/a/b/c'
-	 * if dir[] contains 'd....' it appends "/d"
-	 * If path ends with /, it would be doubled later
-	 */
-	if (path[plen-1] == '/' && plen > 1) {
-		path[plen-1] = 0;
+	const char* a = dir;
+	const char* b;
+	size_t plen = strnlen(path, PATH_MAX);
+	char P[PATH_MAX];
+	memcpy(P, path, plen+1);
+	size_t ns = 0; // Number of Slashes
+	for (size_t i = 0; i < strnlen(dir, PATH_MAX)+1; ++i) {
+		if (dir[i] == '/') ns += 1;
 	}
-	char* save_ptr = NULL;
-	char* dirdup = strndup(dir, PATH_MAX);
-	char* entry = strtok_r(dirdup, "/", &save_ptr);
-	char newpath[PATH_MAX+1];
-	strncpy(newpath, path, PATH_MAX);
-	while (entry) {
-		if (!strncmp(entry, ".", 2));
-		else if (!strncmp(entry, "..", 3)) {
-			char* p = newpath + strnlen(newpath, PATH_MAX);
-			// At this point path never ends with /
-			// p points null pointer
-			// Go back till nearest /
-			while (*p != '/' && p != newpath) {
-				*p = 0;
-				p -= 1;
-			}
-			// loop stopped at /, which must be deleted too
-			*p = 0;
+	for (size_t i = 0; i < ns+1; ++i) {
+		b = strchr(a, '/');
+		if (!b) b = a+strlen(a);
+		if (!memcmp(a, ".", b-a));
+		else if (!memcmp(a, "..", b-a)) {
+			up_dir(P);
+			plen = strnlen(P, PATH_MAX);
 		}
 		else {
-			// Check if PATH_MAX is respected
-			const size_t plen = strnlen(newpath, PATH_MAX);
-			if ((plen + strnlen(entry, PATH_MAX) + 1) > PATH_MAX) {
-				free(dirdup);
-				return ENAMETOOLONG;
+			if (plen + 1 + (b-a) >= PATH_MAX) return ENAMETOOLONG;
+			if (P[plen-1] != '/') {
+				strncat(P, "/", 2);
 			}
-			else {
-				const size_t elen = strnlen(entry, NAME_MAX);
-				if (newpath[0] == '/' && plen > 1) {
-					// dont prepend / in root directory
-					strncat(newpath, "/", 2);
-				}
-				strncat(newpath, entry, elen);
-			}
+			strncat(P, a, b-a);
+			plen = strnlen(P, PATH_MAX);
 		}
-		entry = strtok_r(NULL, "/", &save_ptr);
+		a = b+1;
 	}
-	free(dirdup);
-	strncpy(path, newpath, PATH_MAX);
+	strcpy(path, P);
 	return 0;
 }
 
