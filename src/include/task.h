@@ -103,15 +103,17 @@ struct task {
 	//    vvv basically pointers to file_view->wd; to not free
 	char* src; // Source directory path
 	char* dst; // Destination directory path
-	struct string_list targets; // Files to be copied
-	struct string_list renamed; // Same size as targets,
-	fnum_t current_target;
+	struct string_list sources; // Files to be copied
+	struct string_list renamed; // Same size as sources,
+	fnum_t current_source;
 	// NULL == no conflict, use origial name
 	// NONNULL = conflict, contains pointer to name replacement
 
 	struct tree_walk tw;
-	int in, out; // when copying, fd of old and new files are held here
+	int in, out;
+
 	bool estimated;
+	int conflicts;
 	ssize_t size_total, size_done;
 	int files_total, files_done;
 	int dirs_total, dirs_done;
@@ -134,7 +136,7 @@ int tree_walk_start(struct tree_walk* const, const char* const, const bool);
 void tree_walk_end(struct tree_walk* const);
 int tree_walk_step(struct tree_walk* const);
 
-char* current_target_path(struct task* const);
+char* current_source_path(struct task* const);
 
 int do_task(struct task* const, int);
 #endif
