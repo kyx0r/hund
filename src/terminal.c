@@ -59,8 +59,7 @@ static enum input_type which_key(char* const seq) {
 struct input get_input(int timeout_us) {
 	const int fd = STDIN_FILENO;
 	struct input i;
-	memset(i.utf, 0, 5);
-	i.t = I_NONE;
+	memset(&i, 0, sizeof(struct input));
 	int utflen;
 	char seq[7];
 	memset(seq, 0, sizeof(seq));
