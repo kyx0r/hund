@@ -89,15 +89,22 @@ enum task_flags {
 	TF_DEREF_LINKS = 1<<4, // If copying/moving links, copy what they point to
 };
 
+enum task_state {
+	TS_CLEAN = 0,
+	TS_ESTIMATE, // after task_new; runs task_estimate
+	TS_CONFIRM, // after task_estimate is finished; task configuration
+	TS_RUNNING, // task runs
+	TS_PAUSED,
+	TS_FAILED, // if something went wrong. on some errors task can retry
+	TS_FINISHED // task succesfully finished; cleans up, returns to TS_CLEAN
+};
+
 /*
  * Long disk operations
- * Displays state
  */
 struct task {
 	enum task_type t;
-	bool paused;
-	bool done;
-
+	enum task_state ts;
 	enum task_flags tf;
 
 	//    vvv basically pointers to file_view->wd; to not free
@@ -109,10 +116,10 @@ struct task {
 	// NULL == no conflict, use origial name
 	// NONNULL = conflict, contains pointer to name replacement
 
+	int err; // Last errno
 	struct tree_walk tw;
 	int in, out;
 
-	bool estimated;
 	int conflicts;
 	ssize_t size_total, size_done;
 	int files_total, files_done;

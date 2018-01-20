@@ -145,21 +145,15 @@ inline static void estimate_volume_for_selected(struct file_view* const fv) {
 }
 #endif
 
-/* Only solves copy/move/remove conflicts */
-inline static bool _solve_conflicts(struct ui* const i,
-		enum task_flags* const t,
+inline static bool _solve_name_conflicts(struct ui* const i,
 		struct string_list* const s,
 		struct string_list* const r) {
-	static const char* const question = "There are conflicts.";
+	static const char* const question = "Conflicting target names.";
 	static const struct select_option o[] = {
 		{ KUTF8("s"), "skip" },
 		{ KUTF8("r"), "rename" },
 		{ KUTF8("m"), "merge" },
 		{ KUTF8("a"), "abort" }
-	};
-	static const struct select_option m[] = {
-		{ KUTF8("s"), "skip" },
-		{ KUTF8("o"), "overwrite" },
 	};
 	int d = ui_select(i, question, o, 4);
 	if (!d) {
@@ -185,11 +179,9 @@ inline static bool _solve_conflicts(struct ui* const i,
 			}
 		} while (!solved && ui_select(i, question, o, 4));
 	}
-	if (d == 2) {
-		*t |= TF_MERGE;
-		if (!ui_select(i, "How to handle conflicts?", m, 2)) {
-			*t |= TF_SKIP_CONFLICTS;
-		}
+	else if (d == 2) {
+		r->len = s->len;
+		r->str = calloc(r->len, sizeof(char*));
 		return true;
 	}
 	free_list(s);
@@ -197,9 +189,34 @@ inline static bool _solve_conflicts(struct ui* const i,
 	return false;
 }
 
-static void prepare_long_task(struct ui* const i, struct task* const t,
-		enum task_type tt) {
-	// TODO error handling
+/* Return value: false = abort, true = go on */
+static bool _choose_subtree_conflict_policy(struct ui* const i,
+		struct task* const t) {
+	char question[64];
+	snprintf(question, sizeof(question),
+			"There are %d conflicts in the subtrees",
+			t->conflicts);
+	static const struct select_option o[] = {
+		{ KUTF8("s"), "skip" },
+		{ KUTF8("m"), "merge" },
+		{ KUTF8("a"), "abort" }
+	};
+	switch (ui_select(i, question, o, 3)) {
+	case 0:
+		t->tf |= TF_SKIP_CONFLICTS;
+		break;
+	case 1:
+		t->tf |= TF_MERGE;
+		break;
+	case 2:
+		return false;
+	default:
+		break;
+	}
+	return true;
+}
+
+static void prepare_remove(struct ui* const i, struct task* const t) {
 	if (!i->pv->num_files) return;
 	if (!i->pv->num_selected) {
 		hfr(i->pv)->selected = true;
@@ -208,24 +225,23 @@ static void prepare_long_task(struct ui* const i, struct task* const t,
 	struct string_list selected = { NULL, 0 };
 	struct string_list renamed = { NULL, 0 };
 	file_view_selected_to_list(i->pv, &selected);
-	static const struct select_option o[] = {
-		{ KUTF8("n"), "no" },
-		{ KUTF8("y"), "yes" }
-	};
-	enum task_flags tf = TF_RAW_LINKS;
-	if (tt == TASK_REMOVE && !ui_select(i, "Remove?", o, 2)) return;
-	if (tt == TASK_MOVE || tt == TASK_COPY) {
-		if (conflicts_with_existing(i->sv, &selected)) {
-			if (!_solve_conflicts(i, &tf, &selected, &renamed)) return;
-		}
-		else {
-			renamed.len = selected.len;
-			renamed.str = calloc(renamed.len, sizeof(char*));
-		}
+	task_new(t, TASK_REMOVE, i->pv->wd, i->sv->wd, &selected, &renamed);
+}
+
+static void prepare_long_task(struct ui* const i, struct task* const t,
+		enum task_type tt) {
+#if 0
+	// TODO error handling
+	struct string_list selected = { NULL, 0 };
+	struct string_list renamed = { NULL, 0 };
+	file_view_selected_to_list(i->pv, &selected);
+
+	if (conflicts_with_existing(i->sv, &selected)) {
+		if (!_solve_name_conflicts(i, &selected, &renamed)) return;
 	}
 	task_new(t, tt, i->pv->wd, i->sv->wd, &selected, &renamed);
-	t->tf = tf;
 	i->m = MODE_WAIT;
+#endif
 }
 
 static void process_input(struct ui* const i, struct task* const t) {
@@ -322,13 +338,13 @@ static void process_input(struct ui* const i, struct task* const t) {
 	case CMD_TOGGLE_OX: i->perm[1] ^= S_IXOTH; break;
 	/* WAIT */
 	case CMD_TASK_QUIT:
-		t->done = true; // TODO
+		//t->done = true; // TODO
 		break;
 	case CMD_TASK_PAUSE:
-		t->paused = true;
+		//t->paused = true;
 		break;
 	case CMD_TASK_RESUME:
-		t->paused = false;
+		//t->paused = false;
 		break;
 	/* MANAGER */
 	case CMD_QUIT:
@@ -385,7 +401,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		prepare_long_task(i, t, TASK_MOVE);
 		break;
 	case CMD_REMOVE:
-		prepare_long_task(i, t, TASK_REMOVE);
+		prepare_remove(i, t);
 		break;
 	case CMD_PAGER:
 		name = getenv("PAGER");
@@ -591,41 +607,9 @@ static void process_input(struct ui* const i, struct task* const t) {
 	}
 }
 
-/* Display message and clean task */
-static void task_finish(struct ui* const i, struct task* const t) {
-	i->timeout = -1;
-	int err;
-	if ((err = file_view_scan_dir(i->pv))
-	   || (err = file_view_scan_dir(i->sv))) {
-		failed(i, task_strings[t->t][NOUN], err, NULL);
-	}
-	else {
-		file_view_sort(i->pv);
-		file_view_sort(i->sv);
-		if (t->t == TASK_REMOVE) file_view_afterdel(i->pv);
-		else if (t->t == TASK_MOVE) prev_entry(i->pv);
-		i->mt = MSG_INFO;
-		snprintf(i->msg, MSG_BUFFER_SIZE, "%s from %s", // TODO
-				task_strings[t->t][PAST], t->src);
-	}
-	task_clean(t);
-	i->ui_needs_refresh = true;
-	i->m = MODE_MANAGER;
-}
-
-static void task_execute(struct ui* const i, struct task* const t) {
-	i->timeout = 100;
-	int err;
-	if (!t->estimated) {
-		task_estimate(t, 1024); // TODO error
-	}
-	else if (!t->paused && (err = do_task(t, 1024))) {
-		failed(i, task_strings[t->t][NOUN], err, NULL);
-		task_clean(t); // TODO
-		i->m = MODE_MANAGER;
-		i->timeout = -1;
-		return;
-	}
+static void task_progress(struct ui* const i,
+		struct task* const t,
+		const char* const S) {
 	char sdone[SIZE_BUF_SIZE];
 	char stota[SIZE_BUF_SIZE];
 	pretty_size(t->size_done, sdone);
@@ -633,11 +617,94 @@ static void task_execute(struct ui* const i, struct task* const t) {
 	i->mt = MSG_INFO;
 	snprintf(i->msg, MSG_BUFFER_SIZE,
 		"%s %s: %d/%df, %d/%dd, %s/%s",
-		(t->paused ? "||" : ">>"),
-		task_strings[t->t][ING],
+		S, task_strings[t->t][ING],
 		t->files_done, t->files_total,
 		t->dirs_done, t->dirs_total,
 		sdone, stota);
+}
+
+static void task_execute(struct ui* const i, struct task* const t) {
+	int err;
+	static const struct select_option o[] = {
+		{ KUTF8("n"), "no" },
+		{ KUTF8("y"), "yes" }
+	};
+	switch (t->ts) {
+	case TS_CLEAN:
+		break;
+	case TS_ESTIMATE:
+		i->timeout = 500;
+		i->m = MODE_WAIT;
+		if ((err = task_estimate(t, 1024*10))) {
+			t->err = err;
+			t->ts = TS_FAILED;
+		}
+		break;
+	case TS_CONFIRM:
+		i->timeout = -1;
+		if (t->conflicts) {
+			_choose_subtree_conflict_policy(i, t);
+		}
+		if (t->t == TASK_REMOVE) {
+			switch (ui_select(i, "Remove?", o, 2)) {
+			case 1: t->ts = TS_RUNNING; break;
+			default:
+			case 0: t->ts = TS_FINISHED; break;
+			}
+		}
+		i->timeout = 500;
+		break;
+	case TS_RUNNING:
+		i->timeout = 500;
+		if ((err = do_task(t, 1024*10))) {
+			t->err = err;
+			t->ts = TS_FAILED;
+		}
+		task_progress(i, t, ">>");
+		break;
+	case TS_PAUSED:
+		i->timeout = -1;
+		task_progress(i, t, "||");
+		break;
+	case TS_FAILED:
+		i->timeout = -1;
+		// TODO
+		/*i->mt = MSG_ERROR;
+		top = snprintf(i->msg, MSG_BUFFER_SIZE,
+				"%s: (%d) %s at",
+				task_strings[t->t][NOUN], t->err,
+				strerror(t->err));
+		snprintf(i->msg+top, MSG_BUFFER_SIZE-top, "%.*s",
+				(int)utf8_w2nb(t->tw.cpath, MSG_BUFFER_SIZE-top), t->tw.cpath);
+		sel = ui_select(i, "Try again?", o, 2);
+		i->timeout = 500;
+		t->ts = (!sel ? TS_FINISHED : TS_RUNNING);*/
+		i->timeout = 500;
+		t->ts = TS_FINISHED;
+		break;
+	case TS_FINISHED:
+		i->timeout = -1;
+		if ((err = file_view_scan_dir(i->pv))
+		   || (err = file_view_scan_dir(i->sv))) {
+			failed(i, task_strings[t->t][NOUN], err, NULL);
+		}
+		else {
+			file_view_sort(i->pv);
+			file_view_sort(i->sv);
+			if (t->t == TASK_REMOVE) file_view_afterdel(i->pv);
+			else if (t->t == TASK_MOVE) prev_entry(i->pv);
+			i->mt = MSG_INFO;
+			snprintf(i->msg, MSG_BUFFER_SIZE, "%s %u files",
+					task_strings[t->t][PAST],
+					t->files_done);
+		}
+		task_clean(t);
+		i->ui_needs_refresh = true;
+		i->m = MODE_MANAGER;
+		break;
+	default:
+		break;
+	}
 }
 
 static int _init_wd(struct file_view fvs[2], char* const init_wd[2]) {
@@ -733,20 +800,14 @@ int main(int argc, char* argv[]) {
 
 	i.mt = MSG_INFO;
 	strcpy(i.msg, "Type ? for help and license notice.");
-	while (i.run) {
+	while (i.run) { // TODO but task may be still running
 		if (i.ui_needs_refresh) {
 			ui_update_geometry(&i);
 		}
 		ui_draw(&i);
-
 		process_input(&i, &t);
-
-		if (t.t != TASK_NONE) {
-			if (t.done) task_finish(&i, &t);
-			else task_execute(&i, &t);
-		}
+		task_execute(&i, &t);
 	}
-
 	for (int v = 0; v < 2; ++v) {
 		delete_file_list(&fvs[v]);
 	}
