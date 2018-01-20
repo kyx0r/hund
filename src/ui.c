@@ -24,13 +24,6 @@
  * They are supposed to read file_view contents, but never modify it.
  */
 
-/*
- * UI TODO NOTES
- * 2. TODO scroll too long filenames
- * 3. Change panel split with < >
- * 4. Consistent theme colors
- */
-
 static enum theme_element mode2theme(const mode_t m) {
 	switch (m & S_IFMT) {
 	case S_IFBLK: return THEME_ENTRY_BLK_UNS;
@@ -487,7 +480,6 @@ static void _bottombar(struct ui* const i) {
 
 void ui_draw(struct ui* const i) {
 	i->B.top = 0;
-	append(&i->B, CSI_CLEAR_ALL);
 	append(&i->B, CSI_CURSOR_HIDE);
 	append(&i->B, CSI_CURSOR_TOP_LEFT);
 	if (i->m == MODE_HELP) {
@@ -622,7 +614,7 @@ enum command get_cmd(struct ui* const i) {
 		return CMD_NONE;
 	}
 	i->il[i->ili] = newinput;
-	i->ili += 1;
+	i->ili += 1; // TODO ili sometimes overflows
 
 	for (size_t m = 0; m < i->kml; ++m) {
 		const struct input2cmd* const i2c = &i->kmap[m];
