@@ -124,7 +124,7 @@ size_t utf8_cp2nb(const codepoint_t cp) {
 size_t utf8_g2w(const codepoint_t cp) {
 	if (cp < 0x7f) return 1;
 	if (cp_in(zero_width, zero_width_len, cp)) return 0;
-	//if (cp_in(double_width, double_width_len, cp)) return 2;
+	if (cp_in(double_width, double_width_len, cp)) return 2;
 	return 1;
 }
 
@@ -218,10 +218,10 @@ void cut_unwanted(const char* str, char* buf, const char c, size_t n) {
 	*buf = 0; // null-terminator
 }
 
-bool cp_in(const struct range* const r, const size_t l, const codepoint_t cp) {
+bool cp_in(const codepoint_t r[][2], const size_t l, const codepoint_t cp) {
 	// TODO binary search?
 	for (size_t i = 0; i < l; ++i) {
-		if (r[i].s <= cp && cp <= r[i].e) return true;
+		if (r[i][0] <= cp && cp <= r[i][1]) return true;
 	}
 	return false;
 }

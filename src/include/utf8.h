@@ -23,6 +23,8 @@
 #include <string.h>
 #include <stdbool.h>
 
+#include "widechars.h"
+
 typedef unsigned int codepoint_t;
 
 void utf8_cp2b(char* const, const codepoint_t);
@@ -40,24 +42,9 @@ void utf8_remove(char* const, const size_t);
 
 void cut_unwanted(const char*, char*, const char, size_t);
 
-struct range {
-	codepoint_t s, e;
-};
+static const size_t zero_width_len = sizeof(zero_width)/sizeof(unsigned int*);
+static const size_t double_width_len = sizeof(double_width)/sizeof(unsigned int*);
 
-static const struct range zero_width[] = {
-	{ 0x00, 0x00 },
-	{ 0x200b, 0x200b },
-	{ 0x1160, 0x11ff },
-	// TODO
-};
-static const size_t zero_width_len = sizeof(zero_width)/sizeof(struct range);
-
-/*static const struct range double_width[] = {
- *	// TODO
-	{ 0xffffff, 0xffffff }, // temponary
-};
-static const size_t double_width_len = sizeof(double_width)/sizeof(struct range);*/
-
-bool cp_in(const struct range* const, const size_t l, const codepoint_t);
+bool cp_in(const codepoint_t [][2], const size_t l, const codepoint_t);
 
 #endif
