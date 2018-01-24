@@ -45,6 +45,6 @@ void cut_unwanted(const char*, char*, const char, size_t);
 static const size_t zero_width_len = sizeof(zero_width)/sizeof(unsigned int*);
 static const size_t double_width_len = sizeof(double_width)/sizeof(unsigned int*);
 
-bool cp_in(const codepoint_t [][2], const size_t l, const codepoint_t);
+bool cp_in(const codepoint_t [][2], size_t, const codepoint_t);
 
 #endif

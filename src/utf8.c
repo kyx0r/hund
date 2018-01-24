@@ -218,10 +218,21 @@ void cut_unwanted(const char* str, char* buf, const char c, size_t n) {
 	*buf = 0; // null-terminator
 }
 
-bool cp_in(const codepoint_t r[][2], const size_t l, const codepoint_t cp) {
-	// TODO binary search?
-	for (size_t i = 0; i < l; ++i) {
-		if (r[i][0] <= cp && cp <= r[i][1]) return true;
+bool cp_in(const codepoint_t r[][2], size_t Z, const codepoint_t cp) {
+	if (cp < r[0][0] && r[Z][1] < cp) return false;
+	size_t A = 0;
+	size_t I;
+	while (A <= Z) {
+		I = (A+Z)/2;
+		if (cp < r[I][0]) {
+			Z = I-1;
+		}
+		else if (cp > r[I][1]) {
+			A = I+1;
+		}
+		else {
+			return true;
+		}
 	}
 	return false;
 }
