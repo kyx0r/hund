@@ -267,6 +267,7 @@ static void stringify_pug(const mode_t m, const uid_t u, const gid_t g,
 }
 
 static void _statusbar(struct ui* const i) {
+	// TODO segfaults on small width
 	const struct file_record* const _hfr = hfr(i->pv);
 	if (_hfr) {
 		const time_t lt = _hfr->s.st_mtim.tv_sec;
@@ -289,6 +290,7 @@ static void _statusbar(struct ui* const i) {
 	const size_t uw = utf8_width(i->user);
 	const size_t gw = utf8_width(i->group);
 	const size_t sw = uw+1+gw+1+10+1+TIME_SIZE+1;
+	if ((size_t)i->scrw < cw+sw) return; // TODO
 	const size_t padding = i->scrw-cw-sw;
 
 	append_theme(&i->B, THEME_STATUSBAR);
@@ -598,25 +600,27 @@ int ui_select(struct ui* const i, const char* const q,
 
 /*
  * Find matching mappings
- *
- * If input is ESC or no matches,
- * clear ili, and hint/matching table.
  * If there are a few, do nothing, wait longer.
  * If there is only one, send it.
  */
 enum command get_cmd(struct ui* const i) {
-	memset(i->mks, 0, i->kml*sizeof(unsigned short));
-	struct input newinput = get_input(i->timeout);
-	if (newinput.t == I_NONE) return CMD_NONE;
-	else if (newinput.t == I_ESCAPE || IS_CTRL(newinput, '[')) {
+	if (i->ili >= INPUT_LIST_LENGTH) {
+		memset(i->il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
+		i->ili = 0;
+	}
+	i->il[i->ili] = get_input(i->timeout);
+	i->ili += 1;
+	if (i->il[i->ili-1].t == I_NONE) {
+		return CMD_NONE;
+	}
+	if (i->il[i->ili-1].t == I_ESCAPE || IS_CTRL(i->il[i->ili-1], '[')) {
 		memset(i->il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
 		i->ili = 0;
 		return CMD_NONE;
 	}
-	i->il[i->ili] = newinput;
-	i->ili += 1; // TODO ili sometimes overflows
 
 	for (size_t m = 0; m < i->kml; ++m) {
+		i->mks[m] = 0;
 		const struct input2cmd* const i2c = &i->kmap[m];
 		if (i2c->m != i->m) continue; // mode mismatch
 		const struct input* const in = i2c->i;
@@ -642,28 +646,15 @@ enum command get_cmd(struct ui* const i) {
 	}
 
 	if (!matches) {
-		i->ili = 0;
 		memset(i->il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
-		memset(i->mks, 0, i->kml*sizeof(unsigned short));
+		i->ili = 0;
 		return CMD_NONE;
 	}
-	else if (matches == 1) {
-		const bool fullmatch = !memcmp(i->il,
-				i->kmap[mi].i, INPUT_LIST_LENGTH*sizeof(struct input));
-		if (fullmatch) {
-			memset(i->il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
-			i->ili = 0;
-			// Not clearing mks on full match to preserve this information for hints
-			// Instead, mks is cleared when entered get_cmd()
-			// TODO
-			return i->kmap[mi].c;
-		}
-	}
-	else if (i->ili >= INPUT_LIST_LENGTH) {
-		// TODO test it. ili would sometimes exceed INPUT_LIST_LENGTH
-		i->ili = 0;
+	if (matches == 1 && !memcmp(i->il, i->kmap[mi].i,
+				INPUT_LIST_LENGTH*sizeof(struct input))) {
 		memset(i->il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
-		memset(i->mks, 0, i->kml*sizeof(unsigned short));
+		i->ili = 0;
+		return i->kmap[mi].c;
 	}
 	return CMD_NONE;
 }
@@ -677,8 +668,8 @@ enum command get_cmd(struct ui* const i) {
  * Additionally:
  * returns 2 on ^N and -2 on ^P
  */
-int fill_textbox(struct ui* const I,
-		char* const buf, char** const buftop, const size_t bsize) {
+int fill_textbox(struct ui* const I, char* const buf,
+		char** const buftop, const size_t bsize) {
 	const struct input i = get_input(I->timeout);
 	if (i.t == I_NONE) return 1;
 	if (IS_CTRL(i, '[') || i.t == I_ESCAPE) return -1;
