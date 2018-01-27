@@ -190,15 +190,15 @@ inline static bool _solve_name_conflicts(struct ui* const i,
 }
 
 /* Return value: false = abort, true = go on */
-static bool _choose_subtree_conflict_policy(struct ui* const i,
+static bool _choose_conflict_policy(struct ui* const i,
 		struct task* const t) {
 	char question[64];
 	snprintf(question, sizeof(question),
-			"There are %d conflicts in the subtrees",
+			"There are %d conflicts",
 			t->conflicts);
 	static const struct select_option o[] = {
 		{ KUTF8("s"), "skip" },
-		{ KUTF8("m"), "merge" },
+		{ KUTF8("o"), "overwrite" },
 		{ KUTF8("a"), "abort" }
 	};
 	switch (ui_select(i, question, o, 3)) {
@@ -206,7 +206,7 @@ static bool _choose_subtree_conflict_policy(struct ui* const i,
 		t->tf |= TF_SKIP_CONFLICTS;
 		break;
 	case 1:
-		t->tf |= TF_MERGE;
+		t->tf |= TF_OVERWRITE_CONFLICTS;
 		break;
 	case 2:
 		return false;
@@ -216,7 +216,56 @@ static bool _choose_subtree_conflict_policy(struct ui* const i,
 	return true;
 }
 
-static void prepare_remove(struct ui* const i, struct task* const t) {
+static bool _choose_symlink_policy(struct ui* const i,
+		struct task* const t) {
+	char question[80];
+	snprintf(question, sizeof(question),
+			"There are %d symlinks",
+			t->symlinks);
+	static const struct select_option o[] = {
+		{ KUTF8("r"), "raw" },
+		{ KUTF8("c"), "recalculate" },
+		{ KUTF8("d"), "dereference" },
+		{ KUTF8("s"), "skip" },
+		{ KUTF8("a"), "abort" }
+	};
+	switch (ui_select(i, question, o, 5)) {
+	case 0:
+		t->tf |= TF_RAW_LINKS;
+		break;
+	case 2:
+		t->tf |= TF_DEREF_LINKS;
+		break;
+	case 3:
+		t->tf |= TF_SKIP_LINKS;
+		break;
+	case 4:
+		return false;
+	case 1:
+	default:
+		break;
+	}
+	return true;
+}
+
+static void _confirm_removal(struct ui* const i,
+		struct task* const t) {
+	static const struct select_option o[] = {
+		{ KUTF8("n"), "no" },
+		{ KUTF8("y"), "yes" }
+	};
+	char question[80];
+	snprintf(question, sizeof(question),
+			"Remove %u files?", t->files_total);
+	switch (ui_select(i, question, o, 2)) {
+	case 1: t->ts = TS_RUNNING; break;
+	default:
+	case 0: t->ts = TS_FINISHED; break;
+	}
+}
+
+static void prepare_task(struct ui* const i, struct task* const t,
+		const enum task_type tt) {
 	if (!i->pv->num_files) return;
 	if (!i->pv->num_selected) {
 		hfr(i->pv)->selected = true;
@@ -225,23 +274,15 @@ static void prepare_remove(struct ui* const i, struct task* const t) {
 	struct string_list selected = { NULL, 0 };
 	struct string_list renamed = { NULL, 0 };
 	file_view_selected_to_list(i->pv, &selected);
-	task_new(t, TASK_REMOVE, i->pv->wd, i->sv->wd, &selected, &renamed);
-}
-
-static void prepare_long_task(struct ui* const i, struct task* const t,
-		enum task_type tt) {
-#if 0
-	// TODO error handling
-	struct string_list selected = { NULL, 0 };
-	struct string_list renamed = { NULL, 0 };
-	file_view_selected_to_list(i->pv, &selected);
-
-	if (conflicts_with_existing(i->sv, &selected)) {
+	if ((tt == TASK_MOVE || tt == TASK_COPY)
+			&& conflicts_with_existing(i->sv, &selected)) {
 		if (!_solve_name_conflicts(i, &selected, &renamed)) return;
 	}
+	else {
+		renamed.len = selected.len;
+		renamed.str = calloc(renamed.len, sizeof(char*));
+	}
 	task_new(t, tt, i->pv->wd, i->sv->wd, &selected, &renamed);
-	i->m = MODE_WAIT;
-#endif
 }
 
 static void process_input(struct ui* const i, struct task* const t) {
@@ -395,13 +436,13 @@ static void process_input(struct ui* const i, struct task* const t) {
 		if (err) failed(i, "up dir", err, NULL);
 		break;
 	case CMD_COPY:
-		prepare_long_task(i, t, TASK_COPY);
+		prepare_task(i, t, TASK_COPY);
 		break;
 	case CMD_MOVE:
-		prepare_long_task(i, t, TASK_MOVE);
+		prepare_task(i, t, TASK_MOVE);
 		break;
 	case CMD_REMOVE:
-		prepare_remove(i, t);
+		prepare_task(i, t, TASK_REMOVE);
 		break;
 	case CMD_PAGER:
 		name = getenv("PAGER");
@@ -624,42 +665,44 @@ static void task_progress(struct ui* const i,
 }
 
 static void task_execute(struct ui* const i, struct task* const t) {
-	int err;
-	static const struct select_option o[] = {
-		{ KUTF8("n"), "no" },
-		{ KUTF8("y"), "yes" }
-	};
 	switch (t->ts) {
 	case TS_CLEAN:
 		break;
 	case TS_ESTIMATE:
 		i->timeout = 500;
 		i->m = MODE_WAIT;
-		if ((err = task_estimate(t, 1024*10))) {
-			t->err = err;
-			t->ts = TS_FAILED;
-		}
+		t->err = task_do(t, 1024*10, task_action_estimate, TS_CONFIRM);
+		if (t->err) t->ts = TS_FAILED;
 		break;
 	case TS_CONFIRM:
 		i->timeout = -1;
-		if (t->conflicts) {
-			_choose_subtree_conflict_policy(i, t);
-		}
 		if (t->t == TASK_REMOVE) {
-			switch (ui_select(i, "Remove?", o, 2)) {
-			case 1: t->ts = TS_RUNNING; break;
-			default:
-			case 0: t->ts = TS_FINISHED; break;
+			_confirm_removal(i, t);
+		}
+		else if (t->t & (TASK_COPY | TASK_MOVE)) {
+			if (t->conflicts) {
+				if (!_choose_conflict_policy(i, t)) {
+					t->ts = TS_FINISHED;
+					i->timeout = 500;
+					break;
+				}
 			}
+			if (t->symlinks) {
+				if (!_choose_symlink_policy(i, t)) {
+					t->ts = TS_FINISHED;
+					i->timeout = 500;
+					break;
+				}
+			}
+			t->ts = TS_RUNNING;
 		}
 		i->timeout = 500;
 		break;
 	case TS_RUNNING:
 		i->timeout = 500;
-		if ((err = do_task(t, 1024*10))) {
-			t->err = err;
-			t->ts = TS_FAILED;
-		}
+		t->err = task_do(t, 1024*10,
+				task_action_copyremove, TS_FINISHED);
+		if (t->err) t->ts = TS_FAILED;
 		task_progress(i, t, ">>");
 		break;
 	case TS_PAUSED:
@@ -684,9 +727,9 @@ static void task_execute(struct ui* const i, struct task* const t) {
 		break;
 	case TS_FINISHED:
 		i->timeout = -1;
-		if ((err = file_view_scan_dir(i->pv))
-		   || (err = file_view_scan_dir(i->sv))) {
-			failed(i, task_strings[t->t][NOUN], err, NULL);
+		if ((t->err = file_view_scan_dir(i->pv))
+		   || (t->err = file_view_scan_dir(i->sv))) {
+			failed(i, task_strings[t->t][NOUN], t->err, NULL);
 		}
 		else {
 			file_view_sort(i->pv);
@@ -708,21 +751,26 @@ static void task_execute(struct ui* const i, struct task* const t) {
 }
 
 static int _init_wd(struct file_view fvs[2], char* const init_wd[2]) {
-	int e = 0;
+	int e;
 	for (int v = 0; v < 2; ++v) {
 		const char* const d = (init_wd[v] ? init_wd[v] : "");
-		const bool cwd = getcwd(fvs[v].wd, PATH_MAX);
-		if (!cwd || (e = enter_dir(fvs[v].wd, d))) {
-			strncpy(fvs[v].wd, "/", 2);
+		if (!getcwd(fvs[v].wd, PATH_MAX)) {
+			memcpy(fvs[v].wd, "/", 2);
+			if ((e = enter_dir(fvs[v].wd, d))) {
+				return e;
+			}
 		}
-		// TODO breaks if user suppiles path ending with /
-		// TODO remove /
-		e = file_view_scan_dir(&fvs[v]);
-		if (e) return e;
+		const size_t s = strnlen(fvs[v].wd, PATH_MAX)-1;
+		if (s && fvs[v].wd[s] == '/') {
+			fvs[v].wd[s] = 0;
+		}
+		if ((e = file_view_scan_dir(&fvs[v]))) {
+			return e;
+		}
 		file_view_sort(&fvs[v]);
 		first_entry(&fvs[v]);
 	}
-	return e;
+	return 0;
 }
 
 extern struct ui* I;
@@ -742,14 +790,16 @@ int main(int argc, char* argv[]) {
 		{0, 0, 0, 0}
 	};
 	int o, opti = 0;
+	int err;
 	while ((o = getopt_long(argc, argv, sopt, lopt, &opti)) != -1) {
 		if (o == -1) break;
 		switch (o) {
 		case 'c':
 			if (chdir(optarg)) {
-				int e = errno;
+				err = errno;
 				fprintf(stderr, "chdir failed:"
-						" %s (%d)\n", strerror(e), e);
+						" %s (%d)\n",
+						strerror(err), err);
 				exit(EXIT_FAILURE);
 			}
 			break;
@@ -780,8 +830,6 @@ int main(int argc, char* argv[]) {
 		optind += 1;
 	}
 
-	int err = 0;
-
 	struct file_view fvs[2];
 	memset(fvs, 0, sizeof(fvs));
 	fvs[0].sorting = fvs[1].sorting = cmp_name_asc;
@@ -791,6 +839,7 @@ int main(int argc, char* argv[]) {
 	if ((err = _init_wd(fvs, init_wd))) {
 		fprintf(stderr, "failed to initalize: (%d) %s\n",
 				err, strerror(err));
+		ui_end(&i);
 		exit(EXIT_FAILURE);
 	}
 

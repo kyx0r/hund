@@ -32,61 +32,65 @@ void task_new(struct task* const t, const enum task_type tp,
 	t->renamed = *renamed;
 	t->in = t->out = -1;
 	t->current_source = 0;
-	t->conflicts = t->err = 0;
+	t->conflicts = t->symlinks = t->specials = t->err = 0;
 	t->size_total = t->size_done = 0;
 	t->files_total = t->files_done = 0;
 	t->dirs_total = t->dirs_done = 0;
 	memset(&t->tw, 0, sizeof(struct tree_walk));
 }
 
-/* This is for conflicts IN the copied directory tree */
-static void _check_subtree_conflict(struct task* const t) {
-	const char* const tfn = t->sources.str[t->current_source];
-	const char* rfn = t->renamed.str[t->current_source];
-	char new_path[PATH_MAX];
-	build_new_path(t->tw.cpath, t->src, t->dst, tfn, rfn, new_path);
-	if (!access(new_path, F_OK)) {
-		t->conflicts += 1;
+void task_action_estimate(struct task* const t, int* const c) {
+	switch (t->tw.tws) {
+	case AT_LINK:
+		t->symlinks += 1;
+	case AT_FILE:
+		t->files_total += 1;
+		break;
+	case AT_DIR:
+		t->dirs_total += 1;
+		break;
+	default:
+		t->specials += 1;
+		break;
 	}
+	const bool Q = t->tw.tws & (AT_DIR | AT_LINK | AT_FILE);
+	if ((t->t == TASK_COPY || t->t == TASK_MOVE) && Q) {
+		char new_path[PATH_MAX];
+		build_new_path(t->tw.cpath, t->src, t->dst,
+				t->sources.str[t->current_source],
+				t->renamed.str[t->current_source],
+				new_path);
+		if (!access(new_path, F_OK)) {
+			t->conflicts += 1;
+		}
+	}
+	t->size_total += t->tw.cs.st_size; // TODO
+	if ((t->err = tree_walk_step(&t->tw))) {
+		t->ts = TS_FAILED;
+	}
+	*c -= 1;
 }
 
-int task_estimate(struct task* const t, int c) {
-	int err;
+int task_do(struct task* const t, int c, task_action ta,
+		const enum task_state onend) {
 	if (t->tw.tws == AT_NOWHERE) {
 		char* path = current_source_path(t);
-		err = tree_walk_start(&t->tw, path, false);
+		t->err = tree_walk_start(&t->tw, path, t->tf & TF_DEREF_LINKS);
 		free(path);
-		if (err) {
+		if (t->err) {
 			t->tw.tws = AT_NOWHERE;
-			return err;
+			t->ts = TS_FAILED;
+			return t->err;
 		}
 	}
-	while (t->tw.tws != AT_EXIT && c > 0) {
-		switch (t->tw.tws) {
-		case AT_LINK:
-		case AT_FILE:
-			t->files_total += 1;
-			break;
-		case AT_DIR:
-			t->dirs_total += 1;
-			break;
-		default:
-			break;
-		}
-		if (t->t == TASK_COPY || t->t == TASK_MOVE) {
-			_check_subtree_conflict(t);
-		}
-		t->size_total += t->tw.cs.st_size; // TODO
-		if ((err = tree_walk_step(&t->tw))) {
-			return err;
-		}
-		c -= 1;
+	while (t->tw.tws != AT_EXIT && !t->err && c > 0) {
+		ta(t, &c);
 	}
 	if (t->tw.tws == AT_EXIT) {
 		t->current_source += 1;
 		t->tw.tws = AT_NOWHERE;
 		if (t->current_source == t->sources.len) {
-			t->ts = TS_CONFIRM;
+			t->ts = onend;
 			tree_walk_end(&t->tw);
 			t->current_source = 0;
 		}
@@ -109,7 +113,7 @@ void task_clean(struct task* const t) {
 	t->t = TASK_NONE;
 	t->tf = TF_NONE;
 	t->ts = TS_CLEAN;
-	t->conflicts = 0;
+	t->conflicts = t->specials = t->err = 0;
 	_close_files(t);
 }
 
@@ -218,10 +222,19 @@ void build_new_path(const char* const path, const char* const wd,
 	}
 }
 
-inline static int _stat_file(struct tree_walk* const tw) {
+/*
+ * No effects on failure
+ */
+static int _stat_file(struct tree_walk* const tw) {
+	// lstat/stat can errno:
+	// ENOENT, EACCES, ELOOP, ENAMETOOLONG, ENOMEM, ENOTDIR, EOVERFLOW
+	struct stat old_cs;
+	memcpy(&old_cs, &tw->cs, sizeof(struct stat));
+	const enum tree_walk_state old_tws = tw->tws;
 	int err;
 	if (lstat(tw->cpath, &tw->cs)) {
-		return errno; // TODO at what?
+		memcpy(&tw->cs, &old_cs, sizeof(struct stat));
+		return errno;
 	}
 	if (S_ISDIR(tw->cs.st_mode)) {
 		tw->tws = AT_DIR;
@@ -230,16 +243,24 @@ inline static int _stat_file(struct tree_walk* const tw) {
 		tw->tws = AT_FILE;
 	}
 	else if (S_ISLNK(tw->cs.st_mode)) {
-		if ((stat(tw->cpath, &tw->cs), err = errno) && err != ENOENT) {
+		if (!tw->tl) {
+			tw->tws = AT_LINK;
+		}
+		else if (stat(tw->cpath, &tw->cs) && errno != ENOENT) {
+			err = errno;
+			memcpy(&tw->cs, &old_cs, sizeof(struct stat));
+			tw->tws = old_tws;
 			return err;
 		}
-		if (tw->tl) {
+		else if (errno == ENOENT) {
+			tw->tws = AT_LINK;
+		}
+		else {
 			if (S_ISDIR(tw->cs.st_mode)) {
 				tw->tws = AT_DIR;
 			}
 			else tw->tws = AT_FILE;
 		}
-		else tw->tws = AT_LINK;
 	}
 	else tw->tws = AT_SPECIAL;
 	return 0;
@@ -283,9 +304,7 @@ void tree_walk_end(struct tree_walk* const tw) {
 }
 
 int tree_walk_step(struct tree_walk* const tw) {
-	// TODO error handling
-	errno = 0;
-	int err;
+	int e = 0;
 	switch (tw->tws)  {
 	case AT_LINK:
 	case AT_FILE:
@@ -296,12 +315,14 @@ int tree_walk_step(struct tree_walk* const tw) {
 		up_dir(tw->cpath);
 		break;
 	case AT_DIR:
-		if ((err = tree_walk_down(tw))) {
-			return err;
+		if ((e = tree_walk_down(tw))) {
+			return e;
 		}
 		break;
 	case AT_DIR_END:
-		if ((err = tree_walk_up(tw))) return err;
+		if ((e = tree_walk_up(tw))) {
+			return e;
+		}
 		break;
 	default:
 		break;
@@ -341,7 +362,8 @@ static int _at_step(struct task* const t, int* const c,
 	const char* const tfn = t->sources.str[t->current_source];
 	const char* rfn = NULL;
 	int err;
-	if ((t->t == TASK_COPY || t->t == TASK_MOVE) && !(t->tf & TF_MERGE)) {
+	if ((t->t == TASK_COPY || t->t == TASK_MOVE)
+			&& !(t->tf & TF_OVERWRITE_CONFLICTS)) {
 		rfn = t->renamed.str[t->current_source];
 	}
 	if (copy && remove && same_fs(t->src, t->dst)) {
@@ -349,14 +371,17 @@ static int _at_step(struct task* const t, int* const c,
 				t->dst, tfn, rfn, new_path);
 		t->tw.tws = AT_EXIT;
 		if (rename(t->tw.cpath, new_path)) return errno;
+		t->size_done = t->size_total;
+		t->files_done = t->files_total;
+		t->dirs_done = t->dirs_total;
 		return 0;
 	}
 	switch (t->tw.tws) {
 	case AT_LINK:
-		/*if (copy) { // TODO overwrite
+		if (t->tf & TF_SKIP_LINKS) break;
+		if (copy) { // TODO overwrite
 			build_new_path(t->tw.cpath, t->src,
 					t->dst, tfn, rfn, new_path);
-			int err;
 			if (t->tf & TF_RAW_LINKS) {
 				err = link_copy_raw(t->tw.cpath, new_path);
 			}
@@ -364,7 +389,7 @@ static int _at_step(struct task* const t, int* const c,
 				err = link_copy(t->src, t->tw.cpath, new_path);
 			}
 			if (err && err != EACCES) return err;
-		}*/
+		}
 		if (remove) {
 			if (unlink(t->tw.cpath)) return errno;
 			if (!copy) {
@@ -398,7 +423,8 @@ static int _at_step(struct task* const t, int* const c,
 			build_new_path(t->tw.cpath, t->src,
 					t->dst, tfn, rfn, new_path);
 			err = (mkdir(new_path, t->tw.cs.st_mode) ? errno : 0);
-			if (!err || ((t->tf & TF_MERGE) && err == EEXIST)) {
+			if (!err || ((t->tf & TF_OVERWRITE_CONFLICTS)
+						&& err == EEXIST)) {
 				t->size_done += t->tw.cs.st_size;
 				t->dirs_done += 1;
 				*c -= 1;
@@ -433,38 +459,16 @@ char* current_source_path(struct task* const t) {
 	return path;
 }
 
-/*
- * Permission Denied (EACCES) ignore, inform later
- *
- */
-int do_task(struct task* const t, int c) {
-	int err;
-	if (t->tw.tws == AT_NOWHERE) {
-		char* path = current_source_path(t);
-		err = tree_walk_start(&t->tw, path, false);
-		free(path);
-		if (err) return err;
-	}
+void task_action_copyremove(struct task* const t, int* const c) {
 	char new_path[PATH_MAX];
 	char buf[BUFSIZ];
-	while (t->tw.tws != AT_EXIT && c > 0) {
-		if ((err = _at_step(t, &c, new_path, buf, sizeof(buf)))) {
-			return err;
-		}
-		if (t->in != -1 || t->out != -1) {
-			continue;
-		}
-		if ((err = tree_walk_step(&t->tw)) && err != EACCES) {
-			return err; // TODO
-		}
+	if ((t->err = _at_step(t, c, new_path, buf, sizeof(buf)))) {
+		return;
 	}
-	if (t->tw.tws == AT_EXIT) {
-		t->current_source += 1;
-		t->tw.tws = AT_NOWHERE;
-		if (t->current_source == t->sources.len) {
-			t->ts = TS_FINISHED;
-			tree_walk_end(&t->tw);
-		}
+	if (t->in != -1 || t->out != -1) {
+		return;
 	}
-	return 0;
+	if ((t->err = tree_walk_step(&t->tw)) && t->err != EACCES) {
+		return; // TODO
+	}
 }

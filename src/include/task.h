@@ -53,12 +53,12 @@ static const char* const task_strings[][3] = {
  */
 enum tree_walk_state {
 	AT_NOWHERE = 0,
-	AT_EXIT, // finished reading tree
-	AT_FILE,
-	AT_LINK,
-	AT_DIR, // on dir (will enter this dir)
-	AT_DIR_END, // finished reading dir (will go up)
-	AT_SPECIAL, // anything other than link, dir or regular file
+	AT_EXIT = 1<<0, // finished reading tree
+	AT_FILE = 1<<1,
+	AT_LINK = 1<<2,
+	AT_DIR = 1<<3, // on dir (will enter this dir)
+	AT_DIR_END = 1<<4, // finished reading dir (will go up)
+	AT_SPECIAL = 1<<5, // anything other than link, dir or regular file
 };
 
 struct dirtree {
@@ -84,19 +84,20 @@ struct tree_walk {
 enum task_flags {
 	TF_NONE = 0,
 	TF_RAW_LINKS = 1<<0, // Copy links raw instead of recalculating
-	TF_MERGE = 1<<1, // Merge directories (overwrite filesby default)
-	TF_SKIP_CONFLICTS = 1<<3, // If merging, skip (leave) conflicting
-	TF_DEREF_LINKS = 1<<4, // If copying/moving links, copy what they point to
+	TF_OVERWRITE_CONFLICTS = 1<<1,
+	TF_SKIP_CONFLICTS = 1<<2,
+	TF_DEREF_LINKS = 1<<3, // If copying/moving links, copy what they point to
+	TF_SKIP_LINKS = 1<<4,
 };
 
 enum task_state {
 	TS_CLEAN = 0,
-	TS_ESTIMATE, // after task_new; runs task_estimate
-	TS_CONFIRM, // after task_estimate is finished; task configuration
-	TS_RUNNING, // task runs
-	TS_PAUSED,
-	TS_FAILED, // if something went wrong. on some errors task can retry
-	TS_FINISHED // task succesfully finished; cleans up, returns to TS_CLEAN
+	TS_ESTIMATE = 1<<0, // after task_new; runs task_estimate
+	TS_CONFIRM = 1<<1, // after task_estimate is finished; task configuration
+	TS_RUNNING = 1<<2, // task runs
+	TS_PAUSED = 1<<3,
+	TS_FAILED = 1<<4, // if something went wrong. on some errors task can retry
+	TS_FINISHED = 1<<5 // task succesfully finished; cleans up, returns to TS_CLEAN
 };
 
 /*
@@ -120,7 +121,9 @@ struct task {
 	struct tree_walk tw;
 	int in, out;
 
-	int conflicts;
+	fnum_t conflicts;
+	fnum_t symlinks;
+	fnum_t specials;
 	ssize_t size_total, size_done;
 	int files_total, files_done;
 	int dirs_total, dirs_done;
@@ -131,7 +134,10 @@ void task_new(struct task* const, const enum task_type,
 		const struct string_list* const,
 		const struct string_list* const);
 
-int task_estimate(struct task* const, int c);
+typedef void (*task_action)(struct task* const, int* const);
+void task_action_estimate(struct task* const, int* const);
+void task_action_copyremove(struct task* const, int* const);
+int task_do(struct task* const, int, task_action, const enum task_state);
 
 void task_clean(struct task* const);
 
@@ -145,5 +151,4 @@ int tree_walk_step(struct tree_walk* const);
 
 char* current_source_path(struct task* const);
 
-int do_task(struct task* const, int);
 #endif
