@@ -71,6 +71,8 @@ static const char* const perm2rwx[] = {
 	[07] = "rwx",
 };
 
+int relative_chmod(const char* const, const mode_t, const mode_t);
+
 typedef unsigned int fnum_t; // Number of Files
 
 struct file_record {

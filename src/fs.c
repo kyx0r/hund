@@ -19,6 +19,16 @@
 
 #include "include/fs.h"
 
+int relative_chmod(const char* const file,
+		const mode_t plus, const mode_t minus) {
+	struct stat s;
+	if (stat(file, &s)) return errno;
+	mode_t p = s.st_mode & 07777;
+	p |= plus;
+	p &= ~minus;
+	return (chmod(file, p) ? errno : 0);
+}
+
 /*
  * Checks of two files are on the same filesystem.
  * If they are, moving files (and even whole directories)
@@ -172,7 +182,7 @@ void sort_file_list(int (*cmp)(const void*, const void*),
  * all paths must be absolute.
  * There are two instances, when symlink path is copied raw:
  * - when it is absolute
- * - when target is within copy operation
+ * - when target is within copy operation // TODO don't do that
  *
  * TODO detect loops/recursion
  * TODO lots of testing
@@ -389,16 +399,15 @@ int current_dir_i(const char* const path) {
 }
 
 /*
- * Finds SUBString at the begining of STRing and changes it ti REPLacement
+ * Finds SubString at the begining of STRing and changes it ti RepLacement
  */
-bool substitute(char* const str,
-		const char* const subs, const char* const repl) {
-	const size_t subs_l = strnlen(subs, PATH_MAX);
+bool substitute(char* const str, const char* const SS, const char* const R) {
+	const size_t ss_l = strnlen(SS, PATH_MAX);
 	const size_t str_l = strnlen(str, PATH_MAX);
-	if (subs_l > str_l || memcmp(str, subs, subs_l)) return false;
-	const size_t repl_l = strnlen(repl, PATH_MAX);
-	memmove(str+repl_l, str+subs_l, str_l-subs_l+1);
-	memcpy(str, repl, repl_l);
+	if (ss_l > str_l || memcmp(str, SS, ss_l)) return false;
+	const size_t repl_l = strnlen(R, PATH_MAX);
+	memmove(str+repl_l, str+ss_l, str_l-ss_l+1);
+	memcpy(str, R, repl_l);
 	return true;
 }
 
@@ -442,6 +451,7 @@ char* list_push(struct string_list* const list, const char* const s) {
  *
  * TODO flexible buffer length
  * TODO more testing
+ * TODO support for other line endings
  */
 int file_to_list(const int fd, struct string_list* const list) {
 	list->str = NULL;
