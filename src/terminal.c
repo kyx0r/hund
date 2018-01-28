@@ -19,10 +19,7 @@
 
 #include "include/terminal.h"
 
-/*
- * TODO test
- * TODO maybe move the select() code to get_input()???
- */
+// TODO timeouts may cause problems on remote connections
 ssize_t xread(int fd, void* buf, ssize_t count, int timeout_us) {
 	struct timeval T = { 0, (suseconds_t)timeout_us };
 	fd_set rfds;
@@ -39,7 +36,6 @@ ssize_t xread(int fd, void* buf, ssize_t count, int timeout_us) {
 				FD_CLR(fd, &rfds);
 				return 0;
 			}
-			FD_CLR(fd, &rfds);
 		}
 		rd = read(fd, buf, count);
 	} while (rd < 0 && errno == EINTR && errno == EAGAIN);
@@ -116,24 +112,23 @@ int stop_raw_mode(struct termios* const before) {
 	return (tcsetattr(STDIN_FILENO, TCSAFLUSH, before) == -1 ? errno : 0);
 }
 
-int char_attr(char* const buf, const size_t bufs,
+int char_attr(char* const B, const size_t S,
 		const int F, const unsigned char* const v) {
-	if ((F & 0x000000ff) < 32) {
-		return snprintf(buf, bufs, "\x1b[%dm", F);
+	if (F < 32) {
+		return snprintf(B, S, "\x1b[%dm", F);
 	}
-	char fgbg = '3'; // TODO vvvv
-	if (F & ATTR_FOREGROUND) fgbg = '3';
-	else if (F & ATTR_BACKGROUND) fgbg = '4';
-	if (F & 0x0000007f) {
-		const char C = F & 0x0000007f;
-		return snprintf(buf, bufs, "\x1b[%c%cm", fgbg, C);
+	if (!(F & (ATTR_FOREGROUND | ATTR_BACKGROUND))) return 0;
+	const char fb = ((F & ATTR_FOREGROUND) ? '3' : '4');
+	const char C = F & 0x0000007f;
+	if (C) {
+		return snprintf(B, S, "\x1b[%c%cm", fb, C);
 	}
 	if (F & ATTR_COLOR_256) {
-		return snprintf(buf, bufs, "\x1b[%c8;5;%hhum", fgbg, v[0]);
+		return snprintf(B, S, "\x1b[%c8;5;%hhum", fb, v[0]);
 	}
 	if (F & ATTR_COLOR_TRUE) {
-		return snprintf(buf, bufs, "\x1b[%c8;2;%hhu;%hhu;%hhum",
-				fgbg, v[0], v[1], v[2]);
+		return snprintf(B, S, "\x1b[%c8;2;%hhu;%hhu;%hhum",
+				fb, v[0], v[1], v[2]);
 	}
 	return 0;
 }
@@ -169,7 +164,7 @@ size_t append(struct append_buffer* const ab, const char* const b, const size_t 
 
 size_t append_attr(struct append_buffer* const ab,
 		const int F, const unsigned char* const v) {
-	const size_t S = 1+1+1+1+1+1+1+3+1+3+1+3+1;
+	const size_t S = 1+1+1+1+1+1+1+3+1+3+1+3+1+1;
 	char attr[S];
 	int n = char_attr(attr, S, F, v);
 	return append(ab, attr, n);
