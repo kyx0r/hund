@@ -104,18 +104,50 @@ enum command {
 	CMD_CHOWN,
 	CMD_CHGRP,
 
-	CMD_TOGGLE_UR,
-	CMD_TOGGLE_UW,
-	CMD_TOGGLE_UX,
-	CMD_TOGGLE_UIOX,
-	CMD_TOGGLE_GR,
-	CMD_TOGGLE_GW,
-	CMD_TOGGLE_GX,
-	CMD_TOGGLE_GIOX,
-	CMD_TOGGLE_OR,
-	CMD_TOGGLE_OW,
-	CMD_TOGGLE_OX,
-	CMD_TOGGLE_SB,
+	CMD_A_PLUS_R,
+	CMD_A_MINUS_R,
+
+	CMD_A_PLUS_W,
+	CMD_A_MINUS_W,
+
+	CMD_A_PLUS_X,
+	CMD_A_MINUS_X,
+
+	CMD_U_PLUS_R,
+	CMD_U_MINUS_R,
+
+	CMD_U_PLUS_W,
+	CMD_U_MINUS_W,
+
+	CMD_U_PLUS_X,
+	CMD_U_MINUS_X,
+
+	CMD_U_PLUS_IOX,
+	CMD_U_MINUS_IOX,
+
+	CMD_G_PLUS_R,
+	CMD_G_MINUS_R,
+
+	CMD_G_PLUS_W,
+	CMD_G_MINUS_W,
+
+	CMD_G_PLUS_X,
+	CMD_G_MINUS_X,
+
+	CMD_G_PLUS_IOX,
+	CMD_G_MINUS_IOX,
+
+	CMD_O_PLUS_R,
+	CMD_O_MINUS_R,
+
+	CMD_O_PLUS_W,
+	CMD_O_MINUS_W,
+
+	CMD_O_PLUS_X,
+	CMD_O_MINUS_X,
+
+	CMD_O_PLUS_SB,
+	CMD_O_MINUS_SB,
 
 	CMD_TASK_QUIT,
 	CMD_TASK_PAUSE,
@@ -293,28 +325,54 @@ static struct input2cmd default_mapping[] = {
 	/* MODE CHMOD */
 	{ { KUTF8("q"), KUTF8("q"), KEND }, MODE_CHMOD, CMD_RETURN },
 	{ { KUTF8("c"), KUTF8("h"), KEND }, MODE_CHMOD, CMD_CHANGE },
+
 	{ { KUTF8("c"), KUTF8("o"), KEND }, MODE_CHMOD, CMD_CHOWN },
 	{ { KUTF8("c"), KUTF8("g"), KEND }, MODE_CHMOD, CMD_CHGRP },
-	{ { KUTF8("u"), KUTF8("i"), KEND }, MODE_CHMOD, CMD_TOGGLE_UIOX },
-	{ { KUTF8("g"), KUTF8("i"), KEND }, MODE_CHMOD, CMD_TOGGLE_GIOX },
-	{ { KUTF8("o"), KUTF8("s"), KEND }, MODE_CHMOD, CMD_TOGGLE_SB },
-	{ { KUTF8("u"), KUTF8("r"), KEND }, MODE_CHMOD, CMD_TOGGLE_UR },
-	{ { KUTF8("u"), KUTF8("w"), KEND }, MODE_CHMOD, CMD_TOGGLE_UW },
-	{ { KUTF8("u"), KUTF8("x"), KEND }, MODE_CHMOD, CMD_TOGGLE_UX },
-	{ { KUTF8("g"), KUTF8("r"), KEND }, MODE_CHMOD, CMD_TOGGLE_GR },
-	{ { KUTF8("g"), KUTF8("w"), KEND }, MODE_CHMOD, CMD_TOGGLE_GW },
-	{ { KUTF8("g"), KUTF8("x"), KEND }, MODE_CHMOD, CMD_TOGGLE_GX },
-	{ { KUTF8("o"), KUTF8("r"), KEND }, MODE_CHMOD, CMD_TOGGLE_OR },
-	{ { KUTF8("o"), KUTF8("w"), KEND }, MODE_CHMOD, CMD_TOGGLE_OW },
-	{ { KUTF8("o"), KUTF8("x"), KEND }, MODE_CHMOD, CMD_TOGGLE_OX },
 
-	/* TODO
-	 * +x
-	 * -x
-	 * o+x
-	 * u+x
-	 * ???
-	 */
+	{ { KUTF8("+"), KUTF8("r"), KEND }, MODE_CHMOD, CMD_A_PLUS_R, },
+	{ { KUTF8("-"), KUTF8("r"), KEND }, MODE_CHMOD, CMD_A_MINUS_R, },
+
+	{ { KUTF8("+"), KUTF8("w"), KEND }, MODE_CHMOD, CMD_A_PLUS_W, },
+	{ { KUTF8("-"), KUTF8("w"), KEND }, MODE_CHMOD, CMD_A_MINUS_W, },
+
+	{ { KUTF8("+"), KUTF8("x"), KEND }, MODE_CHMOD, CMD_A_PLUS_X, },
+	{ { KUTF8("-"), KUTF8("x"), KEND }, MODE_CHMOD, CMD_A_MINUS_X, },
+
+	{ { KUTF8("u"), KUTF8("+"), KUTF8("r"), KEND }, MODE_CHMOD, CMD_U_PLUS_R, },
+	{ { KUTF8("u"), KUTF8("-"), KUTF8("r"), KEND }, MODE_CHMOD, CMD_U_MINUS_R, },
+
+	{ { KUTF8("u"), KUTF8("+"), KUTF8("w"), KEND }, MODE_CHMOD, CMD_U_PLUS_W, },
+	{ { KUTF8("u"), KUTF8("-"), KUTF8("w"), KEND }, MODE_CHMOD, CMD_U_MINUS_W, },
+
+	{ { KUTF8("u"), KUTF8("+"), KUTF8("x"), KEND }, MODE_CHMOD, CMD_U_PLUS_X, },
+	{ { KUTF8("u"), KUTF8("-"), KUTF8("x"), KEND }, MODE_CHMOD, CMD_U_MINUS_X, },
+
+	{ { KUTF8("u"), KUTF8("+"), KUTF8("s"), KEND }, MODE_CHMOD, CMD_U_PLUS_IOX, },
+	{ { KUTF8("u"), KUTF8("-"), KUTF8("s"), KEND }, MODE_CHMOD, CMD_U_MINUS_IOX, },
+
+	{ { KUTF8("g"), KUTF8("+"), KUTF8("r"), KEND }, MODE_CHMOD, CMD_G_PLUS_R, },
+	{ { KUTF8("g"), KUTF8("-"), KUTF8("r"), KEND }, MODE_CHMOD, CMD_G_MINUS_R, },
+
+	{ { KUTF8("g"), KUTF8("+"), KUTF8("w"), KEND }, MODE_CHMOD, CMD_G_PLUS_W, },
+	{ { KUTF8("g"), KUTF8("-"), KUTF8("w"), KEND }, MODE_CHMOD, CMD_G_MINUS_W, },
+
+	{ { KUTF8("g"), KUTF8("+"), KUTF8("x"), KEND }, MODE_CHMOD, CMD_G_PLUS_X, },
+	{ { KUTF8("g"), KUTF8("-"), KUTF8("x"), KEND }, MODE_CHMOD, CMD_G_MINUS_X, },
+
+	{ { KUTF8("g"), KUTF8("+"), KUTF8("s"), KEND }, MODE_CHMOD, CMD_G_PLUS_IOX, },
+	{ { KUTF8("g"), KUTF8("-"), KUTF8("s"), KEND }, MODE_CHMOD, CMD_G_MINUS_IOX, },
+
+	{ { KUTF8("o"), KUTF8("+"), KUTF8("r"), KEND }, MODE_CHMOD, CMD_O_PLUS_R, },
+	{ { KUTF8("o"), KUTF8("-"), KUTF8("r"), KEND }, MODE_CHMOD, CMD_O_MINUS_R, },
+
+	{ { KUTF8("o"), KUTF8("+"), KUTF8("w"), KEND }, MODE_CHMOD, CMD_O_PLUS_W, },
+	{ { KUTF8("o"), KUTF8("-"), KUTF8("w"), KEND }, MODE_CHMOD, CMD_O_MINUS_W, },
+
+	{ { KUTF8("o"), KUTF8("+"), KUTF8("x"), KEND }, MODE_CHMOD, CMD_O_PLUS_X, },
+	{ { KUTF8("o"), KUTF8("-"), KUTF8("x"), KEND }, MODE_CHMOD, CMD_O_MINUS_X, },
+
+	{ { KUTF8("+"), KUTF8("t"), KEND }, MODE_CHMOD, CMD_O_PLUS_SB, },
+	{ { KUTF8("-"), KUTF8("t"), KEND }, MODE_CHMOD, CMD_O_MINUS_SB, },
 
 	/* MODE WAIT */
 	{ { KUTF8("q"), KUTF8("q"), KEND }, MODE_WAIT, CMD_TASK_QUIT },
@@ -391,18 +449,50 @@ static const char* const cmd_help[] = {
 	[CMD_CHOWN] = "Change owner of file.",
 	[CMD_CHGRP] = "Change group of file.",
 
-	[CMD_TOGGLE_UIOX] = "Toggle set user ID on execution.",
-	[CMD_TOGGLE_GIOX] = "Toggle set group ID on execution.",
-	[CMD_TOGGLE_SB] = "Toggle sticky bit.",
-	[CMD_TOGGLE_UR] = "Toggle user read.",
-	[CMD_TOGGLE_UW] = "Toggle user write.",
-	[CMD_TOGGLE_UX] = "Toggle user execute.",
-	[CMD_TOGGLE_GR] = "Toggle group read.",
-	[CMD_TOGGLE_GW] = "Toggle group write.",
-	[CMD_TOGGLE_GX] = "Toggle group execute.",
-	[CMD_TOGGLE_OR] = "Toggle other read.",
-	[CMD_TOGGLE_OW] = "Toggle other write.",
-	[CMD_TOGGLE_OX] = "Toggle other execute.",
+	[CMD_A_PLUS_R] = "", // TODO
+	[CMD_A_MINUS_R] = "",
+
+	[CMD_A_PLUS_W] = "",
+	[CMD_A_MINUS_W] = "",
+
+	[CMD_A_PLUS_X] = "",
+	[CMD_A_MINUS_X] = "",
+
+	[CMD_U_PLUS_R] = "",
+	[CMD_U_MINUS_R] = "",
+
+	[CMD_U_PLUS_W] = "",
+	[CMD_U_MINUS_W] = "",
+
+	[CMD_U_PLUS_X] = "",
+	[CMD_U_MINUS_X] = "",
+
+	[CMD_U_PLUS_IOX] = "",
+	[CMD_U_MINUS_IOX] = "",
+
+	[CMD_G_PLUS_R] = "",
+	[CMD_G_MINUS_R] = "",
+
+	[CMD_G_PLUS_W] = "",
+	[CMD_G_MINUS_W] = "",
+
+	[CMD_G_PLUS_X] = "",
+	[CMD_G_MINUS_X] = "",
+
+	[CMD_G_PLUS_IOX] = "",
+	[CMD_G_MINUS_IOX] = "",
+
+	[CMD_O_PLUS_R] = "",
+	[CMD_O_MINUS_R] = "",
+
+	[CMD_O_PLUS_W] = "",
+	[CMD_O_MINUS_W] = "",
+
+	[CMD_O_PLUS_X] = "",
+	[CMD_O_MINUS_X] = "",
+
+	[CMD_O_PLUS_SB] = "",
+	[CMD_O_MINUS_SB] = "",
 
 	[CMD_TASK_QUIT] = "Abort task.",
 	[CMD_TASK_PAUSE] = "Pause task.",
@@ -421,7 +511,7 @@ static const char* const mode_strings[] = {
 };
 
 static const char* const copyright_notice[] = {
-	"Hund  Copyright (C) 2017  Michał Czarnecki",
+	"Hund  Copyright (C) 2017-2018  Michał Czarnecki",
 	"Hund comes with ABSOLUTELY NO WARRANTY.",
 	"This is free software, and you are welcome to",
 	"redistribute it under terms of GNU General Public License.",
@@ -479,6 +569,7 @@ struct ui {
 	// [0] = old value
 	// [1] = new/edited value
 	mode_t perm[2]; // permissions of chmodded file
+	mode_t plus, minus;
 	uid_t o[2];
 	gid_t g[2];
 	char perms[10];

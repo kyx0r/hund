@@ -476,7 +476,12 @@ static void _bottombar(struct ui* const i) {
 	}
 	else if (i->m == MODE_CHMOD) {
 		append(&i->B, "-- CHMOD --", 11);
-		fill(&i->B, ' ', i->scrw-11);
+		char p[4+1+1+4+1+1+4+1+1+4+1];
+		fill(&i->B, ' ', i->scrw-(sizeof(p)-1)-11);
+		snprintf(p, sizeof(p), "%04o +%04o -%04o =%04o",
+				i->perm[0] & 07777, i->plus,
+				i->minus, i->perm[1] & 07777);
+		append(&i->B, p, sizeof(p));
 	}
 }
 
@@ -507,6 +512,9 @@ void ui_draw(struct ui* const i) {
 		_bottombar(i);
 	}
 	else if (i->m == MODE_CHMOD) {
+		i->perm[1] = i->perm[0];
+		i->perm[1] |= i->plus;
+		i->perm[1] &= ~i->minus;
 		stringify_pug(i->perm[1], i->o[1], i->g[1],
 				i->perms, i->user, i->group);
 		_pathbars(i);
@@ -556,6 +564,7 @@ void chmod_close(struct ui* const i) {
 	i->m = MODE_MANAGER;
 	free(i->path);
 	i->path = NULL;
+	i->plus = i->minus = 0;
 	memset(i->perm, 0, sizeof(i->perm));
 	memset(i->o, 0, sizeof(i->o));
 	memset(i->g, 0, sizeof(i->g));

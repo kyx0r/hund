@@ -35,17 +35,11 @@
  * GENERAL TODO
  * 1. Likes to segfault while doing anything on root's/special files.
  * 2. Messages may be blocked by other messages
- * 8. Configuration of copy/move/remove operation
- *    - copy raw links
- *    - dereference links
  * 14. IDEA: Detecting file formats -> display name of a program that
  *     would open highlighted file
  * 15. IDEA: if finding, offer selecting files
  * 16. Dir scanning via task?
- * 17. Recursive chmod
  * 18. ln -> create link to highlighted file in the other panel
- * 20. estimating volume should also gather number of symlinks, size etc,
- *     so that it asks about links only if dir contains links
  */
 
 static char* get_editor(void) {
@@ -189,79 +183,13 @@ inline static bool _solve_name_conflicts(struct ui* const i,
 	return false;
 }
 
-/* Return value: false = abort, true = go on */
-static bool _choose_conflict_policy(struct ui* const i,
-		struct task* const t) {
-	char question[64];
-	snprintf(question, sizeof(question),
-			"There are %d conflicts",
-			t->conflicts);
-	static const struct select_option o[] = {
-		{ KUTF8("s"), "skip" },
-		{ KUTF8("o"), "overwrite" },
-		{ KUTF8("a"), "abort" }
-	};
-	switch (ui_select(i, question, o, 3)) {
-	case 0:
-		t->tf |= TF_SKIP_CONFLICTS;
-		break;
-	case 1:
-		t->tf |= TF_OVERWRITE_CONFLICTS;
-		break;
-	case 2:
-		return false;
-	default:
-		break;
-	}
-	return true;
-}
-
-static bool _choose_symlink_policy(struct ui* const i,
-		struct task* const t) {
-	char question[80];
-	snprintf(question, sizeof(question),
-			"There are %d symlinks",
-			t->symlinks);
-	static const struct select_option o[] = {
-		{ KUTF8("r"), "raw" },
-		{ KUTF8("c"), "recalculate" },
-		{ KUTF8("d"), "dereference" },
-		{ KUTF8("s"), "skip" },
-		{ KUTF8("a"), "abort" }
-	};
-	switch (ui_select(i, question, o, 5)) {
-	case 0:
-		t->tf |= TF_RAW_LINKS;
-		break;
-	case 2:
-		t->tf |= TF_DEREF_LINKS;
-		break;
-	case 3:
-		t->tf |= TF_SKIP_LINKS;
-		break;
-	case 4:
-		return false;
-	case 1:
-	default:
-		break;
-	}
-	return true;
-}
-
-static void _confirm_removal(struct ui* const i,
-		struct task* const t) {
+inline static bool _recursive_chmod(struct ui* const i) {
+	static const char* const question = "Apply recursively?";
 	static const struct select_option o[] = {
 		{ KUTF8("n"), "no" },
-		{ KUTF8("y"), "yes" }
+		{ KUTF8("y"), "yes" },
 	};
-	char question[80];
-	snprintf(question, sizeof(question),
-			"Remove %u files?", t->files_total);
-	switch (ui_select(i, question, o, 2)) {
-	case 1: t->ts = TS_RUNNING; break;
-	default:
-	case 0: t->ts = TS_FINISHED; break;
-	}
+	return ui_select(i, question, o, 2);
 }
 
 static void prepare_task(struct ui* const i, struct task* const t,
@@ -274,15 +202,27 @@ static void prepare_task(struct ui* const i, struct task* const t,
 	struct string_list selected = { NULL, 0 };
 	struct string_list renamed = { NULL, 0 };
 	file_view_selected_to_list(i->pv, &selected);
-	if ((tt == TASK_MOVE || tt == TASK_COPY)
-			&& conflicts_with_existing(i->sv, &selected)) {
+	if ((tt & (TASK_MOVE | TASK_COPY))
+	   && conflicts_with_existing(i->sv, &selected)) {
 		if (!_solve_name_conflicts(i, &selected, &renamed)) return;
 	}
 	else {
 		renamed.len = selected.len;
 		renamed.str = calloc(renamed.len, sizeof(char*));
 	}
-	task_new(t, tt, i->pv->wd, i->sv->wd, &selected, &renamed);
+	enum task_flags tf = TF_NONE;
+	// TODO ask for recursion only for directories
+	if (tt == TASK_CHMOD && _recursive_chmod(i)) {
+		tf |= TF_RECURSIVE_CHMOD;
+	}
+	task_new(t, tt, tf, i->pv->wd, i->sv->wd, &selected, &renamed);
+	if (tt == TASK_CHMOD) {
+		t->chp = i->plus;
+		t->chm = i->minus;
+		t->cho = ((i->o[0] == i->o[1]) ? (uid_t)-1 : i->o[1]);
+		t->chg = ((i->g[0] == i->g[1]) ? (gid_t)-1 : i->g[1]);
+		chmod_close(i);
+	}
 }
 
 static void process_input(struct ui* const i, struct task* const t) {
@@ -321,19 +261,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		chmod_close(i);
 		break;
 	case CMD_CHANGE:
-		// TODO multiple selection
-		// TODO recursive ("Apply changes recursively?")
-		if (chmod(i->path, i->perm[1])) {
-			failed(i, "chmod", errno, NULL);
-		}
-		if (chown(i->path, i->o[1], i->g[1])) {
-			failed(i, "chmod", errno, NULL);
-		}
-		if ((err = file_view_scan_dir(i->pv))) {
-			failed(i, "directory scan", err, NULL);
-		}
-		file_view_sort(i->pv);
-		chmod_close(i);
+		prepare_task(i, t, TASK_CHMOD);
 		break;
 	case CMD_CHOWN:
 		/* TODO in $VISUAL */
@@ -365,27 +293,68 @@ static void process_input(struct ui* const i, struct task* const t) {
 		}
 		free(name);
 		break;
-	case CMD_TOGGLE_UIOX: i->perm[1] ^= S_ISUID; break;
-	case CMD_TOGGLE_GIOX: i->perm[1] ^= S_ISGID; break;
-	case CMD_TOGGLE_SB: i->perm[1] ^= S_ISVTX; break;
-	case CMD_TOGGLE_UR: i->perm[1] ^= S_IRUSR; break;
-	case CMD_TOGGLE_UW: i->perm[1] ^= S_IWUSR; break;
-	case CMD_TOGGLE_UX: i->perm[1] ^= S_IXUSR; break;
-	case CMD_TOGGLE_GR: i->perm[1] ^= S_IRGRP; break;
-	case CMD_TOGGLE_GW: i->perm[1] ^= S_IWGRP; break;
-	case CMD_TOGGLE_GX: i->perm[1] ^= S_IXGRP; break;
-	case CMD_TOGGLE_OR: i->perm[1] ^= S_IROTH; break;
-	case CMD_TOGGLE_OW: i->perm[1] ^= S_IWOTH; break;
-	case CMD_TOGGLE_OX: i->perm[1] ^= S_IXOTH; break;
+
+	#define PLUS(m) i->plus |= (m); i->minus &= ~(m);
+	#define MINUS(m) i->minus |= (m); i->plus &= ~(m);
+	// TODO zeroing plus/minus mask
+	// #define ZERO(m) i->plus &= ~(m); i->minus &= ~(m);
+	// TODO shorten
+
+	case CMD_A_PLUS_R: PLUS(S_IRUSR | S_IRGRP | S_IROTH); break;
+	case CMD_A_MINUS_R: MINUS(S_IRUSR | S_IRGRP | S_IROTH); break;
+
+	case CMD_A_PLUS_W: PLUS(S_IWUSR | S_IWGRP | S_IWOTH); break;
+	case CMD_A_MINUS_W: MINUS(S_IWUSR | S_IWGRP | S_IWOTH); break;
+
+	case CMD_A_PLUS_X: PLUS(S_IXUSR | S_IXGRP | S_IXOTH); break;
+	case CMD_A_MINUS_X: MINUS(S_IXUSR | S_IXGRP | S_IXOTH); break;
+
+	case CMD_U_PLUS_R: PLUS(S_IRUSR); break;
+	case CMD_U_MINUS_R: MINUS(S_IRUSR); break;
+
+	case CMD_U_PLUS_W: PLUS(S_IWUSR); break;
+	case CMD_U_MINUS_W: MINUS(S_IWUSR) break;
+
+	case CMD_U_PLUS_X: PLUS(S_IXUSR); break;
+	case CMD_U_MINUS_X: MINUS(S_IXUSR); break;
+
+	case CMD_U_PLUS_IOX: PLUS(S_ISUID); break;
+	case CMD_U_MINUS_IOX: MINUS(S_ISUID); break;
+
+	case CMD_G_PLUS_R: PLUS(S_IRGRP); break;
+	case CMD_G_MINUS_R: MINUS(S_IRGRP); break;
+
+	case CMD_G_PLUS_W: PLUS(S_IWGRP); break;
+	case CMD_G_MINUS_W: MINUS(S_IWGRP); break;
+
+	case CMD_G_PLUS_X: PLUS(S_IXGRP); break;
+	case CMD_G_MINUS_X: MINUS(S_IXGRP); break;
+
+	case CMD_G_PLUS_IOX: PLUS(S_ISGID); break;
+	case CMD_G_MINUS_IOX: MINUS(S_ISGID); break;
+
+	case CMD_O_PLUS_R: PLUS(S_IROTH); break;
+	case CMD_O_MINUS_R: MINUS(S_IROTH); break;
+
+	case CMD_O_PLUS_W: PLUS(S_IWOTH); break;
+	case CMD_O_MINUS_W: MINUS(S_IWOTH); break;
+
+	case CMD_O_PLUS_X: PLUS(S_IXOTH); break;
+	case CMD_O_MINUS_X: MINUS(S_IXOTH); break;
+
+	case CMD_O_PLUS_SB: PLUS(S_ISVTX); break;
+	case CMD_O_MINUS_SB: MINUS(S_ISVTX); break;
+	// TODO undef
+
 	/* WAIT */
 	case CMD_TASK_QUIT:
 		//t->done = true; // TODO
 		break;
 	case CMD_TASK_PAUSE:
-		//t->paused = true;
+		t->ts = TS_PAUSED;
 		break;
 	case CMD_TASK_RESUME:
-		//t->paused = false;
+		t->ts = TS_RUNNING;
 		break;
 	/* MANAGER */
 	case CMD_QUIT:
@@ -458,7 +427,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		path = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
 		cdp = calloc(PATH_MAX+1, sizeof(char));
 		if ((prompt(i, cdp, cdp, PATH_MAX)
-		   || (err = ENAMETOOLONG, enter_dir(path, cdp))
+		   || (err = enter_dir(path, cdp))
 		   || (err = ENOENT, access(path, F_OK))
 		   || (stat(path, &s) ? (err = errno) : 0)
 		   || (err = ENOTDIR, !S_ISDIR(s.st_mode)))
@@ -499,7 +468,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		file_view_scan_dir(i->pv);
 		file_view_sort(i->pv);
 		break;
-	case CMD_RENAME:
+	case CMD_RENAME: // TODO inline
 		if (!i->pv->num_selected) {
 			hfr(i->pv)->selected = true;
 			i->pv->num_selected += 1;
@@ -651,20 +620,104 @@ static void process_input(struct ui* const i, struct task* const t) {
 static void task_progress(struct ui* const i,
 		struct task* const t,
 		const char* const S) {
-	char sdone[SIZE_BUF_SIZE];
-	char stota[SIZE_BUF_SIZE];
-	pretty_size(t->size_done, sdone);
-	pretty_size(t->size_total, stota);
 	i->mt = MSG_INFO;
-	snprintf(i->msg, MSG_BUFFER_SIZE,
-		"%s %s: %d/%df, %d/%dd, %s/%s",
-		S, task_strings[t->t][ING],
-		t->files_done, t->files_total,
-		t->dirs_done, t->dirs_total,
-		sdone, stota);
+	int n = snprintf(i->msg, MSG_BUFFER_SIZE,
+			"%s %s: %d/%df, %d/%dd",
+			S, task_strings[t->t][ING],
+			t->files_done, t->files_total,
+			t->dirs_done, t->dirs_total);
+	if (t->t & (TASK_REMOVE | TASK_MOVE | TASK_COPY)) {
+		char sdone[SIZE_BUF_SIZE];
+		char stota[SIZE_BUF_SIZE];
+		pretty_size(t->size_done, sdone);
+		pretty_size(t->size_total, stota);
+		snprintf(i->msg+n, MSG_BUFFER_SIZE-n,
+			", %s/%s", sdone, stota);
+	}
 }
 
+/* Return value: false = abort, true = go on */
+inline static bool _conflict_policy(struct ui* const i,
+		struct task* const t) {
+	char question[64];
+	snprintf(question, sizeof(question),
+			"There are %d conflicts",
+			t->conflicts);
+	static const struct select_option o[] = {
+		{ KUTF8("s"), "skip" },
+		{ KUTF8("o"), "overwrite" },
+		{ KUTF8("a"), "abort" }
+	};
+	switch (ui_select(i, question, o, 3)) {
+	case 0:
+		t->tf |= TF_SKIP_CONFLICTS;
+		break;
+	case 1:
+		t->tf |= TF_OVERWRITE_CONFLICTS;
+		break;
+	case 2:
+		return false;
+	default:
+		break;
+	}
+	return true;
+}
+
+inline static bool _symlink_policy(struct ui* const i,
+		struct task* const t) {
+	char question[64];
+	snprintf(question, sizeof(question),
+			"There are %d symlinks", t->symlinks);
+	static const struct select_option o[] = {
+		{ KUTF8("r"), "raw" },
+		{ KUTF8("c"), "recalculate" },
+		{ KUTF8("d"), "dereference" },
+		{ KUTF8("s"), "skip" },
+		{ KUTF8("a"), "abort" }
+	};
+	switch (ui_select(i, question, o, 5)) {
+	case 0:
+		t->tf |= TF_RAW_LINKS;
+		break;
+	case 2:
+		t->tf |= TF_DEREF_LINKS;
+		break;
+	case 3:
+		t->tf |= TF_SKIP_LINKS;
+		break;
+	case 4:
+		return false;
+	case 1:
+	default:
+		break;
+	}
+	return true;
+}
+
+inline static bool _confirm_removal(struct ui* const i,
+		struct task* const t) {
+	static const struct select_option o[] = {
+		{ KUTF8("n"), "no" },
+		{ KUTF8("y"), "yes" }
+	};
+	char question[80];
+	snprintf(question, sizeof(question),
+			"Remove %u files?", t->files_total);
+	switch (ui_select(i, question, o, 2)) {
+	case 1: return true;
+	default:
+	case 0: return false;
+	}
+}
 static void task_execute(struct ui* const i, struct task* const t) {
+	// TODO error handling is chaotic
+	task_action ta;
+	int top;
+	char msg[128]; // TODO
+	static const struct select_option o[] = {
+		{ KUTF8("n"), "no" },
+		{ KUTF8("y"), "yes" },
+	};
 	switch (t->ts) {
 	case TS_CLEAN:
 		break;
@@ -675,55 +728,44 @@ static void task_execute(struct ui* const i, struct task* const t) {
 		if (t->err) t->ts = TS_FAILED;
 		break;
 	case TS_CONFIRM:
-		i->timeout = -1;
-		if (t->t == TASK_REMOVE) {
-			_confirm_removal(i, t);
+		t->ts = TS_RUNNING;
+		if (t->t == TASK_REMOVE && !_confirm_removal(i, t)) {
+			t->ts = TS_FINISHED;
 		}
 		else if (t->t & (TASK_COPY | TASK_MOVE)) {
-			if (t->conflicts) {
-				if (!_choose_conflict_policy(i, t)) {
-					t->ts = TS_FINISHED;
-					i->timeout = 500;
-					break;
-				}
+			if ((t->conflicts && !_conflict_policy(i, t))
+			   || (t->symlinks && !_symlink_policy(i, t))) {
+				t->ts = TS_FINISHED;
 			}
-			if (t->symlinks) {
-				if (!_choose_symlink_policy(i, t)) {
-					t->ts = TS_FINISHED;
-					i->timeout = 500;
-					break;
-				}
-			}
-			t->ts = TS_RUNNING;
 		}
-		i->timeout = 500;
 		break;
 	case TS_RUNNING:
 		i->timeout = 500;
-		t->err = task_do(t, 1024*10,
-				task_action_copyremove, TS_FINISHED);
-		if (t->err) t->ts = TS_FAILED;
+		if (t->t & (TASK_REMOVE | TASK_COPY | TASK_MOVE)) {
+			ta = task_action_copyremove;
+		}
+		else if (t->t == TASK_CHMOD) {
+			ta = task_action_chmod;
+		}
+		if ((t->err = task_do(t, 1024*10, ta, TS_FINISHED))) {
+			t->ts = TS_FAILED;
+		}
 		task_progress(i, t, ">>");
 		break;
 	case TS_PAUSED:
 		i->timeout = -1;
 		task_progress(i, t, "||");
 		break;
-	case TS_FAILED:
-		i->timeout = -1;
-		// TODO
-		/*i->mt = MSG_ERROR;
-		top = snprintf(i->msg, MSG_BUFFER_SIZE,
+	case TS_FAILED: // TODO
+		top = snprintf(msg, sizeof(msg),
 				"%s: (%d) %s at",
-				task_strings[t->t][NOUN], t->err,
-				strerror(t->err));
-		snprintf(i->msg+top, MSG_BUFFER_SIZE-top, "%.*s",
-				(int)utf8_w2nb(t->tw.cpath, MSG_BUFFER_SIZE-top), t->tw.cpath);
-		sel = ui_select(i, "Try again?", o, 2);
-		i->timeout = 500;
-		t->ts = (!sel ? TS_FINISHED : TS_RUNNING);*/
-		i->timeout = 500;
-		t->ts = TS_FINISHED;
+				task_strings[t->t][NOUN],
+				t->err, strerror(t->err));
+		snprintf(msg+top, sizeof(msg)-top, "%.*s",
+				(int)utf8_w2nb(t->tw.cpath,
+					sizeof(msg)-top), t->tw.cpath);
+		t->ts = (ui_select(i, msg, o, 2)
+				? TS_RUNNING : TS_FINISHED);
 		break;
 	case TS_FINISHED:
 		i->timeout = -1;
@@ -792,7 +834,6 @@ int main(int argc, char* argv[]) {
 	int o, opti = 0;
 	int err;
 	while ((o = getopt_long(argc, argv, sopt, lopt, &opti)) != -1) {
-		if (o == -1) break;
 		switch (o) {
 		case 'c':
 			if (chdir(optarg)) {
