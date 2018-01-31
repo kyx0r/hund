@@ -563,6 +563,8 @@ void chmod_close(struct ui* const i) {
 
 int ui_select(struct ui* const i, const char* const q,
 		const struct select_option* o, const size_t oc) {
+	const int oldtimeout = i->timeout;
+	i->timeout = -1;
 	int T = 0;
 	char P[500]; // TODO
 	i->prch = ' ';
@@ -591,6 +593,7 @@ int ui_select(struct ui* const i, const char* const q,
 		for (size_t j = 0; j < oc; ++j) {
 			if (!memcmp(&in, &o[j].i, sizeof(struct input))) {
 				i->prompt = NULL;
+				i->timeout = oldtimeout;
 				return j;
 			}
 		}
