@@ -34,6 +34,7 @@ enum task_type {
 	TASK_REMOVE = 1<<0,
 	TASK_COPY = 1<<1,
 	TASK_MOVE = 1<<2,
+	TASK_CHMOD = 1<<3,
 };
 
 #define NOUN 0
@@ -44,6 +45,7 @@ static const char* const task_strings[][3] = {
 	[TASK_REMOVE] = { "remove", "removing", "removed" },
 	[TASK_COPY] = { "copy", "copying", "copied" },
 	[TASK_MOVE] = { "move", "moving", "moved" },
+	[TASK_CHMOD] = { "chmod", "chmod", "chmodded" },
 };
 
 /*
@@ -88,6 +90,7 @@ enum task_flags {
 	TF_SKIP_CONFLICTS = 1<<2,
 	TF_DEREF_LINKS = 1<<3, // If copying/moving links, copy what they point to
 	TF_SKIP_LINKS = 1<<4,
+	TF_RECURSIVE_CHMOD = 1<<5,
 };
 
 enum task_state {
@@ -100,9 +103,6 @@ enum task_state {
 	TS_FINISHED = 1<<5 // task succesfully finished; cleans up, returns to TS_CLEAN
 };
 
-/*
- * Long disk operations
- */
 struct task {
 	enum task_type t;
 	enum task_state ts;
@@ -125,16 +125,22 @@ struct task {
 	fnum_t symlinks;
 	fnum_t specials;
 	ssize_t size_total, size_done;
-	int files_total, files_done;
-	int dirs_total, dirs_done;
+	fnum_t files_total, files_done;
+	fnum_t dirs_total, dirs_done;
+
+	mode_t chp, chm;
+	uid_t cho;
+	gid_t chg;
 };
 
 void task_new(struct task* const, const enum task_type,
+		const enum task_flags,
 		char* const, char* const,
 		const struct string_list* const,
 		const struct string_list* const);
 
 typedef void (*task_action)(struct task* const, int* const);
+void task_action_chmod(struct task* const, int* const);
 void task_action_estimate(struct task* const, int* const);
 void task_action_copyremove(struct task* const, int* const);
 int task_do(struct task* const, int, task_action, const enum task_state);
