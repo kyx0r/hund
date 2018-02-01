@@ -1,4 +1,4 @@
-#!/usr/bin/sh
+#!/bin/sh
 
 # This stript downloads and parses these files:
 # http://www.unicode.org/Public/UCD/latest/ucd/EastAsianWidth.txt
@@ -31,26 +31,27 @@ echo "#define WIDECHARS_H"
 echo
 echo "// A sorted list of ranges of Unicode codepoints of double-width characters"
 echo "static const unsigned int double_width[][2] = {"
-while IFS='' read -r line || [ -n "$line" ]; do
+echo "$eaw" | while IFS='' read -r line || [ -n "$line" ]; do
 	if [ "${line:0:1}" == "#" ]; then
 		continue
 	fi
 	range=$(echo $line | cut -d ';' -f 1)
-	a=$((16#$(echo $range | cut -d '.' -f 1)))
-	b=$((16#$(echo $range | cut -d '.' -f 3)))
+	a=$(echo $range | cut -d '.' -f 1)
+	b=$(echo $range | cut -d '.' -f 3)
 	category=$(echo $line | cut -d ';' -f 2 | cut -d ' ' -f 1)
 	if [ "$category" == "F" ] || [ "$category" == "W" ]; then
-		printf "\t{0x%06x, 0x%06x},\n" $a $b
+		printf "\t{0x$a, 0x$b},\n"
 	fi
-done <<< "$eaw"
+done
 echo "};"
+echo "static const size_t double_width_len = sizeof(double_width)/sizeof(double_width[0]);"
 echo
 echo "// A sorted list of ranges of Unicode codepoints of zero-width characters"
 echo "static const unsigned int zero_width[][2] = {"
 ra=0
 rb=0
-while IFS='' read -r line || [[ -n "$line" ]]; do
-	cp=$((16#$(echo $line | cut -d ';' -f 1)))
+echo "$udb" | while IFS='' read -r line || [[ -n "$line" ]]; do
+	cp=$(printf '%d' "0x$(echo $line | cut -d ';' -f 1)")
 	name=$(echo $line | cut -d ';' -f 2)
 	category=$(echo $line | cut -d ';' -f 3)
 	if [ "${name:0:16}" == "HANGUL JUNGSEONG" ] \
@@ -62,12 +63,13 @@ while IFS='' read -r line || [[ -n "$line" ]]; do
 			rb=$cp
 			continue
 		else
-			printf "\t{0x%06x, 0x%06x},\n" $ra $rb
+			printf "\t{0x%06X, 0x%06X},\n" $ra $rb
 			ra=$cp
 			rb=$cp
 		fi
 	fi
-done <<< "$udb"
+done
 echo "};"
+echo "static const size_t zero_width_len = sizeof(zero_width)/sizeof(zero_width[0]);"
 echo
 echo "#endif"
