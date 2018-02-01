@@ -1,36 +1,37 @@
-CC = gcc #musl-gcc, clang
-LD = gcc #musl-gcc -static
-CFLAGS += --std=c99 -Wall -Wextra -pedantic -g
+CFLAGS = --std=c99 -Wall -Wextra -pedantic -Wimplicit-fallthrough=0
 LDFLAGS =
-OBJDIR = obj
-OBJ = main.o fs.o ui.o file_view.o utf8.o task.o terminal.o
-TESTOBJ := test.o fs.o ui.o file_view.o utf8.o task.o terminal.o
 EXENAME = hund
 TESTEXENAME = test/testme
 TESTSCRIPTNAME = test/test.sh
 
+.PHONY : all clean test testex
+
 all : $(EXENAME)
 
-$(EXENAME) : $(addprefix $(OBJDIR)/, $(OBJ))
-	$(LD) $(LDFLAGS) $(LIBS) $^ -o $(EXENAME)
+$(EXENAME) : src/main.o src/fs.o src/ui.o src/file_view.o \
+	src/utf8.o src/task.o src/terminal.o
+	$(CC) $(LDFLAGS) src/main.o src/fs.o src/ui.o src/file_view.o \
+	src/utf8.o src/task.o src/terminal.o -o $(EXENAME)
 
-$(OBJDIR)/%.o : src/%.c | $(OBJDIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+src/main.o : src/main.c src/include/task.h src/include/ui.h
+src/fs.o : src/fs.c src/include/fs.h
+src/ui.o : src/ui.c src/include/ui.h src/include/file_view.h \
+	src/include/utf8.h src/include/terminal.h
+src/file_view.o : src/file_view.c src/include/file_view.h src/include/fs.h
+src/task.o : src/task.c src/include/task.h src/include/fs.h src/include/utf8.h
+src/terminal.o : src/terminal.c src/include/terminal.h src/include/utf8.h
+src/utf8.o : src/utf8.c src/include/widechars.h
+test/test.o : test/test.c
 
-$(OBJDIR) :
-	mkdir $(OBJDIR)
-
-$(OBJDIR)/test.o : test/test.c | $(OBJDIR)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-test : $(addprefix $(OBJDIR)/, $(TESTOBJ))
-	$(CC) $(LIBS) -o $(TESTEXENAME) $^ && ./$(TESTEXENAME) && make $(EXENAME)
+test : test/test.o src/fs.o src/ui.o src/file_view.o \
+	src/utf8.o src/task.o src/terminal.o
+	$(CC) -o $(TESTEXENAME) test/test.o src/fs.o src/ui.o src/file_view.o \
+	src/utf8.o src/task.o src/terminal.o && ./$(TESTEXENAME) && make $(EXENAME)
 
 testex :
 	./$(TESTSCRIPTNAME)
 
-.PHONY : all clean test testex
 clean :
 	rm -r testdir &> /dev/null || true
-	rm -r $(OBJDIR) &> /dev/null || true
+	rm -r src/*.o test/*.o &> /dev/null || true
 	rm $(EXENAME) $(TESTEXENAME) &> /dev/null || true
