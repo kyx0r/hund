@@ -111,7 +111,7 @@ void task_action_estimate(struct task* const t, int* const c) {
 	*c -= 1;
 }
 
-int task_do(struct task* const t, int c, task_action ta,
+void task_do(struct task* const t, int c, task_action ta,
 		const enum task_state onend) {
 	if (t->tw.tws == AT_NOWHERE) {
 		char* path = current_source_path(t);
@@ -120,12 +120,12 @@ int task_do(struct task* const t, int c, task_action ta,
 		if (t->err) {
 			t->tw.tws = AT_NOWHERE;
 			t->ts = TS_FAILED;
-			return t->err;
+			return;
 		}
 	}
 	while (t->tw.tws != AT_EXIT && !t->err && c > 0) {
 		ta(t, &c);
-		if (t->err) return t->err; // TODO
+		if (t->err) return;
 	}
 	if (t->tw.tws == AT_EXIT) {
 		t->current_source += 1;
@@ -136,7 +136,6 @@ int task_do(struct task* const t, int c, task_action ta,
 			t->current_source = 0;
 		}
 	}
-	return 0;
 }
 
 static int _close_files(struct task* const t) {

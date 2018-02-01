@@ -37,17 +37,6 @@ enum task_type {
 	TASK_CHMOD = 1<<3,
 };
 
-#define NOUN 0
-#define ING 1
-#define PAST 2
-static const char* const task_strings[][3] = {
-	[TASK_NONE] = { NULL, NULL, NULL},
-	[TASK_REMOVE] = { "remove", "removing", "removed" },
-	[TASK_COPY] = { "copy", "copying", "copied" },
-	[TASK_MOVE] = { "move", "moving", "moved" },
-	[TASK_CHMOD] = { "chmod", "chmod", "chmodded" },
-};
-
 /*
  * If Link Transparency is true in tree_walk,
  * tree_walk_step will output AT_FILE or AT_DIR,
@@ -143,7 +132,7 @@ typedef void (*task_action)(struct task* const, int* const);
 void task_action_chmod(struct task* const, int* const);
 void task_action_estimate(struct task* const, int* const);
 void task_action_copyremove(struct task* const, int* const);
-int task_do(struct task* const, int, task_action, const enum task_state);
+void task_do(struct task* const, int, task_action, const enum task_state);
 
 void task_clean(struct task* const);
 

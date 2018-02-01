@@ -149,6 +149,14 @@ enum command {
 	CMD_O_PLUS_SB,
 	CMD_O_MINUS_SB,
 
+	CMD_U_ZERO,
+	CMD_G_ZERO,
+	CMD_O_ZERO,
+
+	CMD_U_RESET,
+	CMD_G_RESET,
+	CMD_O_RESET,
+
 	CMD_TASK_QUIT,
 	CMD_TASK_PAUSE,
 	CMD_TASK_RESUME,
@@ -374,6 +382,14 @@ static struct input2cmd default_mapping[] = {
 	{ { KUTF8("+"), KUTF8("t"), KEND }, MODE_CHMOD, CMD_O_PLUS_SB, },
 	{ { KUTF8("-"), KUTF8("t"), KEND }, MODE_CHMOD, CMD_O_MINUS_SB, },
 
+	{ { KUTF8("u"), KUTF8("0"), KEND }, MODE_CHMOD, CMD_U_ZERO, },
+	{ { KUTF8("g"), KUTF8("0"), KEND }, MODE_CHMOD, CMD_G_ZERO, },
+	{ { KUTF8("o"), KUTF8("0"), KEND }, MODE_CHMOD, CMD_O_ZERO, },
+
+	{ { KUTF8("u"), KUTF8("="), KEND }, MODE_CHMOD, CMD_U_RESET, },
+	{ { KUTF8("g"), KUTF8("="), KEND }, MODE_CHMOD, CMD_G_RESET, },
+	{ { KUTF8("o"), KUTF8("="), KEND }, MODE_CHMOD, CMD_O_RESET, },
+
 	/* MODE WAIT */
 	{ { KUTF8("q"), KUTF8("q"), KEND }, MODE_WAIT, CMD_TASK_QUIT },
 	{ { KUTF8("p"), KUTF8("p"), KEND }, MODE_WAIT, CMD_TASK_PAUSE },
@@ -493,6 +509,14 @@ static const char* const cmd_help[] = {
 
 	[CMD_O_PLUS_SB] = "",
 	[CMD_O_MINUS_SB] = "",
+
+	[CMD_U_ZERO] = "",
+	[CMD_G_ZERO] = "",
+	[CMD_O_ZERO] = "",
+
+	[CMD_U_RESET] = "",
+	[CMD_G_RESET] = "",
+	[CMD_O_RESET] = "",
 
 	[CMD_TASK_QUIT] = "Abort task.",
 	[CMD_TASK_PAUSE] = "Pause task.",
