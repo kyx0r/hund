@@ -219,7 +219,7 @@ void cut_unwanted(const char* str, char* buf, const char c, size_t n) {
 }
 
 bool cp_in(const codepoint_t r[][2], size_t Z, const codepoint_t cp) {
-	if (cp < r[0][0] && r[Z][1] < cp) return false;
+	if (cp < r[0][0] || r[Z][1] < cp) return false;
 	size_t A = 0;
 	size_t I;
 	while (A <= Z) {
