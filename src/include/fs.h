@@ -97,17 +97,6 @@ void file_list_clean(struct file_record*** const, fnum_t* const);
 int scan_dir(const char* const, struct file_record*** const,
 		fnum_t* const, fnum_t* const);
 
-typedef int (*sorting_foo)(const void*, const void*);
-int cmp_name_asc(const void*, const void*);
-int cmp_name_desc(const void*, const void*);
-int cmp_size_asc(const void*, const void*);
-int cmp_size_desc(const void*, const void*);
-int cmp_date_asc(const void*, const void*);
-int cmp_date_desc(const void*, const void*);
-
-void sort_file_list(int (*)(const void*, const void*),
-		struct file_record**, const fnum_t);
-
 int link_copy(const char* const, const char* const, const char* const);
 int link_copy_raw(const char* const, const char* const);
 

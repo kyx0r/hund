@@ -305,8 +305,69 @@ int file_view_scan_dir(struct file_view* const fv) {
 	return scan_dir(fv->wd, &fv->file_list, &fv->num_files, &fv->num_hidden);
 }
 
+static int frcmp(const struct file_view* const fv,
+		const struct file_record* const a,
+		const struct file_record* const b) {
+	// TODO
+	if (S_ISDIR(a->s.st_mode) ^ S_ISDIR(b->s.st_mode)) {
+		return (S_ISDIR(a->s.st_mode) ? -1 : 1);
+	}
+	(void)(fv);
+	return strcmp(a->file_name, b->file_name);
+}
+
+/*
+ * D = destination
+ * S = source
+ */
+inline static void merge(const struct file_view* const fv,
+		struct file_record** D, struct file_record** S,
+		const fnum_t beg, const fnum_t mid, const fnum_t end) {
+	fnum_t sa = beg;
+	fnum_t sb = mid;
+	for (fnum_t d = beg; d < end; ++d) {
+		if (sa < mid && sb < end) {
+			if (0 > frcmp(fv, S[sa], S[sb])) {
+				D[d] = S[sa];
+				sa += 1;
+			}
+			else {
+				D[d] = S[sb];
+				sb += 1;
+			}
+		}
+		else if (sa == mid) {
+			D[d] = S[sb];
+			sb += 1;
+		}
+		else if (sb == end) {
+			D[d] = S[sa];
+			sa += 1;
+		}
+	}
+}
+
+#define MIN(A,B) (((A) < (B)) ? (A) : (B))
 void file_view_sort(struct file_view* const fv) {
-	sort_file_list(fv->sorting, fv->file_list, fv->num_files);
+	struct file_record** tmp;
+	struct file_record** A = fv->file_list;
+	struct file_record** B = calloc(fv->num_files,
+			sizeof(struct file_record*));
+	bool swapped = false;
+	for (fnum_t L = 1; L < fv->num_files; L *= 2) {
+		for (fnum_t S = 0; S < fv->num_files; S += L+L) {
+			const fnum_t beg = S;
+			const fnum_t mid = MIN(S+L, fv->num_files);
+			const fnum_t end = MIN(S+L+L, fv->num_files);
+			merge(fv, B, A, beg, mid, end);
+		}
+		tmp = A;
+		A = B;
+		B = tmp;
+		swapped = !swapped;
+	}
+	fv->file_list = (swapped ? B : A);
+	free(swapped ? A : B);
 }
 
 char* file_view_path_to_selected(struct file_view* const fv) {
@@ -320,13 +381,15 @@ char* file_view_path_to_selected(struct file_view* const fv) {
 	return p;
 }
 
+#if 0
 void file_view_change_sorting(struct file_view* const fv, sorting_foo sorting) {
 	char before[NAME_MAX+1];
 	strncpy(before, fv->file_list[fv->selection]->file_name, NAME_MAX+1);
-	fv->sorting = sorting;
+	//
 	file_view_sort(fv);
 	file_highlight(fv, before);
 }
+#endif
 
 void file_view_selected_to_list(struct file_view* const fv,
 		struct string_list* const list) {

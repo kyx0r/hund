@@ -30,7 +30,6 @@ struct file_view {
 	fnum_t num_hidden;
 	fnum_t selection;
 	fnum_t num_selected;
-	sorting_foo sorting;
 	bool show_hidden;
 };
 
@@ -60,8 +59,6 @@ int file_view_scan_dir(struct file_view* const);
 void file_view_sort(struct file_view* const);
 
 char* file_view_path_to_selected(struct file_view* const);
-
-void file_view_change_sorting(struct file_view* const, sorting_foo);
 
 void file_view_selected_to_list(struct file_view* const,
 		struct string_list* const);

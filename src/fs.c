@@ -124,59 +124,6 @@ int scan_dir(const char* const wd, struct file_record*** const fl,
 	return err;
 }
 
-int cmp_name_asc(const void* p1, const void* p2) {
-	const struct file_record* const fr1 = *((struct file_record**) p1);
-	const struct file_record* const fr2 = *((struct file_record**) p2);
-	return strcmp(fr1->file_name, fr2->file_name);
-}
-
-int cmp_name_desc(const void* p1, const void* p2) {
-	const struct file_record* const fr1 = *((struct file_record**) p1);
-	const struct file_record* const fr2 = *((struct file_record**) p2);
-	return strcmp(fr2->file_name, fr1->file_name);
-}
-
-// TODO how to sort non-dirs?
-// TODO sorting by size/date seem to be random in FreeBSD
-int cmp_size_asc(const void* p1, const void* p2) {
-	const struct file_record* const fr1 = *((struct file_record**) p1);
-	const struct file_record* const fr2 = *((struct file_record**) p2);
-	const ssize_t s1 = (fr1->dir_volume != -1 ?
-			fr1->dir_volume : fr1->s.st_size);
-	const ssize_t s2 = (fr2->dir_volume != -1 ?
-			fr2->dir_volume : fr2->s.st_size);
-	return s1 > s2;
-}
-
-// TODO
-int cmp_size_desc(const void* p1, const void* p2) {
-	const struct file_record* const fr1 = *((struct file_record**) p1);
-	const struct file_record* const fr2 = *((struct file_record**) p2);
-	const ssize_t s1 = (fr1->dir_volume != -1 ?
-			fr1->dir_volume : fr1->s.st_size);
-	const ssize_t s2 = (fr2->dir_volume != -1 ?
-			fr2->dir_volume : fr2->s.st_size);
-	return s1 < s2;
-}
-
-int cmp_date_asc(const void* p1, const void* p2) {
-	const struct file_record* const fr1 = *((struct file_record**) p1);
-	const struct file_record* const fr2 = *((struct file_record**) p2);
-	return fr1->s.st_mtim.tv_sec > fr2->s.st_mtim.tv_sec;
-}
-
-int cmp_date_desc(const void* p1, const void* p2) {
-	const struct file_record* const fr1 = *((struct file_record**) p1);
-	const struct file_record* const fr2 = *((struct file_record**) p2);
-	return fr1->s.st_mtim.tv_sec < fr2->s.st_mtim.tv_sec;
-}
-
-void sort_file_list(int (*cmp)(const void*, const void*),
-		struct file_record** fl, const fnum_t nf) {
-	// TODO merge sort, because it would respect previous order
-	qsort(fl, nf, sizeof(struct file_record*), cmp);
-}
-
 /*
  * Copies link from src to dst, relative to wd
  * all paths must be absolute.

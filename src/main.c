@@ -610,27 +610,22 @@ static void process_input(struct ui* const i, struct task* const t) {
 		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_BY_NAME_ASC:
-		file_view_change_sorting(i->pv, cmp_name_asc);
 		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_BY_NAME_DESC:
-		file_view_change_sorting(i->pv, cmp_name_desc);
 		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_BY_DATE_ASC:
-		file_view_change_sorting(i->pv, cmp_date_asc);
 		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_BY_DATE_DESC:
-		file_view_change_sorting(i->pv, cmp_date_desc);
 		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_BY_SIZE_ASC:
-		file_view_change_sorting(i->pv, cmp_size_asc);
 		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_BY_SIZE_DESC:
-		file_view_change_sorting(i->pv, cmp_size_desc);
+		//file_view_change_sorting(i->pv, cmp_size_desc);
 		i->ui_needs_refresh = true;
 		break;
 	default:
@@ -642,8 +637,8 @@ static void task_progress(struct ui* const i,
 		struct task* const t,
 		const char* const S) {
 	i->mt = MSG_INFO;
-	int n = snprintf(i->msg, MSG_BUFFER_SIZE,
-			"%s: %d/%df, %d/%dd", S,
+	int n = snprintf(i->msg, MSG_BUFFER_SIZE, // TODO
+			"%s %d/%df, %d/%dd", S,
 			t->files_done, t->files_total,
 			t->dirs_done, t->dirs_total);
 	if (t->t & (TASK_REMOVE | TASK_MOVE | TASK_COPY)) {
@@ -890,7 +885,6 @@ int main(int argc, char* argv[]) {
 
 	struct file_view fvs[2];
 	memset(fvs, 0, sizeof(fvs));
-	fvs[0].sorting = fvs[1].sorting = cmp_name_asc;
 
 	struct ui i;
 	ui_init(&i, &fvs[0], &fvs[1]);
