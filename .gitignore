@@ -1,6 +1,9 @@
 .git
 tags
 obj/
+*.o
 hund
 test/testme
 test/safe/
+stderr.txt
+br
