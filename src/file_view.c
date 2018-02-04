@@ -305,29 +305,42 @@ int file_view_scan_dir(struct file_view* const fv) {
 	return scan_dir(fv->wd, &fv->file_list, &fv->num_files, &fv->num_hidden);
 }
 
-static int frcmp(const struct file_view* const fv,
+/*
+ * Return:
+ * -1: a < b
+ *  0: a == b
+ *  1: a > b
+ */
+static int frcmp(const enum compare cmp,
 		const struct file_record* const a,
 		const struct file_record* const b) {
-	// TODO
-	if (S_ISDIR(a->s.st_mode) ^ S_ISDIR(b->s.st_mode)) {
-		return (S_ISDIR(a->s.st_mode) ? -1 : 1);
+	switch (cmp) {
+	case CMP_NAME:
+		return strcmp(a->file_name, b->file_name);
+	case CMP_SIZE:
+		return (a->s.st_size - b->s.st_size < 0 ? -1 : 1);
+	case CMP_ISDIR:
+		if (S_ISDIR(a->s.st_mode) != S_ISDIR(b->s.st_mode)) {
+			return (S_ISDIR(b->s.st_mode) ? 1 : -1);
+		}
+		break;
+	default: break;
 	}
-	(void)(fv);
-	return strcmp(a->file_name, b->file_name);
+	return 0;
 }
 
 /*
  * D = destination
  * S = source
  */
-inline static void merge(const struct file_view* const fv,
+inline static void merge(const enum compare cmp, const int scending,
 		struct file_record** D, struct file_record** S,
 		const fnum_t beg, const fnum_t mid, const fnum_t end) {
 	fnum_t sa = beg;
 	fnum_t sb = mid;
 	for (fnum_t d = beg; d < end; ++d) {
 		if (sa < mid && sb < end) {
-			if (0 > frcmp(fv, S[sa], S[sb])) {
+			if (0 >= scending * frcmp(cmp, S[sa], S[sb])) {
 				D[d] = S[sa];
 				sa += 1;
 			}
@@ -348,26 +361,30 @@ inline static void merge(const struct file_view* const fv,
 }
 
 #define MIN(A,B) (((A) < (B)) ? (A) : (B))
-void file_view_sort(struct file_view* const fv) {
+void merge_sort(struct file_view* const fv, const enum compare cmp) {
 	struct file_record** tmp;
 	struct file_record** A = fv->file_list;
 	struct file_record** B = calloc(fv->num_files,
 			sizeof(struct file_record*));
-	bool swapped = false;
 	for (fnum_t L = 1; L < fv->num_files; L *= 2) {
 		for (fnum_t S = 0; S < fv->num_files; S += L+L) {
 			const fnum_t beg = S;
 			const fnum_t mid = MIN(S+L, fv->num_files);
 			const fnum_t end = MIN(S+L+L, fv->num_files);
-			merge(fv, B, A, beg, mid, end);
+			merge(cmp, fv->scending, B, A, beg, mid, end);
 		}
 		tmp = A;
 		A = B;
 		B = tmp;
-		swapped = !swapped;
 	}
-	fv->file_list = (swapped ? B : A);
-	free(swapped ? A : B);
+	fv->file_list = A;
+	free(B);
+}
+
+void file_view_sort(struct file_view* const fv) {
+	for (int i = 0; i < CMP_NUM; ++i) {
+		if (fv->order[i] != CMP_NONE) merge_sort(fv, fv->order[i]);
+	}
 }
 
 char* file_view_path_to_selected(struct file_view* const fv) {
@@ -382,10 +399,9 @@ char* file_view_path_to_selected(struct file_view* const fv) {
 }
 
 #if 0
-void file_view_change_sorting(struct file_view* const fv, sorting_foo sorting) {
+void file_view_change_sorting(struct file_view* const fv) {
 	char before[NAME_MAX+1];
 	strncpy(before, fv->file_list[fv->selection]->file_name, NAME_MAX+1);
-	//
 	file_view_sort(fv);
 	file_highlight(fv, before);
 }

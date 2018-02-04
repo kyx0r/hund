@@ -23,6 +23,16 @@
 #include "fs.h"
 #include "utf8.h"
 
+enum compare {
+	CMP_NONE = 0,
+	CMP_NAME,
+	CMP_SIZE,
+	//CMP_DATE,
+	CMP_ISDIR,
+	//CMP_ISEXE,
+	CMP_NUM
+};
+
 struct file_view {
 	char wd[PATH_MAX+1];
 	struct file_record** file_list;
@@ -30,6 +40,8 @@ struct file_view {
 	fnum_t num_hidden;
 	fnum_t selection;
 	fnum_t num_selected;
+	int scending;
+	enum compare order[CMP_NUM+1];
 	bool show_hidden;
 };
 
@@ -59,6 +71,8 @@ int file_view_scan_dir(struct file_view* const);
 void file_view_sort(struct file_view* const);
 
 char* file_view_path_to_selected(struct file_view* const);
+
+//void file_view_change_sorting(struct file_view* const);
 
 void file_view_selected_to_list(struct file_view* const,
 		struct string_list* const);

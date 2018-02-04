@@ -610,22 +610,33 @@ static void process_input(struct ui* const i, struct task* const t) {
 		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_BY_NAME_ASC:
+		//i->pv->scending = 1;
+		//file_view_change_sorting(i->pv);
 		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_BY_NAME_DESC:
+		//i->pv->scending = -1;
+		//file_view_change_sorting(i->pv);
 		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_BY_DATE_ASC:
+		//i->pv->scending = 1;
+		//file_view_change_sorting(i->pv);
 		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_BY_DATE_DESC:
+		//i->pv->scending = -1;
+		//file_view_change_sorting(i->pv);
 		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_BY_SIZE_ASC:
+		//i->pv->scending = 1;
+		//file_view_change_sorting(i->pv);
 		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_BY_SIZE_DESC:
-		//file_view_change_sorting(i->pv, cmp_size_desc);
+		//i->pv->scending = -1;
+		//file_view_change_sorting(i->pv);
 		i->ui_needs_refresh = true;
 		break;
 	default:
@@ -810,9 +821,9 @@ inline static int _init_wd(struct file_view fvs[2], char* const init_wd[2]) {
 		const char* const d = (init_wd[v] ? init_wd[v] : "");
 		if (!getcwd(fvs[v].wd, PATH_MAX)) {
 			memcpy(fvs[v].wd, "/", 2);
-			if ((e = enter_dir(fvs[v].wd, d))) {
-				return e;
-			}
+		}
+		else if ((e = enter_dir(fvs[v].wd, d))) {
+			return e;
 		}
 		const size_t s = strnlen(fvs[v].wd, PATH_MAX)-1;
 		if (s && fvs[v].wd[s] == '/') {
@@ -885,6 +896,13 @@ int main(int argc, char* argv[]) {
 
 	struct file_view fvs[2];
 	memset(fvs, 0, sizeof(fvs));
+	fvs[0].scending = 1;
+	fvs[0].order[1] = CMP_ISDIR;
+	fvs[0].order[0] = CMP_NAME;
+
+	fvs[1].scending = 1;
+	fvs[1].order[1] = CMP_ISDIR;
+	fvs[1].order[0] = CMP_NAME;
 
 	struct ui i;
 	ui_init(&i, &fvs[0], &fvs[1]);
