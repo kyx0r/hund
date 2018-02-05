@@ -318,10 +318,19 @@ static int frcmp(const enum compare cmp,
 	case CMP_NAME:
 		return strcmp(a->file_name, b->file_name);
 	case CMP_SIZE:
-		return (a->s.st_size - b->s.st_size < 0 ? -1 : 1);
+		return (a->s.st_size < b->s.st_size ? -1 : 1);
+	case CMP_DATE:
+		return (a->s.st_mtim.tv_sec < b->s.st_mtim.tv_sec ? -1 : 1);
 	case CMP_ISDIR:
 		if (S_ISDIR(a->s.st_mode) != S_ISDIR(b->s.st_mode)) {
 			return (S_ISDIR(b->s.st_mode) ? 1 : -1);
+		}
+		break;
+	case CMP_PERM:
+		return ((a->s.st_mode & 07777) - (b->s.st_mode & 07777));
+	case CMP_ISEXE:
+		if (EXECUTABLE(a->s.st_mode) != EXECUTABLE(b->s.st_mode)) {
+			return (EXECUTABLE(b->s.st_mode) ? 1 : -1);
 		}
 		break;
 	default: break;
@@ -382,7 +391,7 @@ void merge_sort(struct file_view* const fv, const enum compare cmp) {
 }
 
 void file_view_sort(struct file_view* const fv) {
-	for (int i = 0; i < CMP_NUM; ++i) {
+	for (int i = 0; i < FV_ORDER_SIZE; ++i) {
 		if (fv->order[i] != CMP_NONE) merge_sort(fv, fv->order[i]);
 	}
 }
@@ -398,14 +407,12 @@ char* file_view_path_to_selected(struct file_view* const fv) {
 	return p;
 }
 
-#if 0
-void file_view_change_sorting(struct file_view* const fv) {
+void file_view_sorting_changed(struct file_view* const fv) {
 	char before[NAME_MAX+1];
 	strncpy(before, fv->file_list[fv->selection]->file_name, NAME_MAX+1);
 	file_view_sort(fv);
 	file_highlight(fv, before);
 }
-#endif
 
 void file_view_selected_to_list(struct file_view* const fv,
 		struct string_list* const list) {

@@ -23,14 +23,16 @@
 #include "fs.h"
 #include "utf8.h"
 
+#define FV_ORDER_SIZE 6
+static const char* const compare_values = "nstdpx";
 enum compare {
 	CMP_NONE = 0,
-	CMP_NAME,
-	CMP_SIZE,
-	//CMP_DATE,
-	CMP_ISDIR,
-	//CMP_ISEXE,
-	CMP_NUM
+	CMP_NAME = 'n',
+	CMP_SIZE = 's',
+	CMP_DATE = 't',
+	CMP_ISDIR = 'd',
+	CMP_PERM = 'p',
+	CMP_ISEXE = 'x',
 };
 
 struct file_view {
@@ -41,7 +43,7 @@ struct file_view {
 	fnum_t selection;
 	fnum_t num_selected;
 	int scending;
-	enum compare order[CMP_NUM+1];
+	char order[FV_ORDER_SIZE];
 	bool show_hidden;
 };
 
@@ -72,7 +74,7 @@ void file_view_sort(struct file_view* const);
 
 char* file_view_path_to_selected(struct file_view* const);
 
-//void file_view_change_sorting(struct file_view* const);
+void file_view_sorting_changed(struct file_view* const);
 
 void file_view_selected_to_list(struct file_view* const,
 		struct string_list* const);
