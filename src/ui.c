@@ -280,11 +280,13 @@ static void _statusbar(struct ui* const i) {
 	char status[10+2+10+2+10+1+1];
 	const fnum_t nhf = (i->pv->show_hidden ? 0 : i->pv->num_hidden);
 	int n = snprintf(status, sizeof(status),
-			"%uf %u%c %us",
+			"%uf %u%c %us, %c%.*s",
 			i->pv->num_files-nhf,
 			i->pv->num_hidden,
 			(i->pv->show_hidden ? 'H' : 'h'),
-			i->pv->num_selected);
+			i->pv->num_selected,
+			(i->pv->scending > 0 ? '+' : '-'),
+			FV_ORDER_SIZE, i->pv->order);
 
 	const size_t cw = utf8_width(status);
 	const size_t uw = utf8_width(i->user);
@@ -692,7 +694,7 @@ int fill_textbox(struct ui* const I, char* const buf,
 	         (i.utf[0] == '\n' || i.utf[0] == '\r'))) {
 		if (*buftop != buf) return 0;
 	}
-	else if (i.t == I_UTF8 && (size_t)(*buftop - buf) < bsize) {
+	else if (i.t == I_UTF8 && strlen(buf)+utf8_g2nb(i.utf) <= bsize) {
 		utf8_insert(buf, i.utf, utf8_wtill(buf, *buftop));
 		*buftop += utf8_g2nb(i.utf);
 	}

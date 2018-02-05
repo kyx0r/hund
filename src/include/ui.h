@@ -85,12 +85,8 @@ enum command {
 	CMD_DIR_VOLUME,
 	CMD_TOGGLE_HIDDEN,
 
-	CMD_SORT_BY_NAME_ASC,
-	CMD_SORT_BY_NAME_DESC,
-	CMD_SORT_BY_DATE_ASC,
-	CMD_SORT_BY_DATE_DESC,
-	CMD_SORT_BY_SIZE_ASC,
-	CMD_SORT_BY_SIZE_DESC,
+	CMD_SORT_REVERSE,
+	CMD_SORT_CHANGE,
 
 	CMD_SELECT_FILE,
 	CMD_SELECT_ALL,
@@ -323,12 +319,8 @@ static struct input2cmd default_mapping[] = {
 
 	{ { KUTF8("c"), KUTF8("h"), KEND }, MODE_MANAGER, CMD_CHMOD },
 
-	{ { KUTF8("s"), KUTF8("n"), KUTF8("a"), KEND }, MODE_MANAGER, CMD_SORT_BY_NAME_ASC },
-	{ { KUTF8("s"), KUTF8("n"), KUTF8("d"), KEND }, MODE_MANAGER, CMD_SORT_BY_NAME_DESC },
-	{ { KUTF8("s"), KUTF8("d"), KUTF8("a"), KEND }, MODE_MANAGER, CMD_SORT_BY_DATE_ASC },
-	{ { KUTF8("s"), KUTF8("d"), KUTF8("d"), KEND }, MODE_MANAGER, CMD_SORT_BY_DATE_DESC },
-	{ { KUTF8("s"), KUTF8("s"), KUTF8("a"), KEND }, MODE_MANAGER, CMD_SORT_BY_SIZE_ASC },
-	{ { KUTF8("s"), KUTF8("s"), KUTF8("d"), KEND }, MODE_MANAGER, CMD_SORT_BY_SIZE_DESC },
+	{ { KUTF8("s"), KUTF8("r"), KEND }, MODE_MANAGER, CMD_SORT_REVERSE },
+	{ { KUTF8("s"), KUTF8("c"), KEND }, MODE_MANAGER, CMD_SORT_CHANGE },
 
 	/* MODE CHMOD */
 	{ { KUTF8("q"), KUTF8("q"), KEND }, MODE_CHMOD, CMD_RETURN },
@@ -446,12 +438,8 @@ static const char* const cmd_help[] = {
 	[CMD_DIR_VOLUME] = "Calcualte volume of highlighted directory.",
 	[CMD_TOGGLE_HIDDEN] = "Toggle between hiding/showing hidden files.",
 
-	[CMD_SORT_BY_NAME_ASC] = "Sort by name ascending.",
-	[CMD_SORT_BY_NAME_DESC] = "Sort by name descending.",
-	[CMD_SORT_BY_DATE_ASC] = "Sort by date ascending.",
-	[CMD_SORT_BY_DATE_DESC] = "Sort by date descending.",
-	[CMD_SORT_BY_SIZE_ASC] = "Sort by size ascending.",
-	[CMD_SORT_BY_SIZE_DESC] = "Sort by size descending.",
+	[CMD_SORT_REVERSE] = "Switch between ascending/descending sorting.",
+	[CMD_SORT_CHANGE] = "Change sorting.",
 
 	[CMD_SELECT_FILE] = "Select/unselect file.",
 	[CMD_SELECT_ALL] = "Select all visible files.",

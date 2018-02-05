@@ -230,7 +230,6 @@ inline static void _rename(struct ui* const i) {
 		hfr(i->pv)->selected = true;
 		i->pv->num_selected += 1;
 	}
-	char *opath = NULL, *npath = NULL;
 	char tmpn[] = "/tmp/hund.XXXXXXXX";
 	int err;
 	struct string_list sf = { NULL, 0 }; // Selected Files
@@ -247,7 +246,7 @@ inline static void _rename(struct ui* const i) {
 	do {
 		free_list(&rf);
 		open_file_with(get_editor(), tmpn);
-		file_to_list(tmpfd, &rf);
+		file_to_list(tmpfd, &rf); // TODO
 		if ((unsolved = duplicates_on_list(&rf))) {
 			if (!ui_select(i, "There are conflicts. Retry?", o, 2)) {
 				free_list(&sf);
@@ -257,6 +256,8 @@ inline static void _rename(struct ui* const i) {
 		}
 	} while (unsolved);
 	// TODO conflicts_with_existing(i->pv, &rf));
+	char opath[PATH_MAX+1];
+	char npath[PATH_MAX+1];
 	if (blank_lines(&rf)) {
 		failed(i, "rename", 0, "file contains blank lines");
 	}
@@ -267,8 +268,6 @@ inline static void _rename(struct ui* const i) {
 		failed(i, "rename", 0, "file contains too much lines");
 	}
 	else {
-		opath = malloc(PATH_MAX+1);
-		npath = malloc(PATH_MAX+1);
 		for (fnum_t f = 0; f < sf.len; ++f) {
 			if (!strcmp(sf.str[f], rf.str[f])) continue;
 			strncpy(opath, i->pv->wd, PATH_MAX);
@@ -281,8 +280,6 @@ inline static void _rename(struct ui* const i) {
 				failed(i, "rename", err, NULL);
 			}
 		}
-		free(npath);
-		free(opath);
 		file_view_scan_dir(i->pv);
 		file_view_sort(i->pv);
 		select_from_list(i->pv, &rf);
@@ -344,6 +341,44 @@ inline static void _mkdir(struct ui* const i) {
 	unlink(tmpn);
 	file_view_scan_dir(i->pv);
 	file_view_sort(i->pv);
+}
+
+void change_sorting(struct ui* const i) {
+	// TODO visibility
+	// -- SORT --
+	// ???
+	// TODO cursor
+	char old[FV_ORDER_SIZE];
+	memcpy(old, i->pv->order, FV_ORDER_SIZE);
+	char *buf, *top;
+	buf = top = (char*)i->pv->order;
+	top += strlen(buf);
+	int r;
+	for (;;) {
+		r = fill_textbox(i, buf, &top, FV_ORDER_SIZE);
+		if (!r) break;
+		else if (r == -1) {
+			memcpy(i->pv->order, old, FV_ORDER_SIZE);
+			return;
+		}
+		ui_draw(i);
+	}
+	for (size_t j = 0; j < FV_ORDER_SIZE; ++j) {
+		bool v = false;
+		for (size_t k = 0; k < strlen(compare_values); ++k) {
+			v = v || (compare_values[k] == i->pv->order[j]);
+		}
+		if (!v) {
+			i->pv->order[j] = 0;
+		}
+	}
+	for (size_t j = 0; j < FV_ORDER_SIZE; ++j) {
+		if (i->pv->order[0]) continue;
+		memmove(&i->pv->order[0], &i->pv->order[1], FV_ORDER_SIZE-1);
+		i->pv->order[7] = 0;
+	}
+	file_view_sorting_changed(i->pv);
+	i->ui_needs_refresh = true;
 }
 
 static void process_input(struct ui* const i, struct task* const t) {
@@ -609,35 +644,13 @@ static void process_input(struct ui* const i, struct task* const t) {
 		}
 		i->ui_needs_refresh = true;
 		break;
-	case CMD_SORT_BY_NAME_ASC:
-		//i->pv->scending = 1;
-		//file_view_change_sorting(i->pv);
+	case CMD_SORT_REVERSE:
+		i->pv->scending = -i->pv->scending;
+		file_view_sorting_changed(i->pv);
 		i->ui_needs_refresh = true;
 		break;
-	case CMD_SORT_BY_NAME_DESC:
-		//i->pv->scending = -1;
-		//file_view_change_sorting(i->pv);
-		i->ui_needs_refresh = true;
-		break;
-	case CMD_SORT_BY_DATE_ASC:
-		//i->pv->scending = 1;
-		//file_view_change_sorting(i->pv);
-		i->ui_needs_refresh = true;
-		break;
-	case CMD_SORT_BY_DATE_DESC:
-		//i->pv->scending = -1;
-		//file_view_change_sorting(i->pv);
-		i->ui_needs_refresh = true;
-		break;
-	case CMD_SORT_BY_SIZE_ASC:
-		//i->pv->scending = 1;
-		//file_view_change_sorting(i->pv);
-		i->ui_needs_refresh = true;
-		break;
-	case CMD_SORT_BY_SIZE_DESC:
-		//i->pv->scending = -1;
-		//file_view_change_sorting(i->pv);
-		i->ui_needs_refresh = true;
+	case CMD_SORT_CHANGE:
+		change_sorting(i);
 		break;
 	default:
 		break;
@@ -897,12 +910,14 @@ int main(int argc, char* argv[]) {
 	struct file_view fvs[2];
 	memset(fvs, 0, sizeof(fvs));
 	fvs[0].scending = 1;
-	fvs[0].order[1] = CMP_ISDIR;
 	fvs[0].order[0] = CMP_NAME;
+	fvs[0].order[1] = CMP_ISEXE;
+	fvs[0].order[2] = CMP_ISDIR;
 
 	fvs[1].scending = 1;
-	fvs[1].order[1] = CMP_ISDIR;
 	fvs[1].order[0] = CMP_NAME;
+	fvs[1].order[1] = CMP_ISEXE;
+	fvs[1].order[2] = CMP_ISDIR;
 
 	struct ui i;
 	ui_init(&i, &fvs[0], &fvs[1]);
