@@ -88,7 +88,7 @@ struct file_record {
 		|| ((M & S_IFMT) == S_IFSOCK))
 
 #define DOTDOT(N) (!strncmp((N), ".", 2) || !strncmp((N), "..", 3))
-#define EXECUTABLE(M) (M & 0111)
+#define EXECUTABLE(M) ((M & 0111) && !S_ISDIR(M))
 
 bool same_fs(const char* const, const char* const);
 
