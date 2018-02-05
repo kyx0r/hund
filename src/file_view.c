@@ -391,7 +391,7 @@ void merge_sort(struct file_view* const fv, const enum compare cmp) {
 }
 
 void file_view_sort(struct file_view* const fv) {
-	for (int i = 0; i < FV_ORDER_SIZE; ++i) {
+	for (size_t i = 0; i < FV_ORDER_SIZE; ++i) {
 		if (fv->order[i] != CMP_NONE) merge_sort(fv, fv->order[i]);
 	}
 }

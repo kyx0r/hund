@@ -286,7 +286,7 @@ static void _statusbar(struct ui* const i) {
 			(i->pv->show_hidden ? 'H' : 'h'),
 			i->pv->num_selected,
 			(i->pv->scending > 0 ? '+' : '-'),
-			FV_ORDER_SIZE, i->pv->order);
+			(int)FV_ORDER_SIZE, i->pv->order);
 
 	const size_t cw = utf8_width(status);
 	const size_t uw = utf8_width(i->user);
