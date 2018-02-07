@@ -123,8 +123,8 @@ size_t utf8_cp2nb(const codepoint_t cp) {
 /* Glyph to width */
 size_t utf8_g2w(const codepoint_t cp) {
 	if (cp < 0x7f) return 1;
-	if (cp_in(zero_width, zero_width_len, cp)) return 0;
-	if (cp_in(double_width, double_width_len, cp)) return 2;
+	if (cp_in(zero_width, zero_width_len-1, cp)) return 0;
+	if (cp_in(double_width, double_width_len-1, cp)) return 2;
 	return 1;
 }
 
