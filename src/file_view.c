@@ -34,7 +34,7 @@
  */
 
 /* checks if file is hidden just by looking at the name */
-bool hidden(const struct file_view* const fv, const fnum_t i) {
+inline bool hidden(const struct file_view* const fv, const fnum_t i) {
 	return fv->file_list[i]->file_name[0] == '.';
 }
 
@@ -48,134 +48,38 @@ bool visible(const struct file_view* const fv, const fnum_t i) {
 	return fv->show_hidden || !hidden(fv, i);
 }
 
-void next_entry(struct file_view* const fv) {
-	if (!fv->num_files || fv->selection > fv->num_files-1) {
-		fv->selection = 0;
-		return;
-	}
-	if (fv->show_hidden) {
-		if (fv->selection < fv->num_files-1) {
-			fv->selection += 1;
-		}
-	}
-	else {
-		fnum_t i = fv->selection;
-		do {
-			i += 1;
-		} while (i < fv->num_files && hidden(fv, i));
-		if (i >= fv->num_files) return;
-		fv->selection = i;
-	}
+/* Highlighted File Record */
+inline struct file_record* hfr(const struct file_view* const fv) {
+	return (fv->num_files ? fv->file_list[fv->selection] : NULL);
 }
 
-void prev_entry(struct file_view* const fv) {
-	if (!fv->num_files || fv->selection > fv->num_files-1) {
-		fv->selection = 0;
-		return;
-	}
-	if (fv->show_hidden) {
-		if (fv->selection > 0) {
-			fv->selection -= 1;
-		}
-	}
-	/* Truth table - "Perform backward search?"
-	 * .notvisible | visible
-	 * sel == 0 |1*|0| * = first_entry()
-	 * sel != 0 |1 |1|
-	 */
-	else if (fv->selection == 0 && hidden(fv, fv->selection)) {
-		first_entry(fv);
-	}
-	else if (fv->selection != 0 && !hidden(fv, fv->selection)) {
-	   	/* Truth table - "Keep looking?" or "What to put in while"
-	   	 * 1 = Keep looking
-	   	 * 0 = Stop looking
-	   	 *  visible | hidden
-	   	 * i == 0 |0|0|
-	   	 * i != 0 |0|1|
-	   	 */
-	   	fnum_t i = fv->selection;
-	   	do {
-	   		i -= 1;
-		} while (i != 0 && hidden(fv, i));
-		if (i == 0 && hidden(fv, i)) {
-			first_entry(fv);
-		}
-		else {
-	   		fv->selection = i;
-		}
-	}
+inline void first_entry(struct file_view* const fv) {
+	fv->selection = fv->num_files-1;
+	jump_n_entries(fv, -fv->num_files);
 }
 
-void first_entry(struct file_view* const fv) {
-	if (!fv->num_files || fv->show_hidden ||
-			(!fv->show_hidden && !fv->num_files)) {
-		fv->selection = 0;
-	}
-	else {
-		fnum_t i = 0;
-		while (i < fv->num_files-1 && hidden(fv, i)) {
-			i += 1;
-		}
-		if (i == fv->num_files-1 && hidden(fv, i)) {
-			fv->selection = 0;
-		}
-		else {
-			fv->selection = i;
-		}
-	}
-}
-
-void last_entry(struct file_view* const fv) {
-	if (!fv->num_files) {
-		fv->selection = 0;
-	}
-	else if (fv->show_hidden) {
-		fv->selection = fv->num_files-1;
-	}
-	else {
-		fnum_t i = fv->num_files-1;
-		while (i != 0 && hidden(fv, i)) {
-			i -= 1;
-		}
-		if (i == 0 && hidden(fv, i)) {
-			fv->selection = 0;
-		}
-		else {
-			fv->selection = i;
-		}
-	}
+inline void last_entry(struct file_view* const fv) {
+	fv->selection = 0;
+	jump_n_entries(fv, fv->num_files);
 }
 
 void jump_n_entries(struct file_view* const fv, const int n) {
-	// TODO optimize
 	if (!fv->num_files) {
 		fv->selection = 0;
+		return;
 	}
-	fnum_t N;
-	if (n < 0) {
-		N = -n;
-		if (fv->selection < N) {
-			first_entry(fv);
+	fnum_t N = (n > 0 ? n : -n);
+	const int d = (n > 0 ? 1 : -1);
+	fnum_t i = fv->selection;
+	do {
+		if (n < 0 && !i) return;
+		i += d;
+		if (n > 0 && i >= fv->num_files) return;
+		if (visible(fv, i)) {
+			N -= 1;
+			fv->selection = i;
 		}
-		else {
-			for (int i = 0; i < -n; ++i) {
-				prev_entry(fv);
-			}
-		}
-
-	}
-	else if (n > 0) {
-		N = n;
-		if (fv->num_files - fv->selection < N) {
-			last_entry(fv);
-		}
-		else {
-			for (int i = 0; i < n; ++i) {
-				next_entry(fv);
-			}
-		}
-	}
+	} while (N);
 }
 
 void delete_file_list(struct file_view* const fv) {
@@ -192,18 +96,17 @@ bool file_on_list(struct file_view* const fv, const char* const name) {
 }
 
 /* Finds and highlighs file with given name */
-void file_highlight(struct file_view* const fv, const char* const name) {
+void file_highlight(struct file_view* const fv, const char* const N) {
 	fnum_t i = 0;
-	while (i < fv->num_files && strcmp(fv->file_list[i]->file_name, name)) {
+	while (i < fv->num_files && strcmp(fv->file_list[i]->file_name, N)) {
 		i += 1;
 	}
-	if (i != fv->num_files) {
-		if (visible(fv, i)) {
-			fv->selection = i;
-		}
-		else {
-			first_entry(fv);
-		}
+	if (i == fv->num_files) return;
+	if (visible(fv, i)) {
+		fv->selection = i;
+	}
+	else {
+		first_entry(fv);
 	}
 }
 
@@ -238,50 +141,45 @@ int file_view_enter_selected_dir(struct file_view* const fv) {
 	if (!fv->num_files || !visible(fv, fv->selection)) return 0;
 	const char* const fn = fv->file_list[fv->selection]->file_name;
 	const mode_t m = fv->file_list[fv->selection]->s.st_mode;
+	int err;
 	if (S_ISDIR(m) || S_ISLNK(m)) {
-		if (enter_dir(fv->wd, fn)) return ENAMETOOLONG;
+		if ((err = enter_dir(fv->wd, fn))) return err;
 	}
 	else return ENOTDIR;
-	int err = file_view_scan_dir(fv);
-	if (err) {
+	if ((err = file_view_scan_dir(fv))) {
 		delete_file_list(fv);
 		file_view_up_dir(fv);
 		// TODO ^^^ would be better if it was checked
 		// before any changes to file_view
 		return err;
 	}
-	file_view_sort(fv);
 	first_entry(fv);
 	return 0;
 }
 
 int file_view_up_dir(struct file_view* const fv) {
-	char* prevdir = strncpy(malloc(NAME_MAX+1),
-			fv->wd+current_dir_i(fv->wd), NAME_MAX);
+	int err;
+	char prevdir[NAME_MAX];
+	strncpy(prevdir, fv->wd+current_dir_i(fv->wd), NAME_MAX);
 	up_dir(fv->wd);
-	int err = file_view_scan_dir(fv);
-	if (err) {
+	if ((err = file_view_scan_dir(fv))) {
 		delete_file_list(fv);
-		free(prevdir);
 		return err;
 	}
-	file_view_sort(fv);
 	file_highlight(fv, prevdir);
-	free(prevdir);
 	return 0;
 }
 
 void file_view_afterdel(struct file_view* const fv) {
-	if (fv->num_files) {
-		if (fv->selection >= fv->num_files-1) {
-			last_entry(fv);
-		}
-		if (!visible(fv, fv->selection)){
-			next_entry(fv);
-		}
-	}
-	else {
+	if (!fv->num_files) {
 		fv->selection = 0;
+		return;
+	}
+	if (fv->selection >= fv->num_files-1) {
+		last_entry(fv);
+	}
+	if (!visible(fv, fv->selection)){
+		jump_n_entries(fv, 1);
 	}
 }
 
@@ -301,8 +199,11 @@ void file_view_toggle_hidden(struct file_view* const fv) {
 }
 
 int file_view_scan_dir(struct file_view* const fv) {
+	int err;
 	fv->num_selected = 0;
-	return scan_dir(fv->wd, &fv->file_list, &fv->num_files, &fv->num_hidden);
+	err = scan_dir(fv->wd, &fv->file_list, &fv->num_files, &fv->num_hidden);
+	if (!err) file_view_sort(fv);
+	return err;
 }
 
 /*
@@ -310,6 +211,7 @@ int file_view_scan_dir(struct file_view* const fv) {
  * -1: a < b
  *  0: a == b
  *  1: a > b
+ *  ...just like memcmp,strcmp
  */
 static int frcmp(const enum compare cmp,
 		const struct file_record* const a,
@@ -392,7 +294,7 @@ void merge_sort(struct file_view* const fv, const enum compare cmp) {
 
 void file_view_sort(struct file_view* const fv) {
 	for (size_t i = 0; i < FV_ORDER_SIZE; ++i) {
-		if (fv->order[i] != CMP_NONE) merge_sort(fv, fv->order[i]);
+		if (fv->order[i]) merge_sort(fv, fv->order[i]);
 	}
 }
 
@@ -460,9 +362,4 @@ void remove_conflicting(struct file_view* const fv,
 	}
 	free_list(list);
 	*list = repl;
-}
-
-/* Highlighted File Record */
-struct file_record* hfr(const struct file_view* const fv) {
-	return (fv->num_files ? fv->file_list[fv->selection] : NULL);
 }

@@ -280,8 +280,8 @@ inline static void _rename(struct ui* const i) {
 				failed(i, "rename", err, NULL);
 			}
 		}
-		file_view_scan_dir(i->pv);
-		file_view_sort(i->pv);
+		// TODO what if selection is invalid?
+		file_view_scan_dir(i->pv); // TODO error
 		select_from_list(i->pv, &rf);
 	}
 	close(tmpfd);
@@ -291,17 +291,17 @@ inline static void _rename(struct ui* const i) {
 }
 
 inline static void _cd(struct ui* const i) {
+	// TODO
 	int err = 0;
 	struct stat s;
 	char* path = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
 	char* cdp = calloc(PATH_MAX+1, sizeof(char));
-	if ((prompt(i, cdp, cdp, PATH_MAX)
+	if (prompt(i, cdp, cdp, PATH_MAX)
 	 || (err = enter_dir(path, cdp))
 	 || (err = ENOENT, access(path, F_OK))
 	 || (stat(path, &s) ? (err = errno) : 0)
-	 || (err = ENOTDIR, !S_ISDIR(s.st_mode)))
-	 && err) {
-		failed(i, "cd", err, NULL);
+	 || (err = ENOTDIR, !S_ISDIR(s.st_mode))) {
+		if (err) failed(i, "cd", err, NULL);
 	}
 	else {
 		strncpy(i->pv->wd, path, PATH_MAX);
@@ -309,7 +309,6 @@ inline static void _cd(struct ui* const i) {
 			failed(i, "directory scan", err, NULL);
 		}
 		else {
-			file_view_sort(i->pv);
 			first_entry(i->pv);
 		}
 	}
@@ -339,8 +338,7 @@ inline static void _mkdir(struct ui* const i) {
 	free_list(&files);
 	close(tmpfd);
 	unlink(tmpn);
-	file_view_scan_dir(i->pv);
-	file_view_sort(i->pv);
+	file_view_scan_dir(i->pv); // TODO error
 }
 
 void change_sorting(struct ui* const i) {
@@ -350,9 +348,8 @@ void change_sorting(struct ui* const i) {
 	// TODO cursor
 	char old[FV_ORDER_SIZE];
 	memcpy(old, i->pv->order, FV_ORDER_SIZE);
-	char *buf, *top;
-	buf = top = (char*)i->pv->order;
-	top += strlen(buf);
+	char* buf = i->pv->order;
+	char* top = i->pv->order + strlen(buf);
 	int r;
 	for (;;) {
 		r = fill_textbox(i, buf, &top, FV_ORDER_SIZE);
@@ -529,16 +526,15 @@ static void process_input(struct ui* const i, struct task* const t) {
 			file_view_up_dir(i->sv);
 		}
 		else {
-			file_view_sort(i->sv);
 			i->sv->selection = i->pv->selection;
 			i->sv->show_hidden = i->pv->show_hidden;
 		}
 		break;
 	case CMD_ENTRY_DOWN:
-		next_entry(i->pv);
+		jump_n_entries(i->pv, 1);
 		break;
 	case CMD_ENTRY_UP:
-		prev_entry(i->pv);
+		jump_n_entries(i->pv, -1);
 		break;
 	case CMD_SCREEN_DOWN:
 		jump_n_entries(i->pv, i->ph-1);
@@ -587,7 +583,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 	case CMD_DIR_VOLUME:
 		//estimate_volume_for_selected(i->pv);
 		break;
-	case CMD_SELECT_FILE:
+	case CMD_SELECT_FILE: // TODO
 		if ((fr = hfr(i->pv)) && visible(i->pv, i->pv->selection)) {
 			if ((fr->selected = !fr->selected)) {
 				i->pv->num_selected += 1;
@@ -595,7 +591,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 			else {
 				i->pv->num_selected -= 1;
 			}
-			next_entry(i->pv);
+			jump_n_entries(i->pv, 1);
 		}
 		break;
 	case CMD_SELECT_ALL:
@@ -639,7 +635,6 @@ static void process_input(struct ui* const i, struct task* const t) {
 			failed(i, "refresh", err, NULL);
 		}
 		else {
-			file_view_sort(i->pv);
 			file_view_afterdel(i->pv);
 		}
 		i->ui_needs_refresh = true;
@@ -811,10 +806,8 @@ static void task_execute(struct ui* const i, struct task* const t) {
 			failed(i, "operation", t->err, NULL);
 		}
 		else {
-			file_view_sort(i->pv);
-			file_view_sort(i->sv);
 			if (t->t == TASK_REMOVE) file_view_afterdel(i->pv);
-			else if (t->t == TASK_MOVE) prev_entry(i->pv);
+			else if (t->t == TASK_MOVE) jump_n_entries(i->pv, -1);
 			i->mt = MSG_INFO;
 			snprintf(i->msg, MSG_BUFFER_SIZE, "processed %u files",
 					t->files_done);
@@ -845,7 +838,6 @@ inline static int _init_wd(struct file_view fvs[2], char* const init_wd[2]) {
 		if ((e = file_view_scan_dir(&fvs[v]))) {
 			return e;
 		}
-		file_view_sort(&fvs[v]);
 		first_entry(&fvs[v]);
 	}
 	return 0;

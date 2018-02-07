@@ -23,10 +23,9 @@
 #include "fs.h"
 #include "utf8.h"
 
-#define FV_ORDER_SIZE 6
-static const char* const compare_values = "nstdpx";
+static const char compare_values[] = "nstdpx";
+#define FV_ORDER_SIZE (sizeof(compare_values)-1)
 enum compare {
-	CMP_NONE = 0,
 	CMP_NAME = 'n',
 	CMP_SIZE = 's',
 	CMP_DATE = 't',
@@ -42,17 +41,16 @@ struct file_view {
 	fnum_t num_hidden;
 	fnum_t selection;
 	fnum_t num_selected;
-	int scending;
+	int scending; // 1 = ascending, -1 = descending
 	char order[FV_ORDER_SIZE];
 	bool show_hidden;
 };
 
 bool hidden(const struct file_view* const, const fnum_t);
 bool visible(const struct file_view* const, const fnum_t);
+struct file_record* hfr(const struct file_view* const);
 
-void next_entry(struct file_view* const);
 void first_entry(struct file_view* const);
-void prev_entry(struct file_view* const);
 void last_entry(struct file_view* const);
 
 void jump_n_entries(struct file_view* const, const int);
@@ -86,6 +84,4 @@ bool conflicts_with_existing(struct file_view* const,
 		const struct string_list* const);
 
 void remove_conflicting(struct file_view* const, struct string_list* const);
-
-struct file_record* hfr(const struct file_view* const);
 #endif
