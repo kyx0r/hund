@@ -17,15 +17,6 @@ int main() {
 
 	int r;
 
-	/*char path0[PATH_MAX] = "/home/user/.config/fancyproggie";
-	char home0[PATH_MAX] = "/home/user";
-	r = prettify_path(path0, home0);
-	TEST(r == 0 && strcpy(path0, "~/.config/fancyproggie"), "path changed");
-
-	char path1[PATH_MAX] = "/etc/X11/xinit/xinitrc.d";
-	r = prettify_path(path1, home0);
-	TEST(r == -1 && strcmp(path1, "/etc/X11/xinit/xinitrc.d") == 0, "path remained unchanged");*/
-
 	char path[PATH_MAX] = "/";
 	r = enter_dir(path, "usr");
 	TEST(r == 0 && strcmp(path, "/usr") == 0, "entered directory in root (respect /)");
@@ -104,8 +95,12 @@ int main() {
 	char buf[SIZE_BUF_SIZE];
 	pretty_size(100, buf);
 	TEST(!strcmp(buf, "100B"), "");
+	pretty_size(999, buf);
+	TEST(!strcmp(buf, "999B"), "");
+	pretty_size(1000, buf);
+	TEST(!strcmp(buf, "0.97K"), "");
 	pretty_size(1023, buf);
-	TEST(!strcmp(buf, "1023B"), "");
+	TEST(!strcmp(buf, "0.99K"), "");
 	pretty_size(1024, buf);
 	TEST(!strcmp(buf, "1K"), "");
 	pretty_size(1035, buf);
@@ -118,7 +113,7 @@ int main() {
 	TEST(!strcmp(buf, "2K"), "");
 
 	pretty_size(1024*1000, buf);
-	TEST(!strcmp(buf, "1000K"), "");
+	TEST(!strcmp(buf, "0.97M"), "");
 
 	pretty_size((off_t) 1, buf);
 	TEST(!strcmp(buf, "1B"), "");

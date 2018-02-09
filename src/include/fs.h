@@ -100,7 +100,7 @@ int scan_dir(const char* const, struct file_record*** const,
 int link_copy(const char* const, const char* const, const char* const);
 int link_copy_raw(const char* const, const char* const);
 
-#define SIZE_BUF_SIZE (4+1+2+1+1)
+#define SIZE_BUF_SIZE (3+1+2+1+1)
 void pretty_size(off_t, char* buf);
 
 #define MKDIR_DEFAULT_PERM (S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)

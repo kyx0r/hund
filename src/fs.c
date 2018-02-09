@@ -116,7 +116,7 @@ int scan_dir(const char* const wd, struct file_record*** const fl,
 		strncpy(fpath, wd, PATH_MAX);
 		if ((err = append_dir(fpath, nfr->file_name))
 		   || lstat(fpath, &nfr->s)) {
-			err = errno;
+			err = errno; // TODO
 			memset(&nfr->s, 0, sizeof(struct stat));
 		}
 	}
@@ -209,13 +209,18 @@ void pretty_size(off_t s, char* const buf) {
 		s /= 1024;
 		unit += 1;
 	}
-	rest *= 1000;
+	if (s >= 1000) {
+		unit += 1;
+		rest = s;
+		s = 0;
+	}
+	rest *= 1000; // TODO
 	rest /= 1024;
 	rest /= 10;
 	char r[2] = { rest / 10, rest % 10 };
 	int top = 0;
 	top += snprintf(buf+top, SIZE_BUF_SIZE-top, "%u", (unsigned)s);
-	if (r[0] || r[1]) {
+	if (r[0] || r[1]) { // TODO
 		top += snprintf(buf+top, SIZE_BUF_SIZE-top, ".%c", '0'+r[0]);
 	}
 	if (r[1]) {
@@ -300,8 +305,8 @@ int enter_dir(char* const path, const char* const dir) {
  */
 int up_dir(char* const path) {
 	if (!strncmp(path, "/", 2)) return -1;
-	int i;
-	for (i = strnlen(path, PATH_MAX); i > 0 && path[i] != '/'; i--) {
+	int i = strnlen(path, PATH_MAX);
+	for (; i > 0 && path[i] != '/'; --i) {
 		path[i] = 0;
 	}
 	// At this point i points that last '/'
