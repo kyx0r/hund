@@ -31,7 +31,9 @@ echo "#define WIDECHARS_H"
 echo
 echo "// A sorted list of ranges of Unicode codepoints of double-width characters"
 echo "static const unsigned int double_width[][2] = {"
-echo "$eaw" | while IFS='' read -r line || [ -n "$line" ]; do
+IFS=$'\n'
+for line in $eaw
+do
 	if [ "${line:0:1}" == "#" ]; then
 		continue
 	fi
@@ -40,7 +42,7 @@ echo "$eaw" | while IFS='' read -r line || [ -n "$line" ]; do
 	b=$(echo $range | cut -d '.' -f 3)
 	category=$(echo $line | cut -d ';' -f 2 | cut -d ' ' -f 1)
 	if [ "$category" == "F" ] || [ "$category" == "W" ]; then
-		printf "\t{0x$a, 0x$b},\n"
+		echo -e "\t{0x$a, 0x$b},"
 	fi
 done
 echo "};"
@@ -50,7 +52,9 @@ echo "// A sorted list of ranges of Unicode codepoints of zero-width characters"
 echo "static const unsigned int zero_width[][2] = {"
 ra=0
 rb=0
-echo "$udb" | while IFS='' read -r line || [[ -n "$line" ]]; do
+IFS=$'\n'
+for line in $udb
+do
 	cp=$(printf '%d' "0x$(echo $line | cut -d ';' -f 1)")
 	name=$(echo $line | cut -d ';' -f 2)
 	category=$(echo $line | cut -d ';' -f 3)
