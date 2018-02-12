@@ -39,7 +39,6 @@
  * 15. IDEA: if finding, offer selecting files
  * 16. Dir scanning via task?
  * 18. ln -> create link to highlighted file in the other panel
- * 19. IDEA: quick chmod +x or u+x in MODE_MANAGER
  */
 
 static char* get_editor(void) {
@@ -211,8 +210,7 @@ static void prepare_task(struct ui* const i, struct task* const t,
 		renamed.str = calloc(renamed.len, sizeof(char*));
 	}
 	enum task_flags tf = TF_NONE;
-	// TODO ask for recursion only for directories
-	if (tt == TASK_CHMOD && _recursive_chmod(i)) {
+	if (tt == TASK_CHMOD && S_ISDIR(i->perm[0]) && _recursive_chmod(i)) {
 		tf |= TF_RECURSIVE_CHMOD;
 	}
 	task_new(t, tt, tf, i->pv->wd, i->sv->wd, &selected, &renamed);
@@ -375,6 +373,17 @@ void change_sorting(struct ui* const i) {
 		i->pv->order[7] = 0;
 	}
 	file_view_sorting_changed(i->pv);
+	i->ui_needs_refresh = true;
+}
+
+static inline void _quick_chmod_plus_x(struct ui* const i) {
+	char* path = NULL;
+	struct stat s;
+	if (!(path = file_view_path_to_selected(i->pv))) return;
+	if (stat(path, &s) || !S_ISREG(s.st_mode)) return;
+	const mode_t nm = s.st_mode | (S_IXUSR | S_IXGRP | S_IXOTH);
+	chmod(path, nm);
+	file_view_scan_dir(i->pv);
 	i->ui_needs_refresh = true;
 }
 
@@ -565,6 +574,9 @@ static void process_input(struct ui* const i, struct task* const t) {
 		break;
 	case CMD_EDIT_FILE:
 		open_selected_with(i, get_editor());
+		break;
+	case CMD_QUICK_PLUS_X:
+		_quick_chmod_plus_x(i);
 		break;
 	case CMD_OPEN_FILE:
 		open_selected_with(i, "xdg-open"); // TODO
@@ -809,7 +821,8 @@ static void task_execute(struct ui* const i, struct task* const t) {
 			if (t->t == TASK_REMOVE) file_view_afterdel(i->pv);
 			else if (t->t == TASK_MOVE) jump_n_entries(i->pv, -1);
 			i->mt = MSG_INFO;
-			snprintf(i->msg, MSG_BUFFER_SIZE, "processed %u files",
+			snprintf(i->msg, MSG_BUFFER_SIZE,
+					"processed %u files",
 					t->files_done);
 		}
 		task_clean(t);

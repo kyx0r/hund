@@ -77,6 +77,7 @@ enum command {
 	CMD_PAGER,
 	CMD_OPEN_FILE,
 	CMD_EDIT_FILE,
+	CMD_QUICK_PLUS_X,
 
 	CMD_REFRESH,
 	CMD_SWITCH_PANEL,
@@ -256,7 +257,7 @@ static struct input2cmd default_mapping[] = {
 	/* MODE MANGER */
 	{ { KUTF8("q"), KUTF8("q"), KEND }, MODE_MANAGER, CMD_QUIT },
 
-	{ { KUTF8("g"), KUTF8("g"), KEND }, MODE_MANAGER, CMD_ENTRY_FIRST },
+	{ { KUTF8("g"), KEND }, MODE_MANAGER, CMD_ENTRY_FIRST },
 	{ { KSPEC(I_HOME), KEND }, MODE_MANAGER, CMD_ENTRY_FIRST },
 
 	{ { KUTF8("G"), KEND }, MODE_MANAGER, CMD_ENTRY_LAST },
@@ -302,7 +303,7 @@ static struct input2cmd default_mapping[] = {
 	{ { KUTF8("p"), KEND }, MODE_MANAGER, CMD_PAGER },
 	{ { KUTF8("o"), KEND }, MODE_MANAGER, CMD_OPEN_FILE },
 	{ { KUTF8("e"), KUTF8("d"), KEND }, MODE_MANAGER, CMD_EDIT_FILE },
-
+	{ { KUTF8("+"), KUTF8("x"), KEND }, MODE_MANAGER, CMD_QUICK_PLUS_X },
 	{ { KUTF8("v"), KEND }, MODE_MANAGER, CMD_SELECT_FILE },
 	{ { KUTF8("V"), KUTF8("a"), KEND }, MODE_MANAGER, CMD_SELECT_ALL },
 	{ { KUTF8("V"), KUTF8("0"), KEND }, MODE_MANAGER, CMD_SELECT_NONE },
@@ -430,7 +431,7 @@ static const char* const cmd_help[] = {
 	[CMD_PAGER] = "Open selected file in pager.",
 	[CMD_OPEN_FILE] = "Open selected file.",
 	[CMD_EDIT_FILE] = "Open selected file in text editor.",
-
+	[CMD_QUICK_PLUS_X] = "Quick chmod +x.", //
 	[CMD_REFRESH] = "Rescan directories and redraw UI.",
 	[CMD_SWITCH_PANEL] = "Switch active panel.",
 	[CMD_DUP_PANEL] = "Open current directory in the other panel.",
