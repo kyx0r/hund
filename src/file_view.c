@@ -316,14 +316,22 @@ void file_view_sorting_changed(struct file_view* const fv) {
 	file_highlight(fv, before);
 }
 
+/*
+ * If there is no selection, the highlighted file is selected
+ * TODO optimize
+ */
 void file_view_selected_to_list(struct file_view* const fv,
 		struct string_list* const list) {
+	if (!fv->num_selected) {
+		fv->num_selected = 1;
+		hfr(fv)->selected = true;
+	}
 	list->len = 0;
+	list->str = calloc(fv->num_selected, sizeof(char*));
 	for (fnum_t f = 0, s = 0;
 	     f < fv->num_files && s < fv->num_selected; ++f) {
 		if (!fv->file_list[f]->selected) continue;
 		list->len += 1;
-		list->str = realloc(list->str, (list->len) * sizeof(char*));
 		list->str[list->len-1] = strdup(fv->file_list[f]->file_name);
 		s += 1;
 	}
