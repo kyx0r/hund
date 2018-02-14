@@ -33,12 +33,12 @@
 
 /*
  * GENERAL TODO
- * 2. Messages may be blocked by other messages
- * 14. IDEA: Detecting file formats -> display name of a program that
+ * - Messages may be blocked by other messages
+ * - IDEA: Detecting file formats -> display name of a program that
  *     would open highlighted file
- * 15. IDEA: if finding, offer selecting files
- * 16. Dir scanning via task?
- * 18. ln -> create link to highlighted file in the other panel
+ * - IDEA: if finding, offer selecting files
+ * - Dir scanning via task?
+ * - Dir rescanning should be unified
  */
 
 static char* get_editor(void) {
@@ -194,10 +194,6 @@ inline static bool _recursive_chmod(struct ui* const i) {
 static void prepare_task(struct ui* const i, struct task* const t,
 		const enum task_type tt) {
 	if (!i->pv->num_files) return;
-	if (!i->pv->num_selected) {
-		hfr(i->pv)->selected = true;
-		i->pv->num_selected = 1;
-	}
 	struct string_list selected = { NULL, 0 };
 	struct string_list renamed = { NULL, 0 };
 	file_view_selected_to_list(i->pv, &selected);
@@ -224,10 +220,6 @@ static void prepare_task(struct ui* const i, struct task* const t,
 }
 
 inline static void _rename(struct ui* const i) {
-	if (!i->pv->num_selected) {
-		hfr(i->pv)->selected = true;
-		i->pv->num_selected += 1;
-	}
 	char tmpn[] = "/tmp/hund.XXXXXXXX";
 	int err;
 	struct string_list sf = { NULL, 0 }; // Selected Files
@@ -306,9 +298,6 @@ inline static void _cd(struct ui* const i) {
 		if ((err = file_view_scan_dir(i->pv))) {
 			failed(i, "directory scan", err, NULL);
 		}
-		else {
-			first_entry(i->pv);
-		}
 	}
 	free(path);
 	free(cdp);
@@ -376,6 +365,32 @@ void change_sorting(struct ui* const i) {
 	i->ui_needs_refresh = true;
 }
 
+static inline void _mklnk(struct ui* const i) {
+	// TODO conflicts
+	int err;
+	char tmpn[] = "/tmp/hund.XXXXXXXX";
+	int tmpfd = mkstemp(tmpn);
+	struct string_list sf = { NULL, 0 };
+	file_view_selected_to_list(i->pv, &sf);
+	char target[PATH_MAX];
+	char slpath[PATH_MAX];
+	strcpy(target, i->pv->wd);
+	strcpy(slpath, i->sv->wd);
+	for (fnum_t f = 0; f < sf.len; ++f) {
+		append_dir(target, sf.str[f]);
+		append_dir(slpath, sf.str[f]);
+		symlink(target, slpath); // TODO err
+		up_dir(slpath);
+		up_dir(target);
+	}
+	close(tmpfd);
+	unlink(tmpn);
+	if ((err = file_view_scan_dir(i->sv))) {
+		failed(i, "directory scan", err, NULL); // TODO
+	}
+	select_from_list(i->sv, &sf);
+}
+
 static inline void _quick_chmod_plus_x(struct ui* const i) {
 	char* path = NULL;
 	struct stat s;
@@ -383,7 +398,7 @@ static inline void _quick_chmod_plus_x(struct ui* const i) {
 	if (stat(path, &s) || !S_ISREG(s.st_mode)) return;
 	const mode_t nm = s.st_mode | (S_IXUSR | S_IXGRP | S_IXOTH);
 	chmod(path, nm);
-	file_view_scan_dir(i->pv);
+	file_view_scan_dir(i->pv); // TODO
 	i->ui_needs_refresh = true;
 }
 
@@ -591,6 +606,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		_rename(i);
 		break;
 	case CMD_LINK:
+		_mklnk(i);
 		break;
 	case CMD_DIR_VOLUME:
 		//estimate_volume_for_selected(i->pv);
