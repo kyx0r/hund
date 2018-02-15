@@ -19,10 +19,6 @@
 
 #include "include/task.h"
 
-/* TODO
- * skipped count
- */
-
 void task_new(struct task* const t, const enum task_type tp,
 		const enum task_flags tf,
 		char* const src, char* const dst,
@@ -95,7 +91,7 @@ void task_action_estimate(struct task* const t, int* const c) {
 	}
 	const bool Q = t->tw.tws & (AT_DIR | AT_LINK | AT_FILE);
 	if ((t->t == TASK_COPY || t->t == TASK_MOVE) && Q) {
-		char new_path[PATH_MAX];
+		char new_path[PATH_BUF_SIZE];
 		build_new_path(t->tw.cpath, t->src, t->dst,
 				t->sources.str[t->current_source],
 				t->renamed.str[t->current_source],
@@ -237,15 +233,15 @@ static int _copy_some(struct task* const t,
 void build_new_path(const char* const path, const char* const wd,
 		const char* const dst, const char* const oldname,
 		const char* const newname, char* const result) {
-	strncpy(result, path, PATH_MAX);
+	strncpy(result, path, PATH_BUF_SIZE);
 	if (newname) {
-		const size_t dst_len = strnlen(dst, PATH_MAX);
-		const size_t newname_len = strnlen(newname, NAME_MAX);
+		const size_t dst_len = strnlen(dst, PATH_MAX_LEN);
+		const size_t newname_len = strnlen(newname, NAME_MAX_LEN);
 		char* _dst = malloc(dst_len+1+newname_len+1);
 		strncpy(_dst, dst, dst_len+1);
 		append_dir(_dst, newname);
-		const size_t wd_len = strnlen(wd, PATH_MAX);
-		const size_t oldname_len = strnlen(oldname, NAME_MAX);
+		const size_t wd_len = strnlen(wd, PATH_MAX_LEN);
+		const size_t oldname_len = strnlen(oldname, NAME_MAX_LEN);
 		char* _wd = malloc(wd_len+1+oldname_len+1);
 		strncpy(_wd, wd, wd_len+1);
 		append_dir(_wd, oldname);
@@ -307,10 +303,10 @@ static int _stat_file(struct tree_walk* const tw) {
 
 int tree_walk_start(struct tree_walk* const tw,
 		const char* const path, const bool tl) {
-	tw->cpath = malloc(PATH_MAX);
-	strncpy(tw->cpath, path, PATH_MAX);
+	tw->cpath = malloc(PATH_BUF_SIZE);
+	strncpy(tw->cpath, path, PATH_BUF_SIZE);
 	tw->tl = tl;
-	tw->dt = calloc(1, sizeof(struct dirtree));
+	tw->dt = calloc(1, sizeof(struct dirtree)); // TODO valgrind says it leaks
 	return _stat_file(tw);
 }
 
@@ -500,8 +496,8 @@ static int _at_step(struct task* const t, int* const c,
 
 char* current_source_path(struct task* const t) {
 	const char* source = t->sources.str[t->current_source];
-	const size_t src_len = strnlen(t->src, PATH_MAX);
-	const size_t source_len = strnlen(source, NAME_MAX);
+	const size_t src_len = strnlen(t->src, PATH_MAX_LEN);
+	const size_t source_len = strnlen(source, NAME_MAX_LEN);
 	const size_t path_len = src_len+1+source_len;
 	char* path = malloc(path_len+1);
 	memcpy(path, t->src, path_len+1);
@@ -510,7 +506,7 @@ char* current_source_path(struct task* const t) {
 }
 
 void task_action_copyremove(struct task* const t, int* const c) {
-	char new_path[PATH_MAX];
+	char new_path[PATH_BUF_SIZE];
 	char buf[BUFSIZ];
 	if ((t->err = _at_step(t, c, new_path, buf, sizeof(buf)))) {
 		return;

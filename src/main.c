@@ -49,7 +49,7 @@ static char* get_editor(void) {
 }
 
 static int open_file_with(char* const p, char* const f) {
-	char exeimg[PATH_MAX];
+	char exeimg[PATH_BUF_SIZE];
 	strcpy(exeimg, "/usr/bin");
 	append_dir(exeimg, p);
 	char* const arg[] = { exeimg, f, NULL };
@@ -71,9 +71,9 @@ static void open_selected_with(struct ui* const i, char* const w) {
 }
 
 inline static void open_find(struct ui* const i) {
-	char t[NAME_MAX+1];
+	char t[NAME_BUF_SIZE];
 	char* t_top = t;
-	memset(t, 0, NAME_MAX+1);
+	memset(t, 0, sizeof(t));
 	i->prch = '/';
 	i->prompt = t;
 	ui_draw(i);
@@ -81,7 +81,7 @@ inline static void open_find(struct ui* const i) {
 	const fnum_t S = i->pv->selection;
 	const fnum_t N = i->pv->num_files;
 	for (;;) {
-		r = fill_textbox(i, t, &t_top, NAME_MAX);
+		r = fill_textbox(i, t, &t_top, NAME_MAX_LEN);
 		if (!r) {
 			break;
 		}
@@ -246,8 +246,8 @@ inline static void _rename(struct ui* const i) {
 		}
 	} while (unsolved);
 	// TODO conflicts_with_existing(i->pv, &rf));
-	char opath[PATH_MAX+1];
-	char npath[PATH_MAX+1];
+	char opath[PATH_BUF_SIZE];
+	char npath[PATH_BUF_SIZE];
 	if (blank_lines(&rf)) {
 		failed(i, "rename", 0, "file contains blank lines");
 	}
@@ -260,8 +260,8 @@ inline static void _rename(struct ui* const i) {
 	else {
 		for (fnum_t f = 0; f < sf.len; ++f) {
 			if (!strcmp(sf.str[f], rf.str[f])) continue;
-			strncpy(opath, i->pv->wd, PATH_MAX);
-			strncpy(npath, i->pv->wd, PATH_MAX);
+			strncpy(opath, i->pv->wd, PATH_BUF_SIZE);
+			strncpy(npath, i->pv->wd, PATH_BUF_SIZE);
 			if (((err = EINVAL, contains(rf.str[f], "/"))
 			  || (err = append_dir(opath, sf.str[f]))
 			  || (err = append_dir(npath, rf.str[f]))
@@ -284,9 +284,9 @@ inline static void _cd(struct ui* const i) {
 	// TODO
 	int err = 0;
 	struct stat s;
-	char* path = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
-	char* cdp = calloc(PATH_MAX+1, sizeof(char));
-	if (prompt(i, cdp, cdp, PATH_MAX)
+	char* path = strncpy(malloc(PATH_BUF_SIZE), i->pv->wd, PATH_BUF_SIZE);
+	char* cdp = calloc(PATH_BUF_SIZE, sizeof(char));
+	if (prompt(i, cdp, cdp, PATH_MAX_LEN)
 	 || (err = enter_dir(path, cdp))
 	 || (err = ENOENT, access(path, F_OK))
 	 || (stat(path, &s) ? (err = errno) : 0)
@@ -294,7 +294,7 @@ inline static void _cd(struct ui* const i) {
 		if (err) failed(i, "cd", err, NULL);
 	}
 	else {
-		strncpy(i->pv->wd, path, PATH_MAX);
+		strncpy(i->pv->wd, path, PATH_BUF_SIZE);
 		if ((err = file_view_scan_dir(i->pv))) {
 			failed(i, "directory scan", err, NULL);
 		}
@@ -313,7 +313,7 @@ inline static void _mkdir(struct ui* const i) {
 	file_to_list(tmpfd, &files);
 	for (fnum_t f = 0; f < files.len; ++f) {
 		if (!files.str[f]) continue; // Blank lines are ignored
-		path = strncpy(malloc(PATH_MAX+1), i->pv->wd, PATH_MAX);
+		path = strncpy(malloc(PATH_BUF_SIZE), i->pv->wd, PATH_BUF_SIZE);
 		if (((err = EINVAL, contains(files.str[f], "/"))
 		 || (err = append_dir(path, files.str[f]))
 		 || (mkdir(path, MKDIR_DEFAULT_PERM) ? (err = errno) : 0))
@@ -372,8 +372,8 @@ static inline void _mklnk(struct ui* const i) {
 	int tmpfd = mkstemp(tmpn);
 	struct string_list sf = { NULL, 0 };
 	file_view_selected_to_list(i->pv, &sf);
-	char target[PATH_MAX];
-	char slpath[PATH_MAX];
+	char target[PATH_BUF_SIZE];
+	char slpath[PATH_BUF_SIZE];
 	strcpy(target, i->pv->wd);
 	strcpy(slpath, i->sv->wd);
 	for (fnum_t f = 0; f < sf.len; ++f) {
@@ -430,30 +430,30 @@ static void process_input(struct ui* const i, struct task* const t) {
 		break;
 	case CMD_CHOWN:
 		/* TODO in $VISUAL */
-		name = calloc(LOGIN_NAME_MAX+1, sizeof(char));
-		if (!prompt(i, name, name, LOGIN_NAME_MAX)) {
+		name = calloc(LOGIN_BUF_SIZE, sizeof(char));
+		if (!prompt(i, name, name, LOGIN_MAX_LEN)) {
 			errno = 0;
 			struct passwd* pwd = getpwnam(name);
 			if (!pwd) failed(i, "chown", 0,
 					"Such user does not exist");
 			else {
 				i->o[1] = pwd->pw_uid;
-				strncpy(i->user, pwd->pw_name, LOGIN_NAME_MAX);
+				strncpy(i->user, pwd->pw_name, LOGIN_BUF_SIZE);
 			}
 		}
 		free(name);
 		break;
 	case CMD_CHGRP:
 		/* TODO in $VISUAL */
-		name = calloc(LOGIN_NAME_MAX+1, sizeof(char));
-		if (!prompt(i, name, name, LOGIN_NAME_MAX)) {
+		name = calloc(LOGIN_BUF_SIZE, sizeof(char));
+		if (!prompt(i, name, name, LOGIN_BUF_SIZE)) {
 			errno = 0;
 			struct group* grp = getgrnam(name);
 			if (!grp) failed(i, "chgrp", 0,
 					"Such group does not exist");
 			else {
 				i->g[1] = grp->gr_gid;
-				strncpy(i->group, grp->gr_name, LOGIN_NAME_MAX);
+				strncpy(i->group, grp->gr_name, LOGIN_BUF_SIZE);
 			}
 		}
 		free(name);
@@ -544,7 +544,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		break;
 	case CMD_DUP_PANEL:
 		// TODO
-		strncpy(i->sv->wd, i->pv->wd, PATH_MAX);
+		strncpy(i->sv->wd, i->pv->wd, PATH_BUF_SIZE);
 		if ((err = file_view_scan_dir(i->sv))) {
 			delete_file_list(i->sv);
 			file_view_up_dir(i->sv);
@@ -854,13 +854,13 @@ inline static int _init_wd(struct file_view fvs[2], char* const init_wd[2]) {
 	int e;
 	for (int v = 0; v < 2; ++v) {
 		const char* const d = (init_wd[v] ? init_wd[v] : "");
-		if (!getcwd(fvs[v].wd, PATH_MAX)) {
+		if (!getcwd(fvs[v].wd, PATH_BUF_SIZE)) {
 			memcpy(fvs[v].wd, "/", 2);
 		}
 		else if ((e = enter_dir(fvs[v].wd, d))) {
 			return e;
 		}
-		const size_t s = strnlen(fvs[v].wd, PATH_MAX)-1;
+		const size_t s = strnlen(fvs[v].wd, PATH_MAX_LEN)-1;
 		if (s && fvs[v].wd[s] == '/') {
 			fvs[v].wd[s] = 0;
 		}

@@ -231,8 +231,8 @@ static const struct theme_attrs theme_scheme[THEME_ELEM_NUM] = {
 	[THEME_ENTRY_DIR_SEL] = { ATTR_BLACK, ATTR_CYAN, { 0, 0, 0 }, { 0, 0, 0 } },
 	[THEME_ENTRY_SOCK_UNS] = { ATTR_GREEN, ATTR_BLACK, { 0, 0, 0 }, { 0, 0, 0 } },
 	[THEME_ENTRY_SOCK_SEL] = { ATTR_BLACK, ATTR_GREEN, { 0, 0, 0 }, { 0, 0, 0 } },
-	[THEME_ENTRY_LNK_UNS] = { ATTR_BLUE, ATTR_BLACK, { 0, 0, 0 }, { 0, 0, 0 } },
-	[THEME_ENTRY_LNK_SEL] = { ATTR_BLACK, ATTR_BLUE, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_ENTRY_LNK_UNS] = { ATTR_CYAN, ATTR_BLACK, { 0, 0, 0 }, { 0, 0, 0 } },
+	[THEME_ENTRY_LNK_SEL] = { ATTR_BLACK, ATTR_CYAN, { 0, 0, 0 }, { 0, 0, 0 } },
 	//[THEME_ENTRY_LNK_PATH] = { 0, COLOR_WHITE, COLOR_BLACK },
 	//[THEME_ENTRY_LNK_PATH_INV] = { 0, COLOR_RED, COLOR_BLACK },
 
@@ -407,16 +407,16 @@ static const char* const cmd_help[] = {
 	[CMD_QUIT] = "Quit hund.",
 	[CMD_HELP] = "Display help screen.",
 
-	[CMD_COPY] = "Copy highlighted file to the other directory.",
-	[CMD_MOVE] = "Move highlighted file to the other directory.",
-	[CMD_REMOVE] = "Remove highlighted file.",
+	[CMD_COPY] = "Copy selected file to the other directory.",
+	[CMD_MOVE] = "Move selected file to the other directory.",
+	[CMD_REMOVE] = "Remove selected file.",
 	[CMD_CREATE_DIR] = "Create new directories.",
 	[CMD_RENAME] = "Rename selected files.",
 
-	[CMD_LINK] = "Create links to highlighted files.",
+	[CMD_LINK] = "Create symlinks to selected files.",
 
 	[CMD_UP_DIR] = "Go up in directory tree.",
-	[CMD_ENTER_DIR] = "Enter highlighted directory.",
+	[CMD_ENTER_DIR] = "Enter selected directory.",
 
 	[CMD_ENTRY_UP] = "Go to previous entry.",
 	[CMD_ENTRY_DOWN] = "Go to next entry.",
@@ -436,7 +436,7 @@ static const char* const cmd_help[] = {
 	[CMD_SWITCH_PANEL] = "Switch active panel.",
 	[CMD_DUP_PANEL] = "Open current directory in the other panel.",
 
-	[CMD_DIR_VOLUME] = "Calcualte volume of highlighted directory.",
+	[CMD_DIR_VOLUME] = "Calcualte volume of selected directory.",
 	[CMD_TOGGLE_HIDDEN] = "Toggle between hiding/showing hidden files.",
 
 	[CMD_SORT_REVERSE] = "Switch between ascending/descending sorting.",
@@ -448,7 +448,7 @@ static const char* const cmd_help[] = {
 
 	[CMD_FIND] = "Search for files in current directory.",
 
-	[CMD_CHMOD] = "Change permissions of highlighted file.",
+	[CMD_CHMOD] = "Change permissions of selected files.",
 	[CMD_CHANGE] = "Apply changes and return.",
 	[CMD_RETURN] = "Abort changes and return.",
 	[CMD_CHOWN] = "Change owner of file.",
@@ -587,8 +587,8 @@ struct ui {
 	gid_t g[2];
 	char perms[10];
 	char time[TIME_SIZE];
-	char user[LOGIN_NAME_MAX+1];
-	char group[LOGIN_NAME_MAX+1];
+	char user[LOGIN_BUF_SIZE];
+	char group[LOGIN_BUF_SIZE];
 };
 
 void ui_init(struct ui* const, struct file_view* const,

@@ -62,6 +62,7 @@ void ui_init(struct ui* const i, struct file_view* const pv,
 	i->helpy = 0;
 	i->run = i->ui_needs_refresh = true;
 	i->ili = 0;
+	memset(&i->B, 0, sizeof(struct append_buffer));
 	memset(i->il, 0, INPUT_LIST_LENGTH*sizeof(struct input));
 	i->kml = default_mapping_length;
 	i->mks = calloc(default_mapping_length, sizeof(unsigned short));
@@ -124,7 +125,7 @@ static void _pathbars(struct ui* const i) {
 		}
 		else {
 			padding = (i->pw[p]-2) - wdw[p];
-			wdl = strnlen(wd[p], PATH_MAX);
+			wdl = strnlen(wd[p], PATH_MAX_LEN);
 		}
 		fill(&i->B, ' ', 1);
 		append(&i->B, wd[p], wdl);
@@ -146,8 +147,8 @@ static void _entry(struct ui* const i, const struct file_view* const fv,
 	// THeme ELement
 	const enum theme_element thel = fsym + (hl ? 1 : 0);
 
-	char name[NAME_MAX+1];
-	cut_unwanted(cfr->file_name, name, '.', NAME_MAX+1);
+	char name[NAME_BUF_SIZE];
+	cut_unwanted(cfr->file_name, name, '.', NAME_BUF_SIZE);
 
 	char sbuf[SIZE_BUF_SIZE];
 	pretty_size(cfr->s.st_size, sbuf);
@@ -225,19 +226,19 @@ static fnum_t _start_search_index(const struct file_view* const s,
 /* PUG = Permissions User Group */
 static void stringify_pug(const mode_t m, const uid_t u, const gid_t g,
 		char perms[10],
-		char user[LOGIN_NAME_MAX+1],
-		char group[LOGIN_NAME_MAX+1]) {
+		char user[LOGIN_BUF_SIZE],
+		char group[LOGIN_BUF_SIZE]) {
 	perms[0] = 0;
 	user[0] = 0;
 	group[0] = 0;
 	const struct passwd* const pwd = getpwuid(u);
 	const struct group* const grp = getgrgid(g);
 
-	if (pwd) strncpy(user, pwd->pw_name, LOGIN_NAME_MAX+1);
-	else snprintf(user, LOGIN_NAME_MAX+1, "uid:%u", u);
+	if (pwd) strncpy(user, pwd->pw_name, LOGIN_BUF_SIZE);
+	else snprintf(user, LOGIN_BUF_SIZE, "uid:%u", u);
 
-	if (grp) strncpy(group, grp->gr_name, LOGIN_NAME_MAX+1);
-	else snprintf(group, LOGIN_NAME_MAX+1, "gid:%u", g);
+	if (grp) strncpy(group, grp->gr_name, LOGIN_BUF_SIZE);
+	else snprintf(group, LOGIN_BUF_SIZE, "gid:%u", g);
 
 	switch (m & S_IFMT) {
 	case S_IFBLK: perms[0] = 'b'; break;
@@ -299,9 +300,9 @@ static void _statusbar(struct ui* const i) {
 	fill(&i->B, ' ', 1);
 	append(&i->B, status, n);
 	fill(&i->B, ' ', padding);
-	append(&i->B, i->user, strnlen(i->user, LOGIN_NAME_MAX));
+	append(&i->B, i->user, strnlen(i->user, LOGIN_MAX_LEN));
 	fill(&i->B, ' ', 1);
-	append(&i->B, i->group, strnlen(i->group, LOGIN_NAME_MAX));
+	append(&i->B, i->group, strnlen(i->group, LOGIN_MAX_LEN));
 	fill(&i->B, ' ', 1);
 	append(&i->B, &i->perms[0], 1);
 	for (size_t p = 1; p < 10; ++p) {
@@ -489,6 +490,7 @@ static void _bottombar(struct ui* const i) {
 
 void ui_draw(struct ui* const i) {
 	i->B.top = 0;
+	memset(i->B.buf, 0, i->B.capacity);
 	append(&i->B, CSI_CURSOR_HIDE);
 	append(&i->B, CSI_CURSOR_TOP_LEFT);
 	if (i->m == MODE_HELP) {
@@ -556,8 +558,8 @@ int chmod_open(struct ui* const i, char* const path) {
 	i->perm[0] = i->perm[1] = s.st_mode;
 	i->path = path;
 	i->m = MODE_CHMOD;
-	strncpy(i->user, pwd->pw_name, LOGIN_NAME_MAX+1);
-	strncpy(i->group, grp->gr_name, LOGIN_NAME_MAX+1);
+	strncpy(i->user, pwd->pw_name, LOGIN_BUF_SIZE);
+	strncpy(i->group, grp->gr_name, LOGIN_BUF_SIZE);
 	i->ui_needs_refresh = true;
 	return 0;
 }

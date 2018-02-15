@@ -44,6 +44,15 @@
 	#define LOGIN_NAME_MAX _SC_LOGIN_NAME_MAX
 #endif
 
+#define PATH_BUF_SIZE (PATH_MAX)
+#define PATH_MAX_LEN (PATH_MAX-1)
+
+#define NAME_BUF_SIZE (NAME_MAX+1)
+#define NAME_MAX_LEN (NAME_MAX)
+
+#define LOGIN_BUF_SIZE (LOGIN_NAME_MAX+1)
+#define LOGIN_MAX_LEN (LOGIN_NAME_MAX)
+
 /* From LSB to MSB, by bit index */
 static const char* const mode_bit_meaning[] = {
 	"execute/sears by others",

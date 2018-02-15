@@ -69,7 +69,8 @@ int scan_dir(const char* const wd, struct file_record*** const fl,
 	int err = 0;
 	DIR* dir = opendir(wd);
 	if (!dir) return errno;
-	char fpath[PATH_MAX];
+	char fpath[PATH_BUF_SIZE];
+	memset(fpath, 0, sizeof(fpath));
 	struct dirent* de;
 	while ((de = readdir(dir)) != NULL) {
 		*nf += 1;
@@ -102,7 +103,7 @@ int scan_dir(const char* const wd, struct file_record*** const fl,
 		}
 		(*fl)[gf] = nfr;
 		gf += 1;
-		const size_t namelen = strnlen(de->d_name, NAME_MAX);
+		const size_t namelen = strnlen(de->d_name, NAME_MAX_LEN);
 		nfr->file_name = malloc(namelen+1);
 		nfr->dir_volume = -1;
 		nfr->selected = false;
@@ -113,7 +114,7 @@ int scan_dir(const char* const wd, struct file_record*** const fl,
 			break;
 		}
 		strncpy(nfr->file_name, de->d_name, namelen+1);
-		strncpy(fpath, wd, PATH_MAX);
+		strncpy(fpath, wd, PATH_BUF_SIZE);
 		if ((err = append_dir(fpath, nfr->file_name))
 		   || lstat(fpath, &nfr->s)) {
 			err = errno; // TODO
@@ -145,8 +146,8 @@ int link_copy(const char* const wd,
 	if (lstat(src, &src_s)) return errno;
 	if (!S_ISLNK(src_s.st_mode)) return EINVAL;
 
-	char lpath[PATH_MAX+1];
-	const ssize_t lpath_len = readlink(src, lpath, PATH_MAX);
+	char lpath[PATH_BUF_SIZE];
+	const ssize_t lpath_len = readlink(src, lpath, sizeof(lpath));
 	if (lpath_len == -1) return errno;
 	lpath[lpath_len] = 0;
 	if (access(lpath, F_OK)) return ENOENT;
@@ -155,7 +156,7 @@ int link_copy(const char* const wd,
 	}
 	else {
 		const size_t src_dir_off = current_dir_i(src)-1;
-		const size_t src_dir_len = strnlen(src+src_dir_off, PATH_MAX);
+		const size_t src_dir_len = strnlen(src+src_dir_off, PATH_MAX_LEN);
 		char* target = malloc(src_dir_len+lpath_len+1);
 		strncpy(target, src, src_dir_len);
 		target[src_dir_off] = 0;
@@ -172,19 +173,19 @@ int link_copy(const char* const wd,
 		}
 
 		const size_t dst_dir_off = current_dir_i(dst)-1;
-		const size_t dst_dir_len = strnlen(dst+dst_dir_off, PATH_MAX);
+		const size_t dst_dir_len = strnlen(dst+dst_dir_off, PATH_MAX_LEN);
 		char* _dst = malloc(dst_dir_len+1);
 		strncpy(_dst, dst, dst_dir_off);
 		_dst[dst_dir_off] = 0;
 
-		char newlpath[PATH_MAX+1];
-		newlpath[0] = 0;
+		char newlpath[PATH_BUF_SIZE];
+		memset(newlpath, 0, sizeof(newlpath));
 
 		while (!contains(target, _dst)) {
 			up_dir(_dst);
 			strncat(newlpath, "../", 4);
 		}
-		strcat(newlpath, target+strnlen(_dst, PATH_MAX)+1); // TODO
+		strcat(newlpath, target+strnlen(_dst, PATH_MAX_LEN)+1); // TODO
 		free(_dst);
 		free(target);
 		return (symlink(newlpath, dst) ? errno : 0);
@@ -193,8 +194,8 @@ int link_copy(const char* const wd,
 }
 
 int link_copy_raw(const char* const src, const char* const dst) {
-	char lpath[PATH_MAX+1];
-	const ssize_t ll = readlink(src, lpath, PATH_MAX);
+	char lpath[PATH_BUF_SIZE];
+	const ssize_t ll = readlink(src, lpath, sizeof(lpath));
 	if (ll == -1) return errno;
 	lpath[ll] = 0;
 	return (symlink(lpath, dst) ? errno : 0);
@@ -238,10 +239,10 @@ void pretty_size(off_t s, char* const buf) {
  * returns 0 if succesful or dir is empty string
  */
 int append_dir(char* const path, const char* const dir) {
-	const size_t dl = strnlen(dir, NAME_MAX);
+	const size_t dl = strnlen(dir, NAME_MAX_LEN);
 	if (!dl) return 0;
-	const size_t pl = strnlen(path, PATH_MAX);
-	if (pl+2+dl > PATH_MAX) return ENAMETOOLONG;
+	const size_t pl = strnlen(path, PATH_MAX_LEN);
+	if (pl+2+dl > PATH_MAX_LEN) return ENAMETOOLONG;
 	if (memcmp(path, "/", 2)) {
 		strcat(path, "/");
 	}
@@ -257,22 +258,22 @@ int enter_dir(char* const path, const char* const dir) {
 	if (!path_is_relative(dir)) {
 		if (dir[0] == '~') {
 			struct passwd* pwd = getpwuid(geteuid());
-			strncpy(path, pwd->pw_dir, PATH_MAX);
-			const size_t pwl = strnlen(pwd->pw_dir, PATH_MAX);
-			strncat(path, dir+1, PATH_MAX-pwl);
+			strncpy(path, pwd->pw_dir, PATH_BUF_SIZE);
+			const size_t pwl = strnlen(pwd->pw_dir, PATH_MAX_LEN);
+			strncat(path, dir+1, PATH_BUF_SIZE-pwl);
 		}
 		else {
-			strncpy(path, dir, PATH_MAX);
+			strncpy(path, dir, PATH_BUF_SIZE);
 		}
 		return 0;
 	}
 	const char* a = dir;
 	const char* b;
-	size_t plen = strnlen(path, PATH_MAX);
-	char P[PATH_MAX];
+	size_t plen = strnlen(path, PATH_MAX_LEN);
+	char P[PATH_BUF_SIZE];
 	memcpy(P, path, plen+1);
 	size_t ns = 0; // Number of Slashes
-	for (size_t i = 0; i < strnlen(dir, PATH_MAX)+1; ++i) {
+	for (size_t i = 0; i < strnlen(dir, PATH_MAX_LEN)+1; ++i) {
 		if (dir[i] == '/') ns += 1;
 	}
 	for (size_t i = 0; i < ns+1; ++i) {
@@ -281,15 +282,15 @@ int enter_dir(char* const path, const char* const dir) {
 		if (!memcmp(a, ".", b-a));
 		else if (!memcmp(a, "..", b-a)) {
 			up_dir(P);
-			plen = strnlen(P, PATH_MAX);
+			plen = strnlen(P, PATH_MAX_LEN);
 		}
 		else {
-			if (plen + 1 + (b-a) >= PATH_MAX) return ENAMETOOLONG;
+			if (plen + 1 + (b-a) >= PATH_MAX_LEN) return ENAMETOOLONG;
 			if (P[plen-1] != '/') {
 				strncat(P, "/", 2);
 			}
 			strncat(P, a, b-a);
-			plen = strnlen(P, PATH_MAX);
+			plen = strnlen(P, PATH_MAX_LEN);
 		}
 		a = b+1;
 	}
@@ -305,7 +306,7 @@ int enter_dir(char* const path, const char* const dir) {
  */
 int up_dir(char* const path) {
 	if (!strncmp(path, "/", 2)) return -1;
-	int i = strnlen(path, PATH_MAX);
+	int i = strnlen(path, PATH_MAX_LEN);
 	for (; i > 0 && path[i] != '/'; --i) {
 		path[i] = 0;
 	}
@@ -329,7 +330,7 @@ bool path_is_relative(const char* const path) {
  * If cannot be prettified, returns 0
  */
 int prettify_path_i(const char* const path, const char* const home) {
-	const size_t hlen = strnlen(home, PATH_MAX);
+	const size_t hlen = strnlen(home, PATH_MAX_LEN);
 	if (!memcmp(path, home, hlen)) {
 		return hlen;
 	}
@@ -342,7 +343,7 @@ int prettify_path_i(const char* const path, const char* const home) {
  * where current dir's name starts
  */
 int current_dir_i(const char* const path) {
-	const int plen = strnlen(path, PATH_MAX);
+	const int plen = strnlen(path, PATH_MAX_LEN);
 	int i = plen-1; // i will point last slash in path
 	while (path[i] != '/' && i >= 0) {
 		i -= 1;
@@ -354,10 +355,10 @@ int current_dir_i(const char* const path) {
  * Finds SubString at the begining of STRing and changes it ti RepLacement
  */
 bool substitute(char* const str, const char* const SS, const char* const R) {
-	const size_t ss_l = strnlen(SS, PATH_MAX);
-	const size_t str_l = strnlen(str, PATH_MAX);
+	const size_t ss_l = strnlen(SS, PATH_MAX_LEN);
+	const size_t str_l = strnlen(str, PATH_MAX_LEN);
 	if (ss_l > str_l || memcmp(str, SS, ss_l)) return false;
-	const size_t repl_l = strnlen(R, PATH_MAX);
+	const size_t repl_l = strnlen(R, PATH_MAX_LEN);
 	memmove(str+repl_l, str+ss_l, str_l-ss_l+1);
 	memcpy(str, R, repl_l);
 	return true;
@@ -376,11 +377,11 @@ size_t imb(const char* a, const char* b) {
 
 /* Checks if STRing contains SUBString */
 bool contains(const char* const str, const char* const subs) {
-	const size_t subs_len = strnlen(subs, PATH_MAX);
-	const size_t str_len = strnlen(str, PATH_MAX);
+	const size_t subs_len = strnlen(subs, PATH_MAX_LEN);
+	const size_t str_len = strnlen(str, PATH_MAX_LEN);
 	if (subs_len > str_len) return false;
 	if (subs_len == str_len) return !memcmp(str, subs, str_len);
-	for (size_t j = 0; strnlen(str+j, PATH_MAX) >= subs_len; ++j) {
+	for (size_t j = 0; strnlen(str+j, PATH_MAX_LEN) >= subs_len; ++j) {
 		if (subs_len == imb(str+j, subs)) return true;
 	}
 	return false;
@@ -390,7 +391,7 @@ char* list_push(struct string_list* const list, const char* const s) {
 	void* tmp = realloc(list->str, (list->len+1) * sizeof(char*));
 	if (!tmp) return NULL;
 	list->str = tmp;
-	const size_t slen = strnlen(s, NAME_MAX);
+	const size_t slen = strnlen(s, NAME_MAX_LEN);
 	list->str[list->len] = malloc(slen+1); // TODO
 	memcpy(list->str[list->len], s, slen+1);
 	list->str[list->len][slen] = 0;
@@ -408,14 +409,14 @@ char* list_push(struct string_list* const list, const char* const s) {
 int file_to_list(const int fd, struct string_list* const list) {
 	list->str = NULL;
 	list->len = 0;
-	char name[NAME_MAX+1];
+	char name[NAME_BUF_SIZE];
 	size_t nlen = 0, top = 0;
 	ssize_t rd = 0;
 	char* nl;
 	if (lseek(fd, 0, SEEK_SET) == -1) return errno;
 	memset(name, 0, sizeof(name));
 	for (;;) {
-		rd = read(fd, name+top, NAME_MAX+1-top);
+		rd = read(fd, name+top, NAME_BUF_SIZE-top);
 		if (rd == -1) {
 			int e = errno;
 			free_list(list);
@@ -443,7 +444,7 @@ int file_to_list(const int fd, struct string_list* const list) {
 		else {
 			list->str[list->len] = NULL;
 		}
-		top = NAME_MAX+1-(nlen+1);
+		top = NAME_BUF_SIZE-(nlen+1);
 		memmove(name, name+nlen+1, top);
 		memset(name+top, 0, nlen+1);
 		list->len += 1;
@@ -453,9 +454,9 @@ int file_to_list(const int fd, struct string_list* const list) {
 
 int list_to_file(const struct string_list* const list, int fd) {
 	if (lseek(fd, 0, SEEK_SET)) return errno;
-	char name[NAME_MAX+1];
+	char name[NAME_BUF_SIZE];
 	for (fnum_t i = 0; i < list->len; ++i) {
-		const size_t len = strnlen(list->str[i], NAME_MAX);
+		const size_t len = strnlen(list->str[i], NAME_MAX_LEN);
 		memcpy(name, list->str[i], len);
 		name[len] = '\n';
 		if (write(fd, name, len+1) <= 0) return errno;

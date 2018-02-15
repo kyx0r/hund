@@ -159,8 +159,8 @@ int file_view_enter_selected_dir(struct file_view* const fv) {
 
 int file_view_up_dir(struct file_view* const fv) {
 	int err;
-	char prevdir[NAME_MAX];
-	strncpy(prevdir, fv->wd+current_dir_i(fv->wd), NAME_MAX);
+	char prevdir[NAME_BUF_SIZE];
+	strncpy(prevdir, fv->wd+current_dir_i(fv->wd), NAME_BUF_SIZE);
 	up_dir(fv->wd);
 	if ((err = file_view_scan_dir(fv))) {
 		delete_file_list(fv);
@@ -300,8 +300,8 @@ void file_view_sort(struct file_view* const fv) {
 
 char* file_view_path_to_selected(struct file_view* const fv) {
 	if (!fv->num_files) return NULL;
-	char* p = malloc(PATH_MAX+1);
-	strncpy(p, fv->wd, PATH_MAX);
+	char* p = malloc(PATH_BUF_SIZE);
+	strncpy(p, fv->wd, PATH_BUF_SIZE);
 	if (enter_dir(p, fv->file_list[fv->selection]->file_name)) {
 		free(p);
 		return NULL;
@@ -310,29 +310,38 @@ char* file_view_path_to_selected(struct file_view* const fv) {
 }
 
 void file_view_sorting_changed(struct file_view* const fv) {
-	char before[NAME_MAX+1];
-	strncpy(before, fv->file_list[fv->selection]->file_name, NAME_MAX+1);
+	char before[NAME_BUF_SIZE];
+	strncpy(before, fv->file_list[fv->selection]->file_name, NAME_BUF_SIZE);
 	file_view_sort(fv);
 	file_highlight(fv, before);
 }
 
 /*
  * If there is no selection, the highlighted file is selected
- * TODO optimize
  */
 void file_view_selected_to_list(struct file_view* const fv,
 		struct string_list* const list) {
+	// TODO empty dir
 	if (!fv->num_selected) {
+		struct file_record* const fr = hfr(fv);
 		fv->num_selected = 1;
-		hfr(fv)->selected = true;
+		fr->selected = true;
+		list->len = 1;
+		list->str = malloc(sizeof(char*));
+		list->str[0] = strdup(fr->file_name);
+		return;
 	}
 	list->len = 0;
 	list->str = calloc(fv->num_selected, sizeof(char*));
 	for (fnum_t f = 0, s = 0;
-	     f < fv->num_files && s < fv->num_selected; ++f) {
+			f < fv->num_files && s < fv->num_selected; ++f) {
 		if (!fv->file_list[f]->selected) continue;
+		const size_t fnl = strnlen(fv->file_list[f]->file_name,
+				NAME_MAX_LEN);
+		list->str[list->len] = malloc(fnl+1);
+		memcpy(list->str[list->len],
+				fv->file_list[f]->file_name, fnl+1);
 		list->len += 1;
-		list->str[list->len-1] = strdup(fv->file_list[f]->file_name);
 		s += 1;
 	}
 }
