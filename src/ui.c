@@ -154,6 +154,7 @@ static void _entry(struct ui* const i, const struct file_view* const fv,
 	pretty_size(cfr->s.st_size, sbuf);
 	const size_t slen = strnlen(sbuf, SIZE_BUF_SIZE-1);
 
+	if (1+SIZE_BUF_SIZE+1 > width) return;
 	const size_t name_allowed = width - (1+SIZE_BUF_SIZE+1);
 	const size_t name_width = utf8_width(name);
 	const size_t name_draw = (name_width < name_allowed
