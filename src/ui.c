@@ -25,6 +25,7 @@
  */
 
 static enum theme_element mode2theme(const mode_t m) {
+	// TODO find a better way
 	switch (m & S_IFMT) {
 	case S_IFBLK: return THEME_ENTRY_BLK_UNS;
 	case S_IFCHR: return THEME_ENTRY_CHR_UNS;
@@ -117,9 +118,9 @@ static void _pathbars(struct ui* const i) {
 	append(&i->B, CSI_CLEAR_LINE);
 	append_theme(&i->B, THEME_PATHBAR);
 	for (size_t p = 0; p < 2; ++p) {
-		size_t padding = 0;
-		size_t wdl;
+		size_t padding, wdl;
 		if (wdw[p] > i->pw[p]-2) {
+			padding = 0;
 			wd[p] += utf8_w2nb(wd[p], wdw[p] - (i->pw[p]-2));
 			wdl = utf8_w2nb(wd[p], i->pw[p]-2);
 		}
@@ -144,8 +145,6 @@ static void _entry(struct ui* const i, const struct file_view* const fv,
 
 	// File SYMbol
 	const enum theme_element fsym = mode2theme(cfr->s.st_mode);
-	// THeme ELement
-	const enum theme_element thel = fsym + (hl ? 1 : 0);
 
 	char name[NAME_BUF_SIZE];
 	cut_unwanted(cfr->file_name, name, '.', NAME_BUF_SIZE);
@@ -168,7 +167,7 @@ static void _entry(struct ui* const i, const struct file_view* const fv,
 		close = ']';
 	}
 
-	append_theme(&i->B, thel);
+	append_theme(&i->B, fsym + (hl ? 1 : 0));
 	fill(&i->B, open, 1);
 	append(&i->B, name, utf8_w2nb(name, name_draw));
 	fill(&i->B, ' ', space);
@@ -229,9 +228,9 @@ static void stringify_pug(const mode_t m, const uid_t u, const gid_t g,
 		char perms[10],
 		char user[LOGIN_BUF_SIZE],
 		char group[LOGIN_BUF_SIZE]) {
-	perms[0] = 0;
-	user[0] = 0;
-	group[0] = 0;
+	memset(perms, 0, 10);
+	memset(user, 0, LOGIN_BUF_SIZE);
+	memset(group, 0, LOGIN_BUF_SIZE);
 	const struct passwd* const pwd = getpwuid(u);
 	const struct group* const grp = getgrgid(g);
 
@@ -241,16 +240,7 @@ static void stringify_pug(const mode_t m, const uid_t u, const gid_t g,
 	if (grp) strncpy(group, grp->gr_name, LOGIN_BUF_SIZE);
 	else snprintf(group, LOGIN_BUF_SIZE, "gid:%u", g);
 
-	switch (m & S_IFMT) {
-	case S_IFBLK: perms[0] = 'b'; break;
-	case S_IFCHR: perms[0] = 'c'; break;
-	case S_IFDIR: perms[0] = 'd'; break;
-	case S_IFIFO: perms[0] = 'p'; break;
-	case S_IFLNK: perms[0] = 'l'; break;
-	case S_IFREG: perms[0] = '-'; break;
-	case S_IFSOCK: perms[0] = 's'; break;
-	default: perms[0] = '-'; break;
-	}
+	perms[0] = mode_type_symbols[(m & S_IFMT) >> S_IFMT_TZERO];
 	memcpy(perms+1, perm2rwx[(m>>6) & 07], 3);
 	memcpy(perms+1+3, perm2rwx[(m>>3) & 07], 3);
 	memcpy(perms+1+3+3, perm2rwx[(m>>0) & 07], 3);
@@ -682,16 +672,14 @@ enum command get_cmd(struct ui* const i) {
  * If text is ready (enter pressed) returns 0,
  * If aborted, returns -1.
  * If keeps gathering, returns 1.
- * Additionally:
- * returns 2 on ^N and -2 on ^P
+ * Unhandled inputs are put into 'o' (if not null) and 2 is returned
  */
 int fill_textbox(struct ui* const I, char* const buf,
-		char** const buftop, const size_t bsize) {
+		char** const buftop, const size_t bsize,
+		struct input* const o) {
 	const struct input i = get_input(I->timeout);
 	if (i.t == I_NONE) return 1;
 	if (IS_CTRL(i, '[') || i.t == I_ESCAPE) return -1;
-	else if (IS_CTRL(i, 'N')) return 2;
-	else if (IS_CTRL(i, 'P')) return -2;
 	else if ((IS_CTRL(i, 'J') || IS_CTRL(i, 'M')) ||
 	         (i.t == I_UTF8 &&
 	         (i.utf[0] == '\n' || i.utf[0] == '\r'))) {
@@ -743,7 +731,8 @@ int fill_textbox(struct ui* const I, char* const buf,
 		}
 	}
 	I->prompt_cursor_pos = utf8_width(buf)-utf8_width(*buftop)+1;
-	return 1;
+	if (o) *o = i;
+	return 2;
 }
 
 int prompt(struct ui* const i, char* const t,
@@ -754,7 +743,7 @@ int prompt(struct ui* const i, char* const t,
 	ui_draw(i);
 	int r;
 	do {
-		r = fill_textbox(i, t, &t_top, t_size);
+		r = fill_textbox(i, t, &t_top, t_size, NULL);
 		ui_draw(i); // TODO only redraw bottombar
 	} while (r && r != -1);
 	i->prompt = NULL;

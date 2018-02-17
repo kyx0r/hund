@@ -36,9 +36,9 @@
  * - Messages may be blocked by other messages
  * - IDEA: Detecting file formats -> display name of a program that
  *     would open highlighted file
- * - IDEA: if finding, offer selecting files
  * - Dir scanning via task?
  * - Dir rescanning should be unified
+ * - When "dereferencing", calculate additional file volume
  */
 
 static char* get_editor(void) {
@@ -70,18 +70,35 @@ static void open_selected_with(struct ui* const i, char* const w) {
 	}
 }
 
+static bool _select_file(struct ui* const i) {
+	struct file_record* fr;
+	if ((fr = hfr(i->pv)) && visible(i->pv, i->pv->selection)) {
+		if ((fr->selected = !fr->selected)) {
+			i->pv->num_selected += 1;
+		}
+		else {
+			i->pv->num_selected -= 1;
+		}
+		return true;
+	}
+	return false;
+}
+
 inline static void open_find(struct ui* const i) {
 	char t[NAME_BUF_SIZE];
 	char* t_top = t;
 	memset(t, 0, sizeof(t));
 	i->prch = '/';
 	i->prompt = t;
-	ui_draw(i);
 	int r;
 	const fnum_t S = i->pv->selection;
 	const fnum_t N = i->pv->num_files;
+	struct input o;
+	fnum_t s = 0; // Start
+	fnum_t e = N-1; // End
 	for (;;) {
-		r = fill_textbox(i, t, &t_top, NAME_MAX_LEN);
+		ui_draw(i);
+		r = fill_textbox(i, t, &t_top, NAME_MAX_LEN, &o);
 		if (!r) {
 			break;
 		}
@@ -89,20 +106,21 @@ inline static void open_find(struct ui* const i) {
 			i->pv->selection = S;
 			break;
 		}
-		else if (r == 2 || r == -2 || t_top != t) {
-			fnum_t s = 0; // Start
-			fnum_t e = N-1; // End
-			if (r == 2 && i->pv->selection < N-1) {
+		else if (r == 2 || t_top != t) {
+			if (IS_CTRL(o, 'V')) {
+				_select_file(i);
+				continue;
+			}
+			else if (IS_CTRL(o, 'N') && i->pv->selection < N-1) {
 				s = i->pv->selection+1;
 				e = N-1;
 			}
-			else if (r == -2 && i->pv->selection > 0) {
+			else if (IS_CTRL(o, 'P') && i->pv->selection > 0) {
 				s = i->pv->selection-1;
 				e = 0;
 			}
-			file_find(i->pv, t, s, e);
 		}
-		ui_draw(i);
+		file_find(i->pv, t, s, e);
 	}
 	i->prompt = NULL;
 }
@@ -339,7 +357,7 @@ void change_sorting(struct ui* const i) {
 	char* top = i->pv->order + strlen(buf);
 	int r;
 	for (;;) {
-		r = fill_textbox(i, buf, &top, FV_ORDER_SIZE);
+		r = fill_textbox(i, buf, &top, FV_ORDER_SIZE, NULL);
 		if (!r) break;
 		else if (r == -1) {
 			memcpy(i->pv->order, old, FV_ORDER_SIZE);
@@ -405,7 +423,6 @@ static inline void _quick_chmod_plus_x(struct ui* const i) {
 static void process_input(struct ui* const i, struct task* const t) {
 	char *path = NULL, *name = NULL;
 	struct file_view* tmp = NULL;
-	struct file_record* fr = NULL; // File Record
 	int err = 0;
 	const enum command cmd = get_cmd(i);
 	switch (cmd) {
@@ -612,13 +629,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		//estimate_volume_for_selected(i->pv);
 		break;
 	case CMD_SELECT_FILE: // TODO
-		if ((fr = hfr(i->pv)) && visible(i->pv, i->pv->selection)) {
-			if ((fr->selected = !fr->selected)) {
-				i->pv->num_selected += 1;
-			}
-			else {
-				i->pv->num_selected -= 1;
-			}
+		if (_select_file(i)) {
 			jump_n_entries(i->pv, 1);
 		}
 		break;
@@ -775,7 +786,6 @@ inline static bool _confirm_removal(struct ui* const i,
 static void task_execute(struct ui* const i, struct task* const t) {
 	// TODO error handling is chaotic
 	task_action ta = NULL;
-	int top;
 	char msg[128]; // TODO
 	static const struct select_option o[] = {
 		{ KUTF8("n"), "no" },
@@ -818,14 +828,10 @@ static void task_execute(struct ui* const i, struct task* const t) {
 		task_progress(i, t, "||");
 		break;
 	case TS_FAILED: // TODO
-		top = snprintf(msg, sizeof(msg),
-				"(%d) %s at",
+		snprintf(msg, sizeof(msg), "(%d) %s. Continue?",
 				t->err, strerror(t->err));
-		snprintf(msg+top, sizeof(msg)-top, "%.*s",
-				(int)utf8_w2nb(t->tw.cpath,
-					sizeof(msg)-top), t->tw.cpath);
-		t->ts = (ui_select(i, msg, o, 2)
-				? TS_RUNNING : TS_FINISHED);
+		t->err = 0;
+		t->ts = (ui_select(i, msg, o, 2) ? TS_RUNNING : TS_FINISHED);
 		break;
 	case TS_FINISHED:
 		i->timeout = -1;

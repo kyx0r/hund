@@ -198,6 +198,18 @@ struct theme_attrs {
 	unsigned char fg_color[3], bg_color[3];
 };
 
+#define S_IFMT_TZERO 12
+// ^ Trailing ZEROes
+static const char mode_type_symbols[] = {
+	[S_IFIFO>>S_IFMT_TZERO] = 'p',
+	[S_IFCHR>>S_IFMT_TZERO] = 'c',
+	[S_IFDIR>>S_IFMT_TZERO] = 'd',
+	[S_IFBLK>>S_IFMT_TZERO] = 'b',
+	[S_IFREG>>S_IFMT_TZERO] = '-',
+	[S_IFLNK>>S_IFMT_TZERO] = 'l',
+	[S_IFSOCK>>S_IFMT_TZERO] = 's',
+};
+
 static const char file_symbols[] = {
 	[THEME_ENTRY_BLK_UNS] = '+',
 	[THEME_ENTRY_CHR_UNS] = '-',
@@ -610,7 +622,7 @@ int ui_select(struct ui* const, const char* const q,
 
 enum command get_cmd(struct ui* const);
 int fill_textbox(struct ui* const, char* const,
-		char** const, const size_t);
+		char** const, const size_t, struct input* const);
 
 int prompt(struct ui* const, char* const, char*, const size_t);
 
