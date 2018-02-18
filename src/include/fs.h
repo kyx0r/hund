@@ -137,7 +137,7 @@ int list_to_file(const struct string_list* const, int);
 void list_copy(struct string_list* const, const struct string_list* const);
 void free_list(struct string_list* const);
 
-bool blank_lines(const struct string_list* const);
+fnum_t blank_lines(const struct string_list* const);
 bool duplicates_on_list(const struct string_list* const);
 
 #endif

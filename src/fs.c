@@ -19,6 +19,15 @@
 
 #include "include/fs.h"
 
+/*
+ * TODO get rid of strcats
+ */
+
+/*
+ * Chmods given file using plus and minus masks
+ * The following should be true: (plus & minus) == 0
+ * (it's not checked)
+ */
 int relative_chmod(const char* const file,
 		const mode_t plus, const mode_t minus) {
 	struct stat s;
@@ -39,6 +48,9 @@ bool same_fs(const char* const a, const char* const b) {
 	return !stat(a, &sa) && !stat(b, &sb) && (sa.st_dev == sb.st_dev);
 }
 
+/*
+ * Cleans up list created by scan_dir()
+ */
 void file_list_clean(struct file_record*** const fl, fnum_t* const nf) {
 	if (!*nf) return;
 	for (fnum_t i = 0; i < *nf; ++i) {
@@ -150,7 +162,7 @@ int link_copy(const char* const wd,
 	const ssize_t lpath_len = readlink(src, lpath, sizeof(lpath));
 	if (lpath_len == -1) return errno;
 	lpath[lpath_len] = 0;
-	if (access(lpath, F_OK)) return ENOENT;
+	if (access(lpath, F_OK)) return errno;
 	if (!path_is_relative(lpath)) {
 		return (symlink(lpath, dst) ? errno : 0);
 	}
@@ -190,15 +202,23 @@ int link_copy(const char* const wd,
 		free(target);
 		return (symlink(newlpath, dst) ? errno : 0);
 	}
-	//return 0; // unreachable
 }
 
+/*
+ * Copies link without recalculating path
+ * Allows dangling pointers
+ * TODO TEST
+ */
 int link_copy_raw(const char* const src, const char* const dst) {
 	char lpath[PATH_BUF_SIZE];
 	const ssize_t ll = readlink(src, lpath, sizeof(lpath));
 	if (ll == -1) return errno;
 	lpath[ll] = 0;
-	return (symlink(lpath, dst) ? errno : 0);
+	if (symlink(lpath, dst)) {
+		int e = errno;
+		if (e != ENOENT) return e;
+	}
+	return 0;
 }
 
 void pretty_size(off_t s, char* const buf) {
@@ -215,19 +235,24 @@ void pretty_size(off_t s, char* const buf) {
 		rest = s;
 		s = 0;
 	}
-	rest *= 1000; // TODO
+	rest *= 1000;
 	rest /= 1024;
 	rest /= 10;
-	char r[2] = { rest / 10, rest % 10 };
-	int top = 0;
-	top += snprintf(buf+top, SIZE_BUF_SIZE-top, "%u", (unsigned)s);
-	if (r[0] || r[1]) { // TODO
-		top += snprintf(buf+top, SIZE_BUF_SIZE-top, ".%c", '0'+r[0]);
+	const char d[3] = { s/100, (s/10)%10, s%10 };
+	const char r[2] = { rest/10, rest%10 };
+	memset(buf, 0, SIZE_BUF_SIZE);
+	size_t top = 0;
+	for (size_t i = 0; i < 3; ++i) {
+		if (d[i] || top || (!top && i == 2)) {
+			buf[top++] = '0'+d[i];
+		}
 	}
-	if (r[1]) {
-		top += snprintf(buf+top, SIZE_BUF_SIZE-top, "%c", '0'+r[1]);
+	if (r[0] || r[1]) {
+		buf[top++] = '.';
+		buf[top++] = '0'+r[0];
+		if (r[1]) buf[top++] = '0'+r[1];
 	}
-	snprintf(buf+top, SIZE_BUF_SIZE-top, "%c", *unit);
+	buf[top] = *unit;
 }
 
 /*
@@ -241,18 +266,19 @@ void pretty_size(off_t s, char* const buf) {
 int append_dir(char* const path, const char* const dir) {
 	const size_t dl = strnlen(dir, NAME_MAX_LEN);
 	if (!dl) return 0;
-	const size_t pl = strnlen(path, PATH_MAX_LEN);
+	size_t pl = strnlen(path, PATH_MAX_LEN);
 	if (pl+2+dl > PATH_MAX_LEN) return ENAMETOOLONG;
 	if (memcmp(path, "/", 2)) {
-		strcat(path, "/");
+		memcpy(path+pl, "/", 2);
+		pl += 1;
 	}
-	strncat(path, dir, dl+1);
+	memcpy(path+pl, dir, dl+1);
 	return 0;
 }
 
 /*
  * Returns ENAMETOOLONG if PATH_MAX would be exceeded; leaves path unchanged
- * TODO PATH_MAX
+ * TODO simplify
  */
 int enter_dir(char* const path, const char* const dir) {
 	if (!path_is_relative(dir)) {
@@ -305,16 +331,14 @@ int enter_dir(char* const path, const char* const dir) {
  * -1 if path == '/'
  */
 int up_dir(char* const path) {
-	if (!strncmp(path, "/", 2)) return -1;
+	if (!memcmp(path, "/", 2)) return -1;
 	int i = strnlen(path, PATH_MAX_LEN);
 	for (; i > 0 && path[i] != '/'; --i) {
 		path[i] = 0;
 	}
 	// At this point i points that last '/'
 	// But if it's root, don't delete it
-	if (i) {
-		path[i] = 0;
-	}
+	if (i) path[i] = 0;
 	return 0;
 }
 
@@ -323,7 +347,6 @@ bool path_is_relative(const char* const path) {
 }
 
 /*
- * Same as current_dir_i()
  * Returns place in buffer, where path after ~ starts
  * So that pretty path is just
  * printf("~%s", path+prettify_path_i(path));
@@ -392,7 +415,7 @@ char* list_push(struct string_list* const list, const char* const s) {
 	if (!tmp) return NULL;
 	list->str = tmp;
 	const size_t slen = strnlen(s, NAME_MAX_LEN);
-	list->str[list->len] = malloc(slen+1); // TODO
+	list->str[list->len] = malloc(slen+1);
 	memcpy(list->str[list->len], s, slen+1);
 	list->str[list->len][slen] = 0;
 	list->len += 1;
@@ -483,14 +506,18 @@ void free_list(struct string_list* const list) {
 	list->len = 0;
 }
 
-bool blank_lines(const struct string_list* const list) {
+fnum_t blank_lines(const struct string_list* const list) {
+	fnum_t n = 0;
 	for (fnum_t i = 0; i < list->len; ++i) {
-		if (!list->str[i]) return true;
+		if (!list->str[i]) n += 1;
 	}
-	return false;
+	return n;
 }
 
-/* Tells if there are duplicates on list */
+/*
+ * Tells if there are duplicates on list
+ * TODO optimize
+ */
 bool duplicates_on_list(const struct string_list* const list) {
 	for (fnum_t f = 0; f < list->len; ++f) {
 		for (fnum_t g = 0; g < list->len; ++g) {
