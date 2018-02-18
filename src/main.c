@@ -39,6 +39,7 @@
  * - Dir scanning via task?
  * - Dir rescanning should be unified
  * - When "dereferencing", calculate additional file volume
+ * - Refine ui behavior for very small window
  */
 
 static char* get_editor(void) {
@@ -88,7 +89,7 @@ inline static void open_find(struct ui* const i) {
 	char t[NAME_BUF_SIZE];
 	char* t_top = t;
 	memset(t, 0, sizeof(t));
-	i->prch = '/';
+	strcpy(i->prch, "/");
 	i->prompt = t;
 	int r;
 	const fnum_t S = i->pv->selection;

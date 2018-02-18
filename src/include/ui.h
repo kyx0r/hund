@@ -559,7 +559,7 @@ struct ui {
 	int ph; // Panel Height
 	int pxoff[2]; // Panel X OFFset
 
-	bool ui_needs_refresh;
+	bool ui_needs_refresh; // TODO find a better way
 	bool run;
 
 	enum mode m;
@@ -567,7 +567,7 @@ struct ui {
 
 	char msg[MSG_BUFFER_SIZE];
 
-	char prch;
+	char prch[8]; // TODO adjust size
 	char* prompt;
 	int prompt_cursor_pos;
 

@@ -55,7 +55,7 @@ void ui_init(struct ui* const i, struct file_view* const pv,
 	i->fvs[1] = i->sv = sv;
 	i->scrw = i->scrh = 0;
 	i->m = MODE_MANAGER;
-	i->prch = ' ';
+	memset(i->prch, 0, sizeof(i->prch));
 	i->prompt = NULL;
 	i->prompt_cursor_pos = -1;
 	i->timeout = -1;
@@ -259,7 +259,6 @@ static void stringify_pug(const mode_t m, const uid_t u, const gid_t g,
 }
 
 static void _statusbar(struct ui* const i) {
-	// TODO segfaults on small width
 	const struct file_record* const _hfr = hfr(i->pv);
 	if (_hfr) {
 		const time_t lt = _hfr->s.st_mtim.tv_sec;
@@ -284,7 +283,13 @@ static void _statusbar(struct ui* const i) {
 	const size_t uw = utf8_width(i->user);
 	const size_t gw = utf8_width(i->group);
 	const size_t sw = uw+1+gw+1+10+1+TIME_SIZE+1;
-	if ((size_t)i->scrw < cw+sw) return; // TODO
+	if ((size_t)i->scrw < cw+sw) {
+		append_theme(&i->B, THEME_STATUSBAR);
+		fill(&i->B, ' ', i->scrw);
+		append_attr(&i->B, ATTR_NORMAL, NULL);
+		append(&i->B, "\r\n", 2);
+		return;
+	}
 	const size_t padding = i->scrw-cw-sw;
 
 	append_theme(&i->B, THEME_STATUSBAR);
@@ -460,11 +465,20 @@ static void _bottombar(struct ui* const i) {
 		i->mt = MSG_NONE;
 	}
 	else if (i->prompt) {
-		// TODO control prompt width
-		fill(&i->B, i->prch, 1);
-		append(&i->B, i->prompt, strlen(i->prompt));
-		const int padding = i->scrw-utf8_width(i->prompt)-1;
-		if (padding > 0) {
+		const size_t aw = utf8_width(i->prch);
+		const size_t pw = utf8_width(i->prompt);
+		size_t padding, prompt_slice;
+		if ((size_t)i->scrw > pw+aw) {
+			padding = i->scrw-(pw+aw);
+			prompt_slice = pw;
+		}
+		else {
+			padding = 0;
+			prompt_slice = i->scrw-aw;
+		}
+		append(&i->B, i->prch, aw);
+		append(&i->B, i->prompt, utf8_w2nb(i->prompt, prompt_slice));
+		if (padding) {
 			fill(&i->B, ' ', padding);
 		}
 	}
@@ -498,8 +512,6 @@ void ui_draw(struct ui* const i) {
 			memset(i->perms, '-', 10);
 			memcpy(i->user, "-", 2);
 			memcpy(i->group, "-", 2);
-			// TODO maybe better just display nothing?
-			// but then _statusbar() must be modified
 		}
 		_pathbars(i);
 		_panels(i);
@@ -518,9 +530,13 @@ void ui_draw(struct ui* const i) {
 		_bottombar(i);
 	}
 	write(STDOUT_FILENO, i->B.buf, i->B.top);
-	if (i->prompt && i->prompt_cursor_pos >= 0) {
+	if (i->prompt && i->prompt_cursor_pos >= 0
+		&& i->prompt_cursor_pos < i->scrw) {
 		write(STDOUT_FILENO, CSI_CURSOR_SHOW);
 		move_cursor(i->scrh, i->prompt_cursor_pos+1);
+	}
+	else {
+		write(STDOUT_FILENO, CSI_CURSOR_HIDE);
 	}
 }
 
@@ -571,7 +587,7 @@ int ui_select(struct ui* const i, const char* const q,
 	i->timeout = -1;
 	int T = 0;
 	char P[500]; // TODO
-	i->prch = ' ';
+	i->prch[0] = 0;
 	i->prompt = P;
 	T += snprintf(P+T, sizeof(P)-T, "%s ", q);
 	for (size_t j = 0; j < oc; ++j) {
@@ -672,7 +688,7 @@ enum command get_cmd(struct ui* const i) {
  * If text is ready (enter pressed) returns 0,
  * If aborted, returns -1.
  * If keeps gathering, returns 1.
- * Unhandled inputs are put into 'o' (if not null) and 2 is returned
+ * Unhandled inputs are put into 'o' (if not NULL) and 2 is returned
  */
 int fill_textbox(struct ui* const I, char* const buf,
 		char** const buftop, const size_t bsize,
@@ -737,7 +753,7 @@ int fill_textbox(struct ui* const I, char* const buf,
 
 int prompt(struct ui* const i, char* const t,
 		char* t_top, const size_t t_size) {
-	i->prch = '>';
+	strcpy(i->prch, ">");
 	i->prompt = t;
 	i->prompt_cursor_pos = 0;
 	ui_draw(i);
