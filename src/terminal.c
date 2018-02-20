@@ -19,7 +19,6 @@
 
 #include "include/terminal.h"
 
-// TODO timeouts may cause problems on remote connections
 ssize_t xread(int fd, void* buf, ssize_t count, int timeout_us) {
 	struct timeval T = { 0, (suseconds_t)timeout_us };
 	fd_set rfds;
@@ -31,6 +30,7 @@ ssize_t xread(int fd, void* buf, ssize_t count, int timeout_us) {
 	ssize_t rd;
 	do {
 		if (timeout_us > 0) {
+			// TODO pselect
 			retval = select(fd+1, &rfds, NULL, NULL, &T);
 			if (retval == -1 || !retval) {
 				FD_CLR(fd, &rfds);
@@ -46,7 +46,7 @@ ssize_t xread(int fd, void* buf, ssize_t count, int timeout_us) {
 static enum input_type which_key(char* const seq) {
 	int i = 0;
 	while (SKM[i].seq != NULL && SKM[i].t != I_NONE) {
-		if (!strcmp(SKM[i].seq, seq)) return SKM[i].t; // TODO FIXME
+		if (!strcmp(SKM[i].seq, seq)) return SKM[i].t;
 		i += 1;
 	}
 	return I_NONE;
@@ -60,8 +60,7 @@ struct input get_input(int timeout_us) {
 	char seq[7];
 	memset(seq, 0, sizeof(seq));
 	if (xread(fd, seq, 1, timeout_us) == 1 && seq[0] == '\x1b') {
-		// this tiny timeout    V enables xread to capture escape key alone
-		if (xread(fd, seq+1, 1, 1) == 1
+		if (xread(fd, seq+1, 1, 500) == 1
 				&& (seq[1] == '[' || seq[1] == 'O')) {
 			if (xread(fd, seq+2, 1, 0) == 1 && isdigit(seq[2])) {
 				xread(fd, seq+3, 1, 0);
@@ -70,7 +69,7 @@ struct input get_input(int timeout_us) {
 		i.t = which_key(seq);
 	}
 	else if (seq[0] == 0x7f) {
-#if defined(__linux__) || defined(__linux) // TODO more
+#if defined(__linux__) || defined(__linux) || defined(linux)
 		i.t = I_BACKSPACE;
 #else
 		i.t = I_DELETE;
