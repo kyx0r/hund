@@ -311,7 +311,9 @@ int enter_dir(char* const path, const char* const dir) {
 			plen = strnlen(P, PATH_MAX_LEN);
 		}
 		else {
-			if (plen + 1 + (b-a) >= PATH_MAX_LEN) return ENAMETOOLONG;
+			if (plen + 1 + (b-a) >= PATH_MAX_LEN) {
+				return ENAMETOOLONG;
+			}
 			if (P[plen-1] != '/') {
 				strncat(P, "/", 2);
 			}
@@ -430,8 +432,7 @@ char* list_push(struct string_list* const list, const char* const s) {
  * TODO support for other line endings
  */
 int file_to_list(const int fd, struct string_list* const list) {
-	list->str = NULL;
-	list->len = 0;
+	free_list(list);
 	char name[NAME_BUF_SIZE];
 	size_t nlen = 0, top = 0;
 	ssize_t rd = 0;
