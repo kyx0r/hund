@@ -27,7 +27,7 @@
 
 typedef unsigned int codepoint_t;
 
-void utf8_cp2b(char* const, const codepoint_t);
+void utf8_cp2b(char* const, codepoint_t);
 codepoint_t utf8_b2cp(const char* const);
 size_t utf8_g2nb(const char* const);
 size_t utf8_cp2nb(const codepoint_t);

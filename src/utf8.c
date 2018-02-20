@@ -19,10 +19,17 @@
 
 #include "include/utf8.h"
 
-/* TODO fix some nomenclature mistakes */
-
 /* CodePoint To Bytes */
-void utf8_cp2b(char* const b, const codepoint_t cp) {
+void utf8_cp2b(char* const b, codepoint_t cp) {
+#if 1
+	const size_t nb = utf8_cp2nb(cp);
+	static const unsigned char p[] = { 0x00, 0x7f, 0x1f, 0x0f, 0x07 };
+	static const unsigned char o[] = { 0x00, 0x00, 0xc0, 0xe0, 0xf0 };
+	for (size_t i = nb-1; i; --i, cp >>= 6) {
+		b[i] = 0x80 | (cp & 0x3f);
+	}
+	b[0] = (codepoint_t)o[nb] | (cp & (codepoint_t)p[nb]);
+#else
 	if (cp < (codepoint_t) 0x80) {
 		b[0] = 0x7f & cp;
 	}
@@ -41,11 +48,21 @@ void utf8_cp2b(char* const b, const codepoint_t cp) {
 		b[2] = 0x80 | ((cp >> 6) & 0x00003f);
 		b[3] = 0x80 | (cp & 0x00003f);
 	}
+#endif
 }
 
 /* Bytes To CodePoint */
 codepoint_t utf8_b2cp(const char* const b) {
-	codepoint_t cp = 0;
+	register codepoint_t cp = 0;
+#if 1
+	const size_t nb = utf8_g2nb(b);
+	static const unsigned char p[5] = { 0x00, 0x7f, 0x1f, 0x0f, 0x07 };
+	cp = b[0] & p[nb];
+	for (size_t i = 1; i < nb; ++i) {
+		cp <<= 6;
+		cp |= b[i] & 0x3f;
+	}
+#else
 	if ((b[0] & 0x80) == 0) {
 		cp = b[0];
 	}
@@ -70,6 +87,7 @@ codepoint_t utf8_b2cp(const char* const b) {
 		cp <<= 6;
 		cp |= (b[3] & 0x3f);
 	}
+#endif
 	return cp;
 }
 
@@ -99,7 +117,6 @@ codepoint_t utf8_b2cp(const char* const b) {
  * 11111xxx -> invalid (see impementation)
  */
 size_t utf8_g2nb(const char* const g) {
-	if (!*g) return 0;
 	// Top 5 bits To Length
 	static const char t2l[32] = {
 		1, 1, 1, 1, 1, 1, 1, 1, //00000xxx - 00111xxx
@@ -139,7 +156,10 @@ size_t utf8_width(const char* b) {
 	return g;
 }
 
-/* Calculates how much bytes take will fill given width */
+/*
+ * Width To Number of Bytes
+ * Calculates how much bytes will fill given width
+ */
 size_t utf8_w2nb(const char* const b, size_t w) {
 	size_t r = 0;
 	while (*(b+r) && w > 0) {
@@ -149,7 +169,9 @@ size_t utf8_w2nb(const char* const b, size_t w) {
 	return r;
 }
 
-/* Width till some address in that string */
+/*
+ * Width till some address in that string
+ */
 size_t utf8_wtill(const char* a, const char* const b) {
 	size_t w = 0;
 	while (b - a > 0) {
@@ -189,7 +211,9 @@ void utf8_insert(char* a, const char* const b, const size_t pos) {
 	memcpy(a, b, bl);
 }
 
-/* Remove glyph at index */
+/*
+ * Remove glyph at index
+ */
 void utf8_remove(char* const a, const size_t j) {
 	char* t = a;
 	for (size_t i = 0; i < j; ++i) {
@@ -199,7 +223,9 @@ void utf8_remove(char* const a, const size_t j) {
 	memmove(t, t+rl, strlen(t));
 }
 
-/* Copies only valid utf8 characters and non-control ascii to buf */
+/*
+ * Copies only valid utf8 characters and non-control ascii to buf
+ */
 void cut_unwanted(const char* str, char* buf, const char c, size_t n) {
 	while (*str && n) {
 		const size_t nb = utf8_g2nb(str);
@@ -218,6 +244,9 @@ void cut_unwanted(const char* str, char* buf, const char c, size_t n) {
 	*buf = 0; // null-terminator
 }
 
+/*
+ * Binary search. Determines if the codepoint is in given list.
+ */
 bool cp_in(const codepoint_t r[][2], size_t Z, const codepoint_t cp) {
 	if (cp < r[0][0] || r[Z][1] < cp) return false;
 	size_t A = 0;
