@@ -43,6 +43,9 @@ static enum theme_element mode2theme(const mode_t m) {
 struct ui* global_i;
 static void handle_winch(int sig) {
 	if (sig != SIGWINCH) return;
+	//free(global_i->B.buf);
+	//global_i->B.top = global_i->B.capacity = 0;
+	//global_i->B.buf = NULL;
 	write(STDOUT_FILENO, CSI_CLEAR_ALL);
 	ui_update_geometry(global_i);
 	ui_draw(global_i);
@@ -767,16 +770,10 @@ int prompt(struct ui* const i, char* const t,
 	return r;
 }
 
-void failed(struct ui* const i, const char* const f,
-		const int reason, const char* const custom) {
+inline void failed(struct ui* const i, const char* const what,
+		const char* const why) {
 	i->mt = MSG_ERROR;
-	if (custom) {
-		snprintf(i->msg, MSG_BUFFER_SIZE, "%s failed: %s", f, custom);
-	}
-	else {
-		snprintf(i->msg, MSG_BUFFER_SIZE, "%s failed: %s (%d)",
-				f, strerror(reason), reason);
-	}
+	snprintf(i->msg, MSG_BUFFER_SIZE, "%s failed: %s", what, why);
 }
 
 int spawn(char* const arg[]) {

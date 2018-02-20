@@ -626,8 +626,7 @@ int fill_textbox(struct ui* const, char* const,
 
 int prompt(struct ui* const, char* const, char*, const size_t);
 
-void failed(struct ui* const, const char* const,
-		const int, const char* const);
+void failed(struct ui* const, const char* const, const char* const);
 
 int spawn(char* const[]);
 
