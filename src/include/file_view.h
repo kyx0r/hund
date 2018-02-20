@@ -56,7 +56,7 @@ void last_entry(struct file_view* const);
 void jump_n_entries(struct file_view* const, const int);
 
 void delete_file_list(struct file_view* const);
-bool file_on_list(struct file_view* const, const char* const);
+fnum_t file_on_list(const struct file_view* const, const char* const);
 void file_highlight(struct file_view* const, const char* const);
 
 bool file_find(struct file_view* const, const char* const, fnum_t, fnum_t);

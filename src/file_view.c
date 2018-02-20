@@ -87,12 +87,15 @@ void delete_file_list(struct file_view* const fv) {
 	fv->selection = fv->num_hidden = 0;
 }
 
-bool file_on_list(struct file_view* const fv, const char* const name) {
+/*
+ * Returns index of given file on list or -1 if not present
+ */
+fnum_t file_on_list(const struct file_view* const fv, const char* const name) {
 	fnum_t i = 0;
 	while (i < fv->num_files && strcmp(fv->file_list[i]->file_name, name)) {
 		i += 1;
 	}
-	return i != fv->num_files;
+	return (i == fv->num_files ? (fnum_t)-1 : i);
 }
 
 /* Finds and highlighs file with given name */
@@ -211,7 +214,7 @@ int file_view_scan_dir(struct file_view* const fv) {
  * -1: a < b
  *  0: a == b
  *  1: a > b
- *  ...just like memcmp,strcmp
+ *  ...just like memcmp, strcmp
  */
 static int frcmp(const enum compare cmp,
 		const struct file_record* const a,
@@ -279,10 +282,9 @@ void merge_sort(struct file_view* const fv, const enum compare cmp) {
 			sizeof(struct file_record*));
 	for (fnum_t L = 1; L < fv->num_files; L *= 2) {
 		for (fnum_t S = 0; S < fv->num_files; S += L+L) {
-			const fnum_t beg = S;
 			const fnum_t mid = MIN(S+L, fv->num_files);
 			const fnum_t end = MIN(S+L+L, fv->num_files);
-			merge(cmp, fv->scending, B, A, beg, mid, end);
+			merge(cmp, fv->scending, B, A, S, mid, end);
 		}
 		tmp = A;
 		A = B;
@@ -321,7 +323,6 @@ void file_view_sorting_changed(struct file_view* const fv) {
  */
 void file_view_selected_to_list(struct file_view* const fv,
 		struct string_list* const list) {
-	// TODO empty dir
 	if (!fv->num_selected) {
 		struct file_record* const fr = hfr(fv);
 		fv->num_selected = 1;
@@ -333,38 +334,41 @@ void file_view_selected_to_list(struct file_view* const fv,
 	}
 	list->len = 0;
 	list->str = calloc(fv->num_selected, sizeof(char*));
-	for (fnum_t f = 0, s = 0;
-			f < fv->num_files && s < fv->num_selected; ++f) {
+	fnum_t f = 0, s = 0;
+	for (; f < fv->num_files && s < fv->num_selected; ++f) {
 		if (!fv->file_list[f]->selected) continue;
-		const size_t fnl = strnlen(fv->file_list[f]->file_name,
-				NAME_MAX_LEN);
+		const char* const fn = fv->file_list[f]->file_name;
+		const size_t fnl = strnlen(fn, NAME_MAX_LEN);
 		list->str[list->len] = malloc(fnl+1);
-		memcpy(list->str[list->len],
-				fv->file_list[f]->file_name, fnl+1);
+		memcpy(list->str[list->len], fn, fnl+1);
 		list->len += 1;
 		s += 1;
+	}
+}
+
+inline static void _list_select_by_name(struct file_view* const fv,
+		const char* const name) {
+	for (fnum_t s = 0; s < fv->num_files; ++s) {
+		const char* const F = fv->file_list[s]->file_name;
+		if (!strcmp(name, F)) {
+			fv->file_list[s]->selected = true;
+			fv->num_selected += 1;
+			break;
+		}
 	}
 }
 
 void select_from_list(struct file_view* const fv,
 		const struct string_list* const list) {
 	for (fnum_t li = 0; li < list->len; ++li) {
-		for (fnum_t s = 0; s < fv->num_files; ++s) {
-			if (list->str[li]
-			    && !strcmp(list->str[li],
-					fv->file_list[s]->file_name)) {
-				fv->file_list[s]->selected = true;
-				fv->num_selected += 1;
-				break;
-			}
-		}
+		if (list->str[li]) _list_select_by_name(fv, list->str[li]);
 	}
 }
 
 bool conflicts_with_existing(struct file_view* const fv,
 		const struct string_list* const list) {
 	for (fnum_t f = 0; f < list->len; ++f) {
-		if (file_on_list(fv, list->str[f])) return true;
+		if (file_on_list(fv, list->str[f]) != (fnum_t)-1) return true;
 	}
 	return false;
 }
@@ -373,7 +377,7 @@ void remove_conflicting(struct file_view* const fv,
 		struct string_list* const list) {
 	struct string_list repl = { NULL, 0 };
 	for (fnum_t f = 0; f < list->len; ++f) {
-		if (!file_on_list(fv, list->str[f])) {
+		if (file_on_list(fv, list->str[f]) == (fnum_t)-1) {
 			list_push(&repl, list->str[f]);
 		}
 	}
