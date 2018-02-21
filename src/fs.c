@@ -412,16 +412,16 @@ bool contains(const char* const str, const char* const subs) {
 	return false;
 }
 
-char* list_push(struct string_list* const list, const char* const s) {
+fnum_t list_push(struct string_list* const list, const char* const s) {
 	void* tmp = realloc(list->str, (list->len+1) * sizeof(char*));
-	if (!tmp) return NULL;
+	if (!tmp) return (fnum_t)-1;
 	list->str = tmp;
 	const size_t slen = strnlen(s, NAME_MAX_LEN);
 	list->str[list->len] = malloc(slen+1);
 	memcpy(list->str[list->len], s, slen+1);
 	list->str[list->len][slen] = 0;
 	list->len += 1;
-	return list->str[list->len - 1];
+	return list->len - 1;
 }
 
 /*
@@ -505,6 +505,15 @@ void free_list(struct string_list* const list) {
 	free(list->str);
 	list->str = NULL;
 	list->len = 0;
+}
+
+fnum_t string_on_list(const struct string_list* const L, const char* const S) {
+	for (fnum_t f = 0; f < L->len; ++f) {
+		if (!strcmp(S, L->str[f])) {
+			return f;
+		}
+	}
+	return (fnum_t)-1;
 }
 
 fnum_t blank_lines(const struct string_list* const list) {

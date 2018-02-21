@@ -131,11 +131,12 @@ struct string_list {
 	fnum_t len;
 };
 
-char* list_push(struct string_list* const, const char* const);
+fnum_t list_push(struct string_list* const, const char* const);
 int file_to_list(const int, struct string_list* const);
 int list_to_file(const struct string_list* const, int);
 void list_copy(struct string_list* const, const struct string_list* const);
 void free_list(struct string_list* const);
+fnum_t string_on_list(const struct string_list* const, const char* const);
 
 fnum_t blank_lines(const struct string_list* const);
 bool duplicates_on_list(const struct string_list* const);
