@@ -61,6 +61,7 @@ void file_highlight(struct file_view* const, const char* const);
 
 bool file_find(struct file_view* const, const char* const, fnum_t, fnum_t);
 
+bool file_view_select_file(struct file_view* const);
 int file_view_enter_selected_dir(struct file_view* const);
 int file_view_up_dir(struct file_view* const);
 
@@ -79,6 +80,17 @@ void file_view_selected_to_list(struct file_view* const,
 
 void select_from_list(struct file_view* const,
 		const struct string_list* const);
+
+/*
+ * TODO find a better name
+ */
+struct assign {
+	fnum_t from, to;
+};
+
+bool rename_prepare(const struct file_view* const, struct string_list* const,
+		struct string_list* const, struct string_list* const,
+		struct assign** const, fnum_t* const);
 
 bool conflicts_with_existing(struct file_view* const,
 		const struct string_list* const);

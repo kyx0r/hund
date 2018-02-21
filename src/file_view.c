@@ -140,6 +140,20 @@ bool file_find(struct file_view* const fv, const char* const name,
 	return false;
 }
 
+bool file_view_select_file(struct file_view* const fv) {
+	struct file_record* fr;
+	if ((fr = hfr(fv)) && visible(fv, fv->selection)) {
+		if ((fr->selected = !fr->selected)) {
+			fv->num_selected += 1;
+		}
+		else {
+			fv->num_selected -= 1;
+		}
+		return true;
+	}
+	return false;
+}
+
 int file_view_enter_selected_dir(struct file_view* const fv) {
 	if (!fv->num_files || !visible(fv, fv->selection)) return 0;
 	const char* const fn = fv->file_list[fv->selection]->file_name;
@@ -363,6 +377,100 @@ void select_from_list(struct file_view* const fv,
 	for (fnum_t li = 0; li < list->len; ++li) {
 		if (list->str[li]) _list_select_by_name(fv, list->str[li]);
 	}
+}
+
+/*
+ * Needed by rename operation.
+ * Checks conflicts with existing files and allows complicated swaps.
+ * Pointless renames ('A' -> 'A') are removed from S and R.
+ * On unsolvable conflict false is retured and no data is modified.
+ *
+ * S - selected files
+ * R - new names for selected files
+ *
+ * N - list of names
+ * at - length of a
+ * a - list of indexes to N
+ *
+ * TODO optimize; plenty of loops, copying, allocation
+ * TODO whole file_view is not needed; only the list and it's size
+ * TODO move somewhere else?
+ * TODO inline it (?); only needed once
+ * TODO code repetition
+ */
+bool rename_prepare(const struct file_view* const fv,
+		struct string_list* const S,
+		struct string_list* const R,
+		struct string_list* const N,
+		struct assign** const a, fnum_t* const at) {
+	*at = 0;
+	//          vvvvvv TODO calculate size
+	*a = calloc(S->len, sizeof(struct assign));
+	bool* tofree = calloc(S->len, sizeof(bool));
+	for (fnum_t f = 0; f < R->len; ++f) {
+		if (contains(R->str[f], "/")) {
+			// TODO signal what is wrong
+			free(*a);
+			*a = NULL;
+			*at = 0;
+			free(tofree);
+			return false;
+		}
+		const fnum_t Ri = file_on_list(fv, R->str[f]);
+		if (Ri == (fnum_t)-1) continue;
+		const fnum_t Si = string_on_list(S, R->str[f]);
+		if (Si != (fnum_t)-1) {
+			const fnum_t NSi = string_on_list(N, S->str[f]);
+			const fnum_t NRi = string_on_list(N, R->str[f]);
+			if (NSi == (fnum_t)-1) {
+				(*a)[*at].from = list_push(N, S->str[f]);
+			}
+			else {
+				(*a)[*at].from = NSi;
+			}
+			if (NRi == (fnum_t)-1) {
+				(*a)[(*at)].to = list_push(N, R->str[f]);
+			}
+			else {
+				(*a)[(*at)].to = NRi;
+			}
+			*at += 1;
+			tofree[f] = true;
+		}
+		else {
+			free(*a);
+			*a = NULL;
+			*at = 0;
+			free(tofree);
+			return false;
+		}
+	}
+	for (fnum_t f = 0; f < R->len; ++f) {
+		if (!strcmp(S->str[f], R->str[f])) {
+			tofree[f] = true;
+		}
+	}
+	for (fnum_t f = 0; f < *at; ++f) {
+		for (fnum_t g = 0; g < *at; ++g) {
+			if (f == g) continue;
+			if ((*a)[f].from == (*a)[g].from
+			|| (*a)[f].to == (*a)[g].to) {
+				free(*a);
+				*a = NULL;
+				*at = 0;
+				free(tofree);
+				return false;
+			}
+		}
+	}
+	for (fnum_t f = 0; f < R->len; ++f) {
+		if (!tofree[f]) continue;
+		free(S->str[f]);
+		free(R->str[f]);
+		S->str[f] = R->str[f] = NULL;
+	}
+	free(tofree);
+	return true;
 }
 
 bool conflicts_with_existing(struct file_view* const fv,
