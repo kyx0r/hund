@@ -20,7 +20,7 @@
 #include "include/terminal.h"
 
 ssize_t xread(int fd, void* buf, ssize_t count, int timeout_us) {
-	struct timeval T = { 0, (suseconds_t)timeout_us };
+	struct timespec T = { 0, (suseconds_t)timeout_us*1000 };
 	fd_set rfds;
 	int retval;
 	if (timeout_us > 0) {
@@ -30,8 +30,7 @@ ssize_t xread(int fd, void* buf, ssize_t count, int timeout_us) {
 	ssize_t rd;
 	do {
 		if (timeout_us > 0) {
-			// TODO pselect
-			retval = select(fd+1, &rfds, NULL, NULL, &T);
+			retval = pselect(fd+1, &rfds, NULL, NULL, &T, NULL);
 			if (retval == -1 || !retval) {
 				FD_CLR(fd, &rfds);
 				return 0;
@@ -60,7 +59,7 @@ struct input get_input(int timeout_us) {
 	char seq[7];
 	memset(seq, 0, sizeof(seq));
 	if (xread(fd, seq, 1, timeout_us) == 1 && seq[0] == '\x1b') {
-		if (xread(fd, seq+1, 1, 500) == 1
+		if (xread(fd, seq+1, 1, 500000) == 1
 				&& (seq[1] == '[' || seq[1] == 'O')) {
 			if (xread(fd, seq+2, 1, 0) == 1 && isdigit(seq[2])) {
 				xread(fd, seq+3, 1, 0);
