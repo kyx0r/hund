@@ -360,22 +360,17 @@ void file_view_selected_to_list(struct file_view* const fv,
 	}
 }
 
-inline static void _list_select_by_name(struct file_view* const fv,
-		const char* const name) {
-	for (fnum_t s = 0; s < fv->num_files; ++s) {
-		const char* const F = fv->file_list[s]->file_name;
-		if (!strcmp(name, F)) {
-			fv->file_list[s]->selected = true;
-			fv->num_selected += 1;
-			break;
-		}
-	}
-}
-
 void select_from_list(struct file_view* const fv,
-		const struct string_list* const list) {
-	for (fnum_t li = 0; li < list->len; ++li) {
-		if (list->str[li]) _list_select_by_name(fv, list->str[li]);
+		const struct string_list* const L) {
+	for (fnum_t i = 0; i < L->len; ++i) {
+		if (!L->str[i]) continue;
+		for (fnum_t s = 0; s < fv->num_files; ++s) {
+			if (!strcmp(L->str[i], fv->file_list[s]->file_name)) {
+				fv->file_list[s]->selected = true;
+				fv->num_selected += 1;
+				break;
+			}
+		}
 	}
 }
 
@@ -421,13 +416,13 @@ bool rename_prepare(const struct file_view* const fv,
 		const fnum_t Si = string_on_list(S, R->str[f]);
 		if (Si != (fnum_t)-1) {
 			const fnum_t NSi = string_on_list(N, S->str[f]);
-			const fnum_t NRi = string_on_list(N, R->str[f]);
 			if (NSi == (fnum_t)-1) {
 				(*a)[*at].from = list_push(N, S->str[f]);
 			}
 			else {
 				(*a)[*at].from = NSi;
 			}
+			const fnum_t NRi = string_on_list(N, R->str[f]);
 			if (NRi == (fnum_t)-1) {
 				(*a)[(*at)].to = list_push(N, R->str[f]);
 			}
@@ -461,6 +456,11 @@ bool rename_prepare(const struct file_view* const fv,
 				free(tofree);
 				return false;
 			}
+		}
+	}
+	for (fnum_t f = 0; f < *at; ++f) {
+		if ((*a)[f].from == (*a)[f].to) {
+			(*a)[f].from = (*a)[f].to = (fnum_t)-1;
 		}
 	}
 	for (fnum_t f = 0; f < R->len; ++f) {
