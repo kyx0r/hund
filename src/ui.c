@@ -85,7 +85,7 @@ void ui_init(struct ui* const i, struct file_view* const pv,
 	memset(&sa, 0, sizeof(struct sigaction));
 	sa.sa_handler = handle_winch;
 	if ((err = start_raw_mode(&i->T))
-	   || (err = sigaction(SIGWINCH, &sa, NULL))) {
+	|| (sigaction(SIGWINCH, &sa, NULL) ? (err = errno) : 0)) {
 		fprintf(stderr, "failed to initalize screen: (%d) %s\n",
 				err, strerror(err));
 		exit(EXIT_FAILURE);
@@ -263,14 +263,12 @@ static void stringify_pug(const mode_t m, const uid_t u, const gid_t g,
 
 static void _statusbar(struct ui* const i) {
 	const struct file_record* const _hfr = hfr(i->pv);
-	if (_hfr) {
-		const time_t lt = _hfr->s.st_mtim.tv_sec;
-		const struct tm* const tt = localtime(&lt);
-		strftime(i->time, TIME_SIZE, timefmt, tt);
+	struct tm T;
+	if (!_hfr || !localtime_r(&(_hfr->s.st_mtim.tv_sec), &T)) {
+		memset(&T, 0, sizeof(struct tm));
 	}
-	else {
-		strcpy(i->time, "0000-00-00 00:00:00");
-	}
+	strftime(i->time, TIME_SIZE, timefmt, &T);
+
 	char status[10+2+10+2+10+1+1];
 	const fnum_t nhf = (i->pv->show_hidden ? 0 : i->pv->num_hidden);
 	int n = snprintf(status, sizeof(status),
@@ -293,12 +291,10 @@ static void _statusbar(struct ui* const i) {
 		append(&i->B, "\r\n", 2);
 		return;
 	}
-	const size_t padding = i->scrw-cw-sw;
-
 	append_theme(&i->B, THEME_STATUSBAR);
 	fill(&i->B, ' ', 1);
 	append(&i->B, status, n);
-	fill(&i->B, ' ', padding);
+	fill(&i->B, ' ', i->scrw-cw-sw); // Padding
 	append(&i->B, i->user, strnlen(i->user, LOGIN_MAX_LEN));
 	fill(&i->B, ' ', 1);
 	append(&i->B, i->group, strnlen(i->group, LOGIN_MAX_LEN));
@@ -309,10 +305,9 @@ static void _statusbar(struct ui* const i) {
 			(i->perm[0] & 0777) & (0400 >> (p-1)),
 			(i->perm[1] & 0777) & (0400 >> (p-1))
 		};
-		const bool diff = m[0] != m[1];
-		if (diff) append_attr(&i->B, ATTR_UNDERLINE, NULL);
+		if (m[0] != m[1]) append_attr(&i->B, ATTR_UNDERLINE, NULL);
 		append(&i->B, &i->perms[p], 1);
-		if (diff) append_attr(&i->B, ATTR_NOT_UNDERLINE, NULL);
+		if (m[0] != m[1]) append_attr(&i->B, ATTR_NOT_UNDERLINE, NULL);
 	}
 	fill(&i->B, ' ', 1);
 	append(&i->B, i->time, strnlen(i->time, TIME_SIZE));
@@ -532,14 +527,14 @@ void ui_draw(struct ui* const i) {
 		_statusbar(i);
 		_bottombar(i);
 	}
+	const bool pa = i->prompt
+		&& i->prompt_cursor_pos >= 0
+		&& i->prompt_cursor_pos < i->scrw;
+	if (!pa) append(&i->B, CSI_CURSOR_HIDE);
 	write(STDOUT_FILENO, i->B.buf, i->B.top);
-	if (i->prompt && i->prompt_cursor_pos >= 0
-		&& i->prompt_cursor_pos < i->scrw) {
+	if (pa) {
 		write(STDOUT_FILENO, CSI_CURSOR_SHOW);
 		move_cursor(i->scrh, i->prompt_cursor_pos+1);
-	}
-	else {
-		write(STDOUT_FILENO, CSI_CURSOR_HIDE);
 	}
 }
 
@@ -586,6 +581,7 @@ void chmod_close(struct ui* const i) {
 
 int ui_select(struct ui* const i, const char* const q,
 		const struct select_option* o, const size_t oc) {
+	// TODO snprintf
 	const int oldtimeout = i->timeout;
 	i->timeout = -1;
 	int T = 0;
@@ -693,15 +689,13 @@ enum command get_cmd(struct ui* const i) {
  * If keeps gathering, returns 1.
  * Unhandled inputs are put into 'o' (if not NULL) and 2 is returned
  */
-int fill_textbox(struct ui* const I, char* const buf,
-		char** const buftop, const size_t bsize,
-		struct input* const o) {
+int fill_textbox(struct ui* const I, char* const buf, char** const buftop,
+		const size_t bsize, struct input* const o) {
 	const struct input i = get_input(I->timeout);
 	if (i.t == I_NONE) return 1;
 	if (IS_CTRL(i, '[') || i.t == I_ESCAPE) return -1;
-	else if ((IS_CTRL(i, 'J') || IS_CTRL(i, 'M')) ||
-	         (i.t == I_UTF8 &&
-	         (i.utf[0] == '\n' || i.utf[0] == '\r'))) {
+	else if ((IS_CTRL(i, 'J') || IS_CTRL(i, 'M'))
+	|| (i.t == I_UTF8 && (i.utf[0] == '\n' || i.utf[0] == '\r'))) {
 		if (*buftop != buf) return 0;
 	}
 	else if (i.t == I_UTF8 && strlen(buf)+utf8_g2nb(i.utf) <= bsize) {
@@ -710,9 +704,8 @@ int fill_textbox(struct ui* const I, char* const buf,
 	}
 	else if (IS_CTRL(i, 'H') || i.t == I_BACKSPACE) {
 		if (*buftop != buf) {
-			const size_t before = strnlen(buf, bsize);
-			utf8_remove(buf, utf8_wtill(buf, *buftop)-1);
-			*buftop -= before - strnlen(buf, bsize);
+			const size_t wt = utf8_wtill(buf, *buftop);
+			*buftop -= utf8_remove(buf, wt-1);
 		}
 		else if (!strnlen(buf, bsize)) {
 			return -1;
