@@ -38,7 +38,7 @@ size_t utf8_wtill(const char*, const char* const);
 bool utf8_validate(const char* const);
 
 void utf8_insert(char*, const char* const, const size_t);
-void utf8_remove(char* const, const size_t);
+size_t utf8_remove(char* const, const size_t);
 
 void cut_unwanted(const char*, char*, const char, size_t);
 

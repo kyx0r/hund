@@ -213,14 +213,16 @@ void utf8_insert(char* a, const char* const b, const size_t pos) {
 
 /*
  * Remove glyph at index
+ * returns length in bytes of removed glyph
  */
-void utf8_remove(char* const a, const size_t j) {
+size_t utf8_remove(char* const a, const size_t j) {
 	char* t = a;
 	for (size_t i = 0; i < j; ++i) {
 		t += utf8_g2nb(t);
 	}
 	const size_t rl = utf8_g2nb(t); // Removed glyph Length
 	memmove(t, t+rl, strlen(t));
+	return rl;
 }
 
 /*
