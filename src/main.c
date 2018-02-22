@@ -43,10 +43,8 @@
  * - After renaming, highlight one of the renamed files (?)
  *   - Or add command jumping to next/prev selected file
  * - Swap panels
- * - Task has problems with counting
  * - Copy/move: merge+overwrite fails with "file exists" error lol
  * - Rename/copy/move: display conflicts in list and allow user to browse the list
- * - contains() used with "/" can be optimized (contains() is intended for words)
  * - I'm pushing lot's of huge buffers on stack. Gotta be more careful. TODO estimate maximum stack usage
  */
 
@@ -98,7 +96,7 @@ static void open_selected_with(struct ui* const i, char* const w) {
 	}
 }
 
-inline static void cmd_find(struct ui* const i) {
+static void cmd_find(struct ui* const i) {
 	char t[NAME_BUF_SIZE];
 	char* t_top = t;
 	memset(t, 0, sizeof(t));
@@ -174,8 +172,7 @@ inline static void estimate_volume_for_selected(struct file_view* const fv) {
  * If failed to solve conflicts, returns false and frees lists.
  */
 inline static bool _solve_name_conflicts(struct ui* const i,
-		struct string_list* const s,
-		struct string_list* const r) {
+		struct string_list* const s, struct string_list* const r) {
 	static const char* const question = "Conflicting target names.";
 	static const struct select_option o[] = {
 		{ KUTF8("s"), "skip" },
@@ -247,29 +244,6 @@ static void prepare_task(struct ui* const i, struct task* const t,
 }
 
 /*
- * TODO huge buffers
- */
-static int rename_trivial(const char* const wd,
-		struct string_list* const S, struct string_list* const R) {
-	int err;
-	char opath[PATH_BUF_SIZE]; // old path
-	char npath[PATH_BUF_SIZE]; // new path
-	strncpy(opath, wd, PATH_BUF_SIZE);
-	strncpy(npath, wd, PATH_BUF_SIZE);
-	for (fnum_t f = 0; f < S->len; ++f) {
-		if (!S->str[f]) continue;
-		if ((err = append_dir(opath, S->str[f]))
-		|| (err = append_dir(npath, R->str[f]))
-		|| (rename(opath, npath) ? (err = errno) : 0)) {
-			return err;
-		}
-		up_dir(opath);
-		up_dir(npath);
-	}
-	return 0;
-}
-
-/*
  * op = Old Path
  * np = New Path
  * on = Old Name
@@ -294,11 +268,41 @@ static int _rename(char* const op, char* const np,
 }
 
 /*
+ */
+static int rename_trivial(const char* const wd,
+		struct string_list* const S, struct string_list* const R) {
+	int err;
+	const size_t wdl = strnlen(wd, PATH_MAX_LEN);
+	char* op = malloc(wdl+1+NAME_BUF_SIZE);
+	if (!op) {
+		return ENOMEM;
+	}
+	char* np = malloc(wdl+1+NAME_BUF_SIZE);
+	if (!np) {
+		free(op);
+		return ENOMEM;
+	}
+	memcpy(op, wd, wdl+1);
+	memcpy(np, wd, wdl+1);
+	for (fnum_t f = 0; f < S->len; ++f) {
+		if (!S->str[f]) continue;
+		if ((err = _rename(op, np, S->str[f], R->str[f]))) {
+			free(op);
+			free(np);
+			return err;
+		}
+	}
+	free(op);
+	free(np);
+	return 0;
+}
+
+/*
  * TODO huge buffers
  */
 static int rename_interdependent(const char* const wd,
 		struct string_list* const N,
-		struct assign* A, const fnum_t Al) {
+		struct assign* const A, const fnum_t Al) {
 	int err;
 	char op[PATH_BUF_SIZE]; // old path
 	strncpy(op, wd, PATH_BUF_SIZE);
@@ -309,7 +313,7 @@ static int rename_interdependent(const char* const wd,
 	fnum_t tc; // Temponary file Content
 	for (;;) {
 		fnum_t i = 0;
-		while (A[i].to == (fnum_t)-1 && i < Al) {
+		while (i < Al && A[i].to == (fnum_t)-1) {
 			i += 1;
 		}
 		if (i == Al) break;
@@ -328,6 +332,7 @@ static int rename_interdependent(const char* const wd,
 					break;
 				}
 			}
+			if (j == (fnum_t)-1) break;
 			if ((err = _rename(op, np,
 				N->str[A[j].from], N->str[A[j].to]))) {
 				return err;
@@ -343,7 +348,7 @@ static int rename_interdependent(const char* const wd,
 	return 0;
 }
 
-inline static void cmd_rename(struct ui* const i) {
+static void cmd_rename(struct ui* const i) {
 	int err;
 	struct string_list S = { NULL, 0 }; // Selected files
 	struct string_list R = { NULL, 0 }; // Renamed files
@@ -366,16 +371,16 @@ inline static void cmd_rename(struct ui* const i) {
 		}
 		const char* msg = "There are conflicts. Retry?";
 		if (blank_lines(&R)) {
-			msg = "File contains blank lines";
+			msg = "File contains blank lines. Retry?";
 			ok = false;
 		}
 		else if (S.len > R.len) {
-			msg = "File does not contain enough lines";
+			msg = "File does not contain enough lines. Retry?";
 			ok = false;
 
 		}
 		else if (S.len < R.len) {
-			msg = "File contains too much lines";
+			msg = "File contains too much lines. Retry?";
 			ok = false;
 		}
 		if ((!ok || !(ok = rename_prepare(i->pv, &S, &R, &N, &a, &al)))
@@ -389,22 +394,19 @@ inline static void cmd_rename(struct ui* const i) {
 		failed(i, "rename", strerror(err));
 	}
 	free_list(&S);
-	free_list(&R);
 
 	if ((err = rename_interdependent(i->pv->wd, &N, a, al))) {
+		// TODO if both fail, this one will overwrite the previous
 		failed(i, "rename", strerror(err));
 	}
 	free_list(&N);
 	free(a);
 
 	free_list(&S);
-	if ((err = file_view_scan_dir(i->pv))) {
-		failed(i, "directory scan", strerror(err));
-	}
-	else {
+	if (ui_rescan(i, i->pv, NULL)) {
 		select_from_list(i->pv, &R);
-		free_list(&R);
 	}
+	free_list(&R);
 }
 
 inline static void cmd_cd(struct ui* const i) {
@@ -423,38 +425,39 @@ inline static void cmd_cd(struct ui* const i) {
 	}
 	else {
 		strncpy(i->pv->wd, path, PATH_BUF_SIZE);
-		if ((err = file_view_scan_dir(i->pv))) {
-			failed(i, "directory scan", strerror(err));
-		}
+		ui_rescan(i, i->pv, NULL);
 	}
 	free(path);
 	free(cdp);
 }
 
 inline static void cmd_mkdir(struct ui* const i) {
+	// TODO errors
 	int err;
 	struct string_list F = { NULL, 0 }; // Files
-	char *path = NULL;
+	const size_t wdl = strnlen(i->pv->wd, PATH_MAX_LEN);
+	char* const path = malloc(wdl+1+NAME_BUF_SIZE);
+	memcpy(path, i->pv->wd, wdl+1);
 	edit_list(&F, &F);
 	for (fnum_t f = 0; f < F.len; ++f) {
-		if (!F.str[f]) continue; // Blank lines are ignored
-		path = strncpy(malloc(PATH_BUF_SIZE), i->pv->wd, PATH_BUF_SIZE);
-		if (contains(F.str[f], "/")) {
+		if (!F.str[f]) continue;
+		if (strchr(F.str[f], '/')) {
 			failed(i, "mkdir", "name contains '/'");
 		}
 		else if ((err = append_dir(path, F.str[f]))
 		|| (mkdir(path, MKDIR_DEFAULT_PERM) ? (err = errno) : 0)) {
 			failed(i, "mkdir", strerror(err));
 		}
-		free(path);
+		up_dir(path);
 	}
+	free(path);
 	free_list(&F);
-	file_view_scan_dir(i->pv); // TODO error
+	ui_rescan(i, i->pv, NULL);
 }
 
 inline static void cmd_change_sorting(struct ui* const i) {
 	// TODO visibility
-	// -- SORT --
+	// -- SORT -- (message?)
 	// ???
 	// TODO cursor
 	char old[FV_ORDER_SIZE];
@@ -462,6 +465,7 @@ inline static void cmd_change_sorting(struct ui* const i) {
 	char* buf = i->pv->order;
 	char* top = i->pv->order + strlen(buf);
 	int r;
+	ui_draw(i);
 	for (;;) {
 		r = fill_textbox(i, buf, &top, FV_ORDER_SIZE, NULL);
 		if (!r) break;
@@ -486,12 +490,10 @@ inline static void cmd_change_sorting(struct ui* const i) {
 		i->pv->order[FV_ORDER_SIZE-1] = 0;
 	}
 	file_view_sorting_changed(i->pv);
-	i->ui_needs_refresh = true;
 }
 
 static void cmd_mklnk(struct ui* const i) {
 	// TODO conflicts
-	int err;
 	//char tmpn[] = "/tmp/hund.XXXXXXXX";
 	//int tmpfd = mkstemp(tmpn);
 	struct string_list sf = { NULL, 0 };
@@ -509,21 +511,18 @@ static void cmd_mklnk(struct ui* const i) {
 	}
 	//close(tmpfd);
 	//unlink(tmpn);
-	if ((err = file_view_scan_dir(i->sv))) {
-		failed(i, "directory scan", strerror(err)); // TODO
-	}
+	ui_rescan(i, i->sv, NULL);
 	select_from_list(i->sv, &sf);
 }
 
-static inline void _quick_chmod_plus_x(struct ui* const i) {
+static void cmd_quick_chmod_plus_x(struct ui* const i) {
 	char* path = NULL;
 	struct stat s;
 	if (!(path = file_view_path_to_selected(i->pv))) return;
 	if (stat(path, &s) || !S_ISREG(s.st_mode)) return;
 	const mode_t nm = s.st_mode | (S_IXUSR | S_IXGRP | S_IXOTH);
 	chmod(path, nm);
-	file_view_scan_dir(i->pv); // TODO error
-	i->ui_needs_refresh = true;
+	ui_rescan(i, i->pv, NULL);
 }
 
 static void process_input(struct ui* const i, struct task* const t) {
@@ -671,13 +670,8 @@ static void process_input(struct ui* const i, struct task* const t) {
 		}
 		break;
 	case CMD_DUP_PANEL:
-		// TODO
 		strncpy(i->sv->wd, i->pv->wd, PATH_BUF_SIZE);
-		if ((err = file_view_scan_dir(i->sv))) {
-			delete_file_list(i->sv);
-			file_view_up_dir(i->sv);
-		}
-		else {
+		if (ui_rescan(i, i->sv, NULL)) {
 			i->sv->selection = i->pv->selection;
 			i->sv->show_hidden = i->pv->show_hidden;
 		}
@@ -722,7 +716,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		open_selected_with(i, get_editor());
 		break;
 	case CMD_QUICK_PLUS_X:
-		_quick_chmod_plus_x(i);
+		cmd_quick_chmod_plus_x(i);
 		break;
 	case CMD_OPEN_FILE:
 		open_selected_with(i, "xdg-open"); // TODO
@@ -783,18 +777,11 @@ static void process_input(struct ui* const i, struct task* const t) {
 		file_view_toggle_hidden(i->pv);
 		break;
 	case CMD_REFRESH:
-		if ((err = file_view_scan_dir(i->pv))) {
-			failed(i, "refresh", strerror(err));
-		}
-		else {
-			file_view_afterdel(i->pv);
-		}
-		i->ui_needs_refresh = true;
+		ui_rescan(i, i->pv, NULL);
 		break;
 	case CMD_SORT_REVERSE:
 		i->pv->scending = -i->pv->scending;
 		file_view_sorting_changed(i->pv);
-		i->ui_needs_refresh = true;
 		break;
 	case CMD_SORT_CHANGE:
 		cmd_change_sorting(i);
@@ -899,7 +886,7 @@ inline static bool _confirm_removal(struct ui* const i,
 static void task_execute(struct ui* const i, struct task* const t) {
 	// TODO error handling is chaotic
 	task_action ta = NULL;
-	char msg[128]; // TODO
+	char msg[256]; // TODO
 	static const struct select_option o[] = {
 		{ KUTF8("n"), "no" },
 		{ KUTF8("y"), "yes" },
@@ -908,7 +895,7 @@ static void task_execute(struct ui* const i, struct task* const t) {
 	case TS_CLEAN:
 		break;
 	case TS_ESTIMATE:
-		i->timeout = 500000;
+		i->timeout = 500;
 		i->m = MODE_WAIT;
 		task_do(t, 1024*10, task_action_estimate, TS_CONFIRM);
 		if (t->err) t->ts = TS_FAILED;
@@ -926,7 +913,7 @@ static void task_execute(struct ui* const i, struct task* const t) {
 		}
 		break;
 	case TS_RUNNING:
-		i->timeout = 500000;
+		i->timeout = 500;
 		if (t->t & (TASK_REMOVE | TASK_COPY | TASK_MOVE)) {
 			ta = task_action_copyremove;
 		}
@@ -941,27 +928,23 @@ static void task_execute(struct ui* const i, struct task* const t) {
 		task_progress(i, t, "||");
 		break;
 	case TS_FAILED: // TODO
-		snprintf(msg, sizeof(msg), "(%d) %s. Continue?",
-				t->err, strerror(t->err));
+		snprintf(msg, sizeof(msg), "@ '%s'\r\n(%d) %s. Continue?",
+				t->tw.cpath, t->err, strerror(t->err));
 		t->err = 0;
 		t->ts = (ui_select(i, msg, o, 2) ? TS_RUNNING : TS_FINISHED);
 		break;
 	case TS_FINISHED:
 		i->timeout = -1;
-		if ((t->err = file_view_scan_dir(i->pv))
-		|| (t->err = file_view_scan_dir(i->sv))) {
-			failed(i, "operation", strerror(t->err));
-		}
-		else {
-			if (t->t == TASK_REMOVE) file_view_afterdel(i->pv);
-			else if (t->t == TASK_MOVE) jump_n_entries(i->pv, -1);
+		if (ui_rescan(i, i->pv, i->sv)) {
+			if (t->t == TASK_MOVE) {
+				jump_n_entries(i->pv, -1);
+			}
 			i->mt = MSG_INFO;
 			snprintf(i->msg, MSG_BUFFER_SIZE,
-					"processed %u files",
-					t->files_done);
+					"processed %u files & dirs",
+					t->files_done+t->dirs_done);
 		}
 		task_clean(t);
-		i->ui_needs_refresh = true;
 		i->m = MODE_MANAGER;
 		break;
 	default:
@@ -983,7 +966,7 @@ inline static int _init_wd(struct file_view fvs[2], char* const init_wd[2]) {
 		if (s && fvs[v].wd[s] == '/') {
 			fvs[v].wd[s] = 0;
 		}
-		if ((e = file_view_scan_dir(&fvs[v]))) {
+		if ((e = file_view_scan_dir(&fvs[v]))) { // TODO
 			return e;
 		}
 		first_entry(&fvs[v]);
@@ -1021,7 +1004,7 @@ int main(int argc, char* argv[]) {
 			}
 			break;
 		case 'h':
-			printf("%s\n", help);
+			printf("%s", help);
 			exit(EXIT_SUCCESS);
 		default:
 			exit(EXIT_FAILURE);
@@ -1050,14 +1033,9 @@ int main(int argc, char* argv[]) {
 	struct file_view fvs[2];
 	memset(fvs, 0, sizeof(fvs));
 	fvs[0].scending = 1;
-	fvs[0].order[0] = CMP_NAME;
-	fvs[0].order[1] = CMP_ISEXE;
-	fvs[0].order[2] = CMP_ISDIR;
-
+	memcpy(fvs[0].order, default_order, FV_ORDER_SIZE);
 	fvs[1].scending = 1;
-	fvs[1].order[0] = CMP_NAME;
-	fvs[1].order[1] = CMP_ISEXE;
-	fvs[1].order[2] = CMP_ISDIR;
+	memcpy(fvs[1].order, default_order, FV_ORDER_SIZE);
 
 	struct ui i;
 	ui_init(&i, &fvs[0], &fvs[1]);
@@ -1075,9 +1053,6 @@ int main(int argc, char* argv[]) {
 	i.mt = MSG_INFO;
 	strcpy(i.msg, "Type ? for help and license notice.");
 	while (i.run) { // TODO but task may be still running
-		if (i.ui_needs_refresh) {
-			ui_update_geometry(&i);
-		}
 		ui_draw(&i);
 		process_input(&i, &t);
 		task_execute(&i, &t);
