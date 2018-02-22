@@ -54,27 +54,34 @@ static void handle_winch(int sig) {
 void ui_init(struct ui* const i, struct file_view* const pv,
 		struct file_view* const sv) {
 	setlocale(LC_ALL, "");
+	i->scrh = i->scrw = i->pw[0] = i->pw[1] = 0;
+	i->ph = i->pxoff[0] = i->pxoff[1] = 0;
+	i->run = true;
+
+	i->m = MODE_MANAGER;
+	i->mt = MSG_NONE;
+
+	i->prompt = NULL;
+	i->prompt_cursor_pos = i->timeout = -1;
+
+	memset(&i->B, 0, sizeof(struct append_buffer));
+
 	i->fvs[0] = i->pv = pv;
 	i->fvs[1] = i->sv = sv;
-	i->scrw = i->scrh = 0;
-	i->m = MODE_MANAGER;
-	memset(i->prch, 0, sizeof(i->prch));
-	i->prompt = NULL;
-	i->prompt_cursor_pos = -1;
-	i->timeout = -1;
-	i->mt = MSG_NONE;
+
 	i->helpy = 0;
-	i->run = i->ui_needs_refresh = true;
-	i->ili = 0;
-	memset(&i->B, 0, sizeof(struct append_buffer));
+
 	memset(i->il, 0, INPUT_LIST_LENGTH*sizeof(struct input));
+	i->ili = 0;
+
+	i->kmap = default_mapping; // TODO ???
 	i->kml = default_mapping_length;
 	i->mks = calloc(default_mapping_length, sizeof(unsigned short));
-	i->kmap = default_mapping; // TODO ???
 	//i->kmap = malloc(default_mapping_length*sizeof(struct input2cmd));
 	/*for (size_t k = 0; k < default_mapping_length; ++k) {
 		memcpy(&i->kmap[k], &default_mapping[k], sizeof(struct input2cmd));
 	}*/
+
 	memset(i->perm, 0, sizeof(i->perm));
 	memset(i->o, 0, sizeof(i->o));
 	memset(i->g, 0, sizeof(i->g));
@@ -161,7 +168,6 @@ static void _entry(struct ui* const i, const struct file_view* const fv,
 	const size_t name_width = utf8_width(name);
 	const size_t name_draw = (name_width < name_allowed
 			? name_width : name_allowed);
-	const size_t space = name_allowed - name_draw;
 
 	char open = file_symbols[fsym];
 	char close = ' ';
@@ -173,7 +179,7 @@ static void _entry(struct ui* const i, const struct file_view* const fv,
 	append_theme(&i->B, fsym + (hl ? 1 : 0));
 	fill(&i->B, open, 1);
 	append(&i->B, name, utf8_w2nb(name, name_draw));
-	fill(&i->B, ' ', space);
+	fill(&i->B, ' ', name_allowed - name_draw);
 	fill(&i->B, ' ', SIZE_BUF_SIZE-slen);
 	append(&i->B, sbuf, slen);
 	fill(&i->B, close, 1);
@@ -492,6 +498,7 @@ static void _bottombar(struct ui* const i) {
 }
 
 void ui_draw(struct ui* const i) {
+	ui_update_geometry(i);
 	i->B.top = 0;
 	memset(i->B.buf, 0, i->B.capacity);
 	append(&i->B, CSI_CURSOR_HIDE);
@@ -545,7 +552,6 @@ void ui_update_geometry(struct ui* const i) {
 	i->ph = i->scrh - 3;
 	i->pxoff[0] = 0;
 	i->pxoff[1] = i->scrw/2;
-	i->ui_needs_refresh = false;
 }
 
 int chmod_open(struct ui* const i, char* const path) {
@@ -565,7 +571,6 @@ int chmod_open(struct ui* const i, char* const path) {
 	i->m = MODE_CHMOD;
 	strncpy(i->user, pwd->pw_name, LOGIN_BUF_SIZE);
 	strncpy(i->group, grp->gr_name, LOGIN_BUF_SIZE);
-	i->ui_needs_refresh = true;
 	return 0;
 }
 
@@ -624,6 +629,7 @@ int ui_select(struct ui* const i, const char* const q,
  * Find matching mappings
  * If there are a few, do nothing, wait longer.
  * If there is only one, send it.
+ * TODO simplify
  */
 enum command get_cmd(struct ui* const i) {
 	if (i->ili >= INPUT_LIST_LENGTH) {
@@ -761,6 +767,24 @@ int prompt(struct ui* const i, char* const t,
 	i->prompt = NULL;
 	i->prompt_cursor_pos = -1;
 	return r;
+}
+
+/*
+ * success = true
+ * failure = false
+ */
+bool ui_rescan(struct ui* const i, struct file_view* const a,
+		struct file_view* const b) {
+	int err;
+	if (a && (err = file_view_scan_dir(a))) {
+		failed(i, "directory scan", strerror(err));
+		return false;
+	}
+	if (b && (err = file_view_scan_dir(b))) {
+		failed(i, "directory scan", strerror(err));
+		return false;
+	}
+	return true;
 }
 
 inline void failed(struct ui* const i, const char* const what,

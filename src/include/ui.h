@@ -227,8 +227,6 @@ static const struct theme_attrs theme_scheme[THEME_ELEM_NUM] = {
 	[THEME_STATUSBAR] = { ATTR_BLACK, ATTR_WHITE, { 0, 0, 0 }, { 0, 0, 0 } },
 	[THEME_ERROR] = { ATTR_BLACK, ATTR_RED, { 0, 0, 0 }, { 0, 0, 0 } },
 	[THEME_INFO] = { ATTR_WHITE, ATTR_BLACK, { 0, 0, 0 }, { 0, 0, 0 } },
-	//[THEME_HINT_KEY] = { 0, COLOR_WHITE, COLOR_BLACK },
-	//[THEME_HINT_DESC] = { 0, COLOR_BLACK, COLOR_WHITE },
 	[THEME_ENTRY_BLK_UNS] = { ATTR_RED, ATTR_BLACK, { 0, 0, 0 }, { 0, 0, 0 } },
 	[THEME_ENTRY_BLK_SEL] = { ATTR_BLACK, ATTR_RED, { 0, 0, 0 }, { 0, 0, 0 } },
 	[THEME_ENTRY_CHR_UNS] = { ATTR_YELLOW, ATTR_BLACK, { 0, 0, 0 }, { 0, 0, 0 } },
@@ -245,9 +243,6 @@ static const struct theme_attrs theme_scheme[THEME_ELEM_NUM] = {
 	[THEME_ENTRY_SOCK_SEL] = { ATTR_BLACK, ATTR_GREEN, { 0, 0, 0 }, { 0, 0, 0 } },
 	[THEME_ENTRY_LNK_UNS] = { ATTR_CYAN, ATTR_BLACK, { 0, 0, 0 }, { 0, 0, 0 } },
 	[THEME_ENTRY_LNK_SEL] = { ATTR_BLACK, ATTR_CYAN, { 0, 0, 0 }, { 0, 0, 0 } },
-	//[THEME_ENTRY_LNK_PATH] = { 0, COLOR_WHITE, COLOR_BLACK },
-	//[THEME_ENTRY_LNK_PATH_INV] = { 0, COLOR_RED, COLOR_BLACK },
-
 };
 
 #define INPUT_LIST_LENGTH 4
@@ -413,7 +408,8 @@ static struct input2cmd default_mapping[] = {
 	{ { KSPEC(I_ARROW_UP), KEND }, MODE_HELP, CMD_HELP_UP },
 };
 
-static const size_t default_mapping_length = (sizeof(default_mapping)/sizeof(struct input2cmd));
+static const size_t default_mapping_length =
+	(sizeof(default_mapping)/sizeof(struct input2cmd));
 
 static const char* const cmd_help[] = {
 	[CMD_QUIT] = "Quit hund.",
@@ -559,7 +555,6 @@ struct ui {
 	int ph; // Panel Height
 	int pxoff[2]; // Panel X OFFset
 
-	bool ui_needs_refresh; // TODO find a better way
 	bool run;
 
 	enum mode m;
@@ -567,7 +562,7 @@ struct ui {
 
 	char msg[MSG_BUFFER_SIZE];
 
-	char prch[8]; // TODO adjust size
+	char prch[16]; // TODO adjust size
 	char* prompt;
 	int prompt_cursor_pos;
 
@@ -627,7 +622,8 @@ int fill_textbox(struct ui* const, char* const,
 int prompt(struct ui* const, char* const, char*, const size_t);
 
 void failed(struct ui* const, const char* const, const char* const);
-
+bool ui_rescan(struct ui* const, struct file_view* const,
+		struct file_view* const);
 int spawn(char* const[]);
 
 size_t append_theme(struct append_buffer* const, const enum theme_element);
