@@ -33,6 +33,11 @@ enum compare {
 	CMP_PERM = 'p',
 	CMP_ISEXE = 'x',
 };
+static const char default_order[FV_ORDER_SIZE] = {
+	CMP_NAME,
+	CMP_ISEXE,
+	CMP_ISDIR
+};
 
 struct file_view {
 	char wd[PATH_MAX+1];
@@ -46,7 +51,6 @@ struct file_view {
 	bool show_hidden;
 };
 
-bool hidden(const struct file_view* const, const fnum_t);
 bool visible(const struct file_view* const, const fnum_t);
 struct file_record* hfr(const struct file_view* const);
 
@@ -65,7 +69,6 @@ bool file_view_select_file(struct file_view* const);
 int file_view_enter_selected_dir(struct file_view* const);
 int file_view_up_dir(struct file_view* const);
 
-void file_view_afterdel(struct file_view* const);
 void file_view_toggle_hidden(struct file_view* const);
 
 int file_view_scan_dir(struct file_view* const);

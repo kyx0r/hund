@@ -33,11 +33,6 @@
  * - rescanning file_list (if needed)
  */
 
-/* checks if file is hidden just by looking at the name */
-inline bool hidden(const struct file_view* const fv, const fnum_t i) {
-	return fv->file_list[i]->file_name[0] == '.';
-}
-
 /* checks if file is visible at the moment */
 /* Truth table - is file visible at the moment?
  *          file.ext | .hidden.ext
@@ -45,12 +40,14 @@ inline bool hidden(const struct file_view* const fv, const fnum_t i) {
  * show_hidden = 0 |1|0|
  */
 bool visible(const struct file_view* const fv, const fnum_t i) {
-	return fv->show_hidden || !hidden(fv, i);
+	return i < fv->num_files && (fv->show_hidden
+		|| fv->file_list[i]->file_name[0] != '.');
 }
 
 /* Highlighted File Record */
-inline struct file_record* hfr(const struct file_view* const fv) {
-	return (fv->num_files ? fv->file_list[fv->selection] : NULL);
+struct file_record* hfr(const struct file_view* const fv) {
+	return (fv->num_files && fv->selection < fv->num_files
+			? fv->file_list[fv->selection] : NULL);
 }
 
 inline void first_entry(struct file_view* const fv) {
@@ -155,19 +152,14 @@ bool file_view_select_file(struct file_view* const fv) {
 }
 
 int file_view_enter_selected_dir(struct file_view* const fv) {
-	if (!fv->num_files || !visible(fv, fv->selection)) return 0;
-	const char* const fn = fv->file_list[fv->selection]->file_name;
-	const mode_t m = fv->file_list[fv->selection]->s.st_mode;
-	int err;
-	if (S_ISDIR(m) || S_ISLNK(m)) {
-		if ((err = enter_dir(fv->wd, fn))) return err;
+	if (!fv->num_files || !visible(fv, fv->selection)) {
+		return 0;
 	}
-	else return ENOTDIR;
-	if ((err = file_view_scan_dir(fv))) {
-		delete_file_list(fv);
+	const char* const fn = fv->file_list[fv->selection]->file_name;
+	int err;
+	if ((err = enter_dir(fv->wd, fn))
+	|| (err = file_view_scan_dir(fv))) {
 		file_view_up_dir(fv);
-		// TODO ^^^ would be better if it was checked
-		// before any changes to file_view
 		return err;
 	}
 	first_entry(fv);
@@ -180,24 +172,10 @@ int file_view_up_dir(struct file_view* const fv) {
 	strncpy(prevdir, fv->wd+current_dir_i(fv->wd), NAME_BUF_SIZE);
 	up_dir(fv->wd);
 	if ((err = file_view_scan_dir(fv))) {
-		delete_file_list(fv);
 		return err;
 	}
 	file_highlight(fv, prevdir);
 	return 0;
-}
-
-void file_view_afterdel(struct file_view* const fv) {
-	if (!fv->num_files) {
-		fv->selection = 0;
-		return;
-	}
-	if (fv->selection >= fv->num_files-1) {
-		last_entry(fv);
-	}
-	if (!visible(fv, fv->selection)){
-		jump_n_entries(fv, 1);
-	}
 }
 
 void file_view_toggle_hidden(struct file_view* const fv) {
@@ -219,8 +197,18 @@ int file_view_scan_dir(struct file_view* const fv) {
 	int err;
 	fv->num_selected = 0;
 	err = scan_dir(fv->wd, &fv->file_list, &fv->num_files, &fv->num_hidden);
-	if (!err) file_view_sort(fv);
-	return err;
+	if (err) return err;
+	file_view_sort(fv);
+	if (!fv->num_files) {
+		fv->selection = 0;
+	}
+	if (fv->selection >= fv->num_files-1) {
+		last_entry(fv);
+	}
+	if (!visible(fv, fv->selection)){
+		jump_n_entries(fv, 1);
+	}
+	return 0;
 }
 
 /*
@@ -307,6 +295,7 @@ void merge_sort(struct file_view* const fv, const enum compare cmp) {
 	fv->file_list = A;
 	free(B);
 }
+#undef MIN
 
 void file_view_sort(struct file_view* const fv) {
 	for (size_t i = 0; i < FV_ORDER_SIZE; ++i) {
@@ -403,7 +392,7 @@ bool rename_prepare(const struct file_view* const fv,
 	*a = calloc(S->len, sizeof(struct assign));
 	bool* tofree = calloc(S->len, sizeof(bool));
 	for (fnum_t f = 0; f < R->len; ++f) {
-		if (contains(R->str[f], "/")) {
+		if (strchr(R->str[f], '/')) {
 			// TODO signal what is wrong
 			free(*a);
 			*a = NULL;
