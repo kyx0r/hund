@@ -40,7 +40,7 @@
 
 #include "fs.h"
 
-#ifndef LOGIN_NAME_MAX // For BSD, TODO
+#ifndef LOGIN_NAME_MAX
 	#define LOGIN_NAME_MAX _SC_LOGIN_NAME_MAX
 #endif
 
@@ -86,6 +86,7 @@ typedef unsigned int fnum_t; // Number of Files
 
 struct file_record {
 	char* file_name;
+	// TODO keep file_name length?
 	struct stat s;
 	ssize_t dir_volume;
 	bool selected;
@@ -115,7 +116,7 @@ void pretty_size(off_t, char* buf);
 #define MKDIR_DEFAULT_PERM (S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
 
 int append_dir(char* const, const char* const);
-int enter_dir(char* const, const char* const);
+int cd(char* const, const char* const);
 int up_dir(char* const);
 bool path_is_relative(const char* const);
 

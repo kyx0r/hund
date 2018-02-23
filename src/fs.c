@@ -174,7 +174,7 @@ int link_copy(const char* const wd,
 		target[src_dir_off] = 0;
 
 		int err;
-		if ((err = enter_dir(target, lpath))) {
+		if ((err = cd(target, lpath))) {
 			free(target);
 			return err;
 		}
@@ -277,52 +277,79 @@ int append_dir(char* const path, const char* const dir) {
 }
 
 /*
- * Returns ENAMETOOLONG if PATH_MAX would be exceeded; leaves path unchanged
- * TODO simplify
+ * Returns ENAMETOOLONG if PATH_MAX would be exceeded and leaves path unchanged
  */
-int enter_dir(char* const path, const char* const dir) {
-	if (!path_is_relative(dir)) {
-		if (dir[0] == '~') {
+int cd(char* const current, const char* const path) {
+	size_t cl = strnlen(current, PATH_MAX_LEN);
+	size_t pl = strnlen(path, PATH_MAX_LEN);
+	if (!path_is_relative(path)) {
+		if (path[0] == '~') {
 			struct passwd* pwd = getpwuid(geteuid());
-			strncpy(path, pwd->pw_dir, PATH_BUF_SIZE);
 			const size_t pwl = strnlen(pwd->pw_dir, PATH_MAX_LEN);
-			strncat(path, dir+1, PATH_BUF_SIZE-pwl);
+			memcpy(current, pwd->pw_dir, pwl+1);
+			cl = pwl;
+			memcpy(current+pwl, path+1, pl+1);
+			cl += pl;
 		}
 		else {
-			strncpy(path, dir, PATH_BUF_SIZE);
+			memcpy(current, path, pl+1);
+			cl = pl;
+		}
+		if (cl != 1 && current[cl-1] == '/') {
+			current[cl-1] = 0;
 		}
 		return 0;
 	}
-	const char* a = dir;
+	const char* a = path;
 	const char* b;
-	size_t plen = strnlen(path, PATH_MAX_LEN);
-	char P[PATH_BUF_SIZE];
-	memcpy(P, path, plen+1);
-	size_t ns = 0; // Number of Slashes
-	for (size_t i = 0; i < strnlen(dir, PATH_MAX_LEN)+1; ++i) {
-		if (dir[i] == '/') ns += 1;
+
+	char B[PATH_BUF_SIZE];
+	memset(B, 0, sizeof(B));
+	size_t Bl = cl;
+	memcpy(B, current, cl+1);
+	if (!memcmp(B, "/", 2)) {
+		B[0] = 0;
+		Bl = 0;
 	}
-	for (size_t i = 0; i < ns+1; ++i) {
+	if (B[Bl-1] == '/') {
+		B[Bl-1] = 0;
+		Bl -= 1;
+	}
+
+	size_t rem = pl;
+	while (rem) {
 		b = strchr(a, '/');
-		if (!b) b = a+strlen(a);
-		if (!memcmp(a, ".", b-a));
-		else if (!memcmp(a, "..", b-a)) {
-			up_dir(P);
-			plen = strnlen(P, PATH_MAX_LEN);
+
+		if (!b) b = a+rem;
+		else rem -= 1;
+
+		if (b-a == 1 && !memcmp(a, ".", 1)) {
+			rem -= 1;
 		}
-		else {
-			if (plen + 1 + (b-a) >= PATH_MAX_LEN) {
+		else if (b-a == 2 && !memcmp(a, "..", 2)) {
+			while (Bl > 0 && B[Bl-1] != '/') {
+				B[--Bl] = 0;
+			}
+			B[--Bl] = 0;
+			rem -= 2;
+		}
+		else if (b-a) {
+			if (Bl + 1 + (b-a) >= PATH_MAX_LEN) {
 				return ENAMETOOLONG;
 			}
-			if (P[plen-1] != '/') {
-				strncat(P, "/", 2);
-			}
-			strncat(P, a, b-a);
-			plen = strnlen(P, PATH_MAX_LEN);
+			B[Bl++] = '/';
+			memcpy(B+Bl, a, b-a);
+			Bl += b-a;
+			rem -= b-a;
 		}
 		a = b+1;
 	}
-	strcpy(path, P);
+	if (B[0] == 0) {
+		B[0] = '/';
+		B[1] = 0;
+		Bl = 1;
+	}
+	memcpy(current, B, Bl+1);
 	return 0;
 }
 
