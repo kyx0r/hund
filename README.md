@@ -9,7 +9,6 @@ A minimalistic terminal file manager.
 - Find file in current directory (find as you type)
 - Multiple key sorting
 - Can be statically linked
-- Not _too_ big; ~4K SLOC
 - Licensed under GPL-3.0
 #### Environment Variables (which Hund uses)
 | Variable | Usage              | Default |
@@ -20,21 +19,30 @@ A minimalistic terminal file manager.
 #### Planned features
 - Calculate volume of directories
 - Filter files
+- atime, mtime, ctime
 - ACLs (at least detection)
 - Configuration in a file
 - Color schemes
-- Extract archive
+- Marks (vim-like)
 - Bookmarks
-- Integrated terminal
+- man page
+- Packaging for some popular distros + installation scripts
+- Columns (size, date, permissions, owner, group, date) (???)
+- Integrated terminal (???)
 #### Architecture/OS Support
-- x86-64 + Arch Linux - Developed on. Can be expected to work *best*
-	- Alpine Linux works too
-- x86-64 + FreeBSD - works!
-- aarch64 (Raspberry PI 3) + Arch Linux ARM 64-bit - works just fine
+- x86-64
+	- Arch Linux - Developed on. Can be expected to work *best*
+	- Alpine Linux - works
+	- FreeBSD - works
+	- OpenBSD - works
+- aarch64 (Raspberry PI 3)
+	- Arch Linux ARM 64-bit - works just fine
 #### Dependencies & Requirements
-- c99-compatible C compiler (gcc and clang were tested)
-- libc of choice (glibc and musl were tested)
-- make
+- c99-compatible C compiler (`gcc` and `clang` were tested)
+- libc of choice (`glibc` and `musl` were tested)
+- `make`
+- A pager (`less` by default)
+- A text editor (`vi` by default)
 #### Commands
 Type `?` while in hund for help.
 #### License
