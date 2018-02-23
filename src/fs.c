@@ -20,10 +20,6 @@
 #include "include/fs.h"
 
 /*
- * TODO get rid of strcats
- */
-
-/*
  * Chmods given file using plus and minus masks
  * The following should be true: (plus & minus) == 0
  * (it's not checked)
@@ -277,46 +273,72 @@ int append_dir(char* const path, const char* const dir) {
 }
 
 /*
- * Returns ENAMETOOLONG if PATH_MAX would be exceeded and leaves path unchanged
+ * cd - Change Directory
+ * Does not change current working directory,
+ * but modifies path passed in arguments.
+ *
+ * Returns ENAMETOOLONG if PATH_MAX would be exceeded.
+ * In such case 'current' is left unchanged.
+ *
+ * 'current' must contain an absolute path.
+ *
+ * 'dest' may be either absolute or relative path.
+ * Besides directory names it can contain . or ..
+ * which are appiled to current directory.
+ * '~' at the begining is an alias for user's HOME directory.
+ *
+ * Path returned in 'current' will always be absolute
+ * and it will never contain '/' at the end
+ * (with exception of root directory).
+ *
+ * If both 'current' and 'dest' are empty strings
+ * 'current' will be corrected to "/".
+ *
+ * If 'dest' is empty string and 'current' ends with '/',
+ * that '/' will be cleared.
+ *
+ * If 'current' is empty string,
+ * then it is assumed to be root directory.
+ *
+ * Multiple consecutive '/' will be shortened to only one '/'
+ * e.g. cd("/", "a///b////c") -> "/a/b/c"
  */
-int cd(char* const current, const char* const path) {
+int cd(char* const current, const char* const dest) {
 	size_t cl = strnlen(current, PATH_MAX_LEN);
-	size_t pl = strnlen(path, PATH_MAX_LEN);
-	if (!path_is_relative(path)) {
-		if (path[0] == '~') {
-			struct passwd* pwd = getpwuid(geteuid());
-			const size_t pwl = strnlen(pwd->pw_dir, PATH_MAX_LEN);
-			memcpy(current, pwd->pw_dir, pwl+1);
-			cl = pwl;
-			memcpy(current+pwl, path+1, pl+1);
-			cl += pl;
+	char B[PATH_BUF_SIZE];
+	size_t Bl;
+	const char* a = dest;
+	size_t rem = strnlen(dest, PATH_MAX_LEN);
+	if (dest[0] == '~') { // TODO TEST
+		struct passwd* pwd = getpwuid(geteuid());
+		const size_t pwl = strnlen(pwd->pw_dir, PATH_MAX_LEN);
+		memcpy(B, pwd->pw_dir, pwl);
+		memset(B+pwl+1, 0, PATH_BUF_SIZE-pwl);
+		Bl = pwl;
+		a += 2;
+		rem -= 2;
+	}
+	else if (dest[0] == '/') {
+		memset(B, 0, sizeof(B));
+		Bl = 0;
+		a += 1;
+		rem -= 1;
+	}
+	else {
+		if (!memcmp(dest, "/", 2)) {
+			B[0] = 0;
+			Bl = 0;
 		}
 		else {
-			memcpy(current, path, pl+1);
-			cl = pl;
+			memcpy(B, current, cl);
+			memset(B+cl+1, 0, PATH_BUF_SIZE-cl);
+			Bl = cl;
+			if (B[Bl-1] == '/') {
+				B[--Bl] = 0;
+			}
 		}
-		if (cl != 1 && current[cl-1] == '/') {
-			current[cl-1] = 0;
-		}
-		return 0;
 	}
-	const char* a = path;
 	const char* b;
-
-	char B[PATH_BUF_SIZE];
-	memset(B, 0, sizeof(B));
-	size_t Bl = cl;
-	memcpy(B, current, cl+1);
-	if (!memcmp(B, "/", 2)) {
-		B[0] = 0;
-		Bl = 0;
-	}
-	if (B[Bl-1] == '/') {
-		B[Bl-1] = 0;
-		Bl -= 1;
-	}
-
-	size_t rem = pl;
 	while (rem) {
 		b = strchr(a, '/');
 
