@@ -37,15 +37,12 @@
  * - IDEA: Detecting file formats -> display name of a program that
  *     would open highlighted file
  * - Dir scanning via task?
- * - Dir rescanning should be unified
  * - When "dereferencing", calculate additional file volume
- * - Refine ui behavior for very small window
  * - After renaming, highlight one of the renamed files (?)
  *   - Or add command jumping to next/prev selected file
  * - Swap panels
  * - Copy/move: merge+overwrite fails with "file exists" error lol
  * - Rename/copy/move: display conflicts in list and allow user to browse the list
- * - I'm pushing lot's of huge buffers on stack. Gotta be more careful. TODO estimate maximum stack usage
  */
 
 static char* get_editor(void) {
@@ -65,7 +62,6 @@ static int open_file_with(char* const p, char* const f) {
 
 static int edit_list(struct string_list* const in,
 		struct string_list* const out) {
-	// TODO test
 	int err = 0, tmpfd;
 	char tmpn[] = "/tmp/hund.XXXXXXXX";
 	if ((tmpfd = mkstemp(tmpn)) == -1) return errno;
@@ -297,18 +293,16 @@ static int rename_trivial(const char* const wd,
 	return 0;
 }
 
-/*
- * TODO huge buffers
- */
 static int rename_interdependent(const char* const wd,
 		struct string_list* const N,
 		struct assign* const A, const fnum_t Al) {
 	int err;
-	char op[PATH_BUF_SIZE]; // old path
-	strncpy(op, wd, PATH_BUF_SIZE);
-	char np[PATH_BUF_SIZE]; // new path
-	strncpy(np, wd, PATH_BUF_SIZE);
-	char tn[NAME_BUF_SIZE]; // Temponary file Name
+	const size_t wdl = strnlen(wd, PATH_MAX_LEN);
+	char* op = malloc(wdl+1+NAME_BUF_SIZE);
+	memcpy(op, wd, wdl+1);
+	char* np = malloc(wdl+1+NAME_BUF_SIZE);
+	memcpy(np, wd, wdl+1);
+	char tn[NAME_BUF_SIZE]; // Temponary file Name TODO does not have to be that long
 	snprintf(tn, sizeof(tn), ".hund.rename.tmpdir.%08x", getpid());
 	fnum_t tc; // Temponary file Content
 	for (;;) {
@@ -321,6 +315,8 @@ static int rename_interdependent(const char* const wd,
 		tc = A[i].to;
 		const fnum_t tv = A[i].to;
 		if ((err = _rename(op, np, N->str[A[i].from], tn))) {
+			free(op);
+			free(np);
 			return err;
 		}
 		fnum_t from = A[i].from;
@@ -335,16 +331,22 @@ static int rename_interdependent(const char* const wd,
 			if (j == (fnum_t)-1) break;
 			if ((err = _rename(op, np,
 				N->str[A[j].from], N->str[A[j].to]))) {
+				free(op);
+				free(np);
 				return err;
 			}
 			from = A[j].from;
 			A[j].from = A[j].to = (fnum_t)-1;
 		} while (from != tv);
 		if ((err = _rename(op, np, tn, N->str[tc]))) {
+			free(op);
+			free(np);
 			return err;
 		}
 		A[i].from = A[i].to = (fnum_t)-1;
 	}
+	free(op);
+	free(np);
 	return 0;
 }
 
@@ -417,7 +419,7 @@ inline static void cmd_cd(struct ui* const i) {
 	char* path = strncpy(malloc(PATH_BUF_SIZE), i->pv->wd, PATH_BUF_SIZE);
 	char* cdp = calloc(PATH_BUF_SIZE, sizeof(char));
 	if (prompt(i, cdp, cdp, PATH_MAX_LEN)
-	|| (err = enter_dir(path, cdp))
+	|| (err = cd(path, cdp))
 	|| (err = ENOENT, access(path, F_OK))
 	|| (stat(path, &s) ? (err = errno) : 0)
 	|| (err = ENOTDIR, !S_ISDIR(s.st_mode))) {
@@ -498,10 +500,12 @@ static void cmd_mklnk(struct ui* const i) {
 	//int tmpfd = mkstemp(tmpn);
 	struct string_list sf = { NULL, 0 };
 	file_view_selected_to_list(i->pv, &sf);
-	char target[PATH_BUF_SIZE];
-	char slpath[PATH_BUF_SIZE];
-	strcpy(target, i->pv->wd);
-	strcpy(slpath, i->sv->wd);
+	const size_t target_l = strnlen(i->pv->wd, PATH_MAX_LEN);
+	const size_t slpath_l = strnlen(i->sv->wd, PATH_MAX_LEN);
+	char* target = malloc(target_l+1+NAME_BUF_SIZE);
+	char* slpath = malloc(slpath_l+1+NAME_BUF_SIZE);
+	memcpy(target, i->pv->wd, target_l+1);
+	memcpy(slpath, i->sv->wd, slpath_l+1);
 	for (fnum_t f = 0; f < sf.len; ++f) {
 		append_dir(target, sf.str[f]);
 		append_dir(slpath, sf.str[f]);
@@ -509,6 +513,8 @@ static void cmd_mklnk(struct ui* const i) {
 		up_dir(slpath);
 		up_dir(target);
 	}
+	free(target);
+	free(slpath);
 	//close(tmpfd);
 	//unlink(tmpn);
 	ui_rescan(i, i->sv, NULL);
@@ -958,15 +964,10 @@ inline static int _init_wd(struct file_view fvs[2], char* const init_wd[2]) {
 		const char* const d = (init_wd[v] ? init_wd[v] : "");
 		if (!getcwd(fvs[v].wd, PATH_BUF_SIZE)) {
 			memcpy(fvs[v].wd, "/", 2);
+			// TODO display error?
 		}
-		else if ((e = enter_dir(fvs[v].wd, d))) {
-			return e;
-		}
-		const size_t s = strnlen(fvs[v].wd, PATH_MAX_LEN)-1;
-		if (s && fvs[v].wd[s] == '/') {
-			fvs[v].wd[s] = 0;
-		}
-		if ((e = file_view_scan_dir(&fvs[v]))) { // TODO
+		else if ((e = cd(fvs[v].wd, d))
+		|| (e = file_view_scan_dir(&fvs[v]))) {
 			return e;
 		}
 		first_entry(&fvs[v]);

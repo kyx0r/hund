@@ -157,7 +157,7 @@ int file_view_enter_selected_dir(struct file_view* const fv) {
 	}
 	const char* const fn = fv->file_list[fv->selection]->file_name;
 	int err;
-	if ((err = enter_dir(fv->wd, fn))
+	if ((err = cd(fv->wd, fn))
 	|| (err = file_view_scan_dir(fv))) {
 		file_view_up_dir(fv);
 		return err;
@@ -304,10 +304,11 @@ void file_view_sort(struct file_view* const fv) {
 }
 
 char* file_view_path_to_selected(struct file_view* const fv) {
+	// TODO buffer
 	if (!fv->num_files) return NULL;
 	char* p = malloc(PATH_BUF_SIZE);
 	strncpy(p, fv->wd, PATH_BUF_SIZE);
-	if (enter_dir(p, fv->file_list[fv->selection]->file_name)) {
+	if (cd(p, fv->file_list[fv->selection]->file_name)) {
 		free(p);
 		return NULL;
 	}
@@ -373,11 +374,10 @@ void select_from_list(struct file_view* const fv,
  * R - new names for selected files
  *
  * N - list of names
- * at - length of a
  * a - list of indexes to N
+ * at - length of a
  *
  * TODO optimize; plenty of loops, copying, allocation
- * TODO whole file_view is not needed; only the list and it's size
  * TODO move somewhere else?
  * TODO inline it (?); only needed once
  * TODO code repetition
