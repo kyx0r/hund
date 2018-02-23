@@ -21,15 +21,10 @@ terminal.o: terminal.c terminal.h utf8.h
 utf8.o: utf8.c widechars.h
 test.o: test.c
 
-.SUFFIXES: .c .o
-	$(CC) $(CFLAGS) -o $<
-
 test: test.o fs.o ui.o file_view.o utf8.o task.o terminal.o
 	$(CC) -o $(TESTEXENAME) test.o fs.o ui.o \
 		file_view.o utf8.o task.o terminal.o \
 		&& ./$(TESTEXENAME) && make $(EXENAME)
 
 clean:
-	rm -r testdir &> /dev/null || true
-	rm -r *.o &> /dev/null || true
-	rm $(EXENAME) $(TESTEXENAME) &> /dev/null || true
+	rm -f *.o $(EXENAME) $(TESTEXENAME)
