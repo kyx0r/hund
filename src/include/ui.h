@@ -289,7 +289,7 @@ static struct input2cmd default_mapping[] = {
 
 	{ { KUTF8("m"), KUTF8("v"), KEND }, MODE_MANAGER, CMD_MOVE },
 
-	{ { KUTF8("l"), KUTF8("n"), KEND}, MODE_MANAGER, CMD_LINK },
+	{ { KUTF8("m"), KUTF8("l"), KEND}, MODE_MANAGER, CMD_LINK },
 
 	{ { KCTRL('I'), KEND }, MODE_MANAGER, CMD_SWITCH_PANEL },
 
@@ -301,10 +301,12 @@ static struct input2cmd default_mapping[] = {
 	{ { KUTF8("m"), KUTF8("k"), KEND }, MODE_MANAGER, CMD_CREATE_DIR },
 
 	{ { KUTF8("u"), KEND }, MODE_MANAGER, CMD_UP_DIR },
+	{ { KUTF8("h"), KEND }, MODE_MANAGER, CMD_UP_DIR },
 	{ { KSPEC(I_BACKSPACE), KEND }, MODE_MANAGER, CMD_UP_DIR },
 
 	{ { KUTF8("i"), KEND }, MODE_MANAGER, CMD_ENTER_DIR },
 	{ { KCTRL('J'), KEND }, MODE_MANAGER, CMD_ENTER_DIR },
+	{ { KUTF8("l"), KEND }, MODE_MANAGER, CMD_ENTER_DIR },
 	{ { KCTRL('M'), KEND }, MODE_MANAGER, CMD_ENTER_DIR },
 
 	{ { KUTF8("p"), KEND }, MODE_MANAGER, CMD_PAGER },
@@ -424,7 +426,7 @@ static const char* const cmd_help[] = {
 	[CMD_LINK] = "Create symlinks to selected files.",
 
 	[CMD_UP_DIR] = "Go up in directory tree.",
-	[CMD_ENTER_DIR] = "Enter selected directory.",
+	[CMD_ENTER_DIR] = "Enter highlighted directory.",
 
 	[CMD_ENTRY_UP] = "Go to previous entry.",
 	[CMD_ENTRY_DOWN] = "Go to next entry.",
