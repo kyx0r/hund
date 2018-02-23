@@ -18,34 +18,52 @@ int main() {
 	int r;
 
 	char path[PATH_MAX] = "/";
-	r = enter_dir(path, "usr");
+	r = cd(path, "");
+	TEST(r == 0 && strcmp(path, "/") == 0, "");
+
+	path[0] = 0;
+	r = cd(path, "");
+	TEST(r == 0 && strcmp(path, "/") == 0, "");
+
+	r = cd(path, "/a/b/");
+	TEST(r == 0 && strcmp(path, "/a/b") == 0, "");
+
+	r = cd(path, "c/");
+	TEST(r == 0 && strcmp(path, "/a/b/c") == 0, "");
+
+	r = cd(path, "d///e");
+	TEST(r == 0 && strcmp(path, "/a/b/c/d/e") == 0, "");
+
+	memset(path, 0, sizeof(path));
+	path[0] = '/';
+	r = cd(path, "usr");
 	TEST(r == 0 && strcmp(path, "/usr") == 0, "entered directory in root (respect /)");
 
-	r = enter_dir(path, "bin");
+	r = cd(path, "bin");
 	TEST(r == 0 && strcmp(path, "/usr/bin") == 0, "correct path");
 
-	r = enter_dir(path, ".");
+	r = cd(path, ".");
 	TEST(r == 0 && strcmp(path, "/usr/bin") == 0, "path unchanged");
 
-	r = enter_dir(path, "..");
-	TEST(r == 0 && strcmp(path, "/usr") == 0, "up_dir used");
+	r = cd(path, "..");
+	TEST(r == 0 && strcmp(path, "/usr") == 0, "");
 
-	r = enter_dir(path, "..");
+	r = cd(path, "..");
 	TEST(r == 0 && strcmp(path, "/") == 0, "");
 
-	r = enter_dir(path, "..");
+	r = cd(path, "..");
 	TEST(r == 0 && strcmp(path, "/") == 0, "");
 
-	r = enter_dir(path, "lol/../wat");
+	r = cd(path, "lol/../wat");
 	TEST(r == 0 && strcmp(path, "/wat") == 0, "");
 
 	memset(path, 0, sizeof(path));
 	path[0] = '/';
 	memset(path+1, 'a', PATH_MAX-3); // 1 to leave null-terminator, 1 for /, 1 for b
-	r = enter_dir(path, "b");
+	r = cd(path, "b");
 	TEST(r && strlen(path) == PATH_MAX-2, "path filled");
 
-	r = enter_dir(path, "end");
+	r = cd(path, "end");
 	TEST(r && strlen(path) == PATH_MAX-2, "respect PATH_MAX; leave path unchanged");
 	r = append_dir(path, "end");
 	TEST(r && strlen(path) == PATH_MAX-2, "respect PATH_MAX; leave path unchanged");
@@ -63,10 +81,10 @@ int main() {
 
 	strcpy(path, "/dope/");
 	char dir5[] = "./wat/lol/../wut";
-	enter_dir(path, dir5);
+	cd(path, dir5);
 	TEST(strcmp(path, "/dope/wat/wut") == 0, "");
 
-	enter_dir(path, "/home/user");
+	cd(path, "/home/user");
 	TEST(strcmp(path, "/home/user") == 0, "");
 
 	char path7[PATH_MAX+1] = "/home/user/images/memes";
