@@ -17,7 +17,7 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "include/file_view.h"
+#include "file_view.h"
 
 /* This file contains file_view-related helper functions.
  *

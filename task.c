@@ -17,7 +17,7 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "include/task.h"
+#include "task.h"
 
 void task_new(struct task* const t, const enum task_type tp,
 		const enum task_flags tf,

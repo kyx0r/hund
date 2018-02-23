@@ -17,7 +17,7 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "include/terminal.h"
+#include "terminal.h"
 
 ssize_t xread(int fd, void* buf, ssize_t count, int timeout_us) {
 	struct timespec T = { 0, (suseconds_t)timeout_us*1000 };
@@ -162,9 +162,8 @@ size_t append(struct append_buffer* const ab, const char* const b, const size_t 
 
 size_t append_attr(struct append_buffer* const ab,
 		const int F, const unsigned char* const v) {
-	const size_t S = 1+1+1+1+1+1+1+3+1+3+1+3+1+1;
-	char attr[S];
-	int n = char_attr(attr, S, F, v);
+	char attr[1+1+1+1+1+1+1+3+1+3+1+3+1+1];
+	int n = char_attr(attr, sizeof(attr), F, v);
 	return append(ab, attr, n);
 }
 

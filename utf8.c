@@ -17,7 +17,7 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "include/utf8.h"
+#include "utf8.h"
 
 /* CodePoint To Bytes */
 void utf8_cp2b(char* const b, codepoint_t cp) {

@@ -3,12 +3,12 @@
 #endif
 
 #include "test.h"
-#include "../src/include/fs.h"
-#include "../src/include/file_view.h"
-#include "../src/include/task.h"
-#include "../src/include/utf8.h"
-#include "../src/include/terminal.h"
-#include "../src/include/ui.h"
+#include "fs.h"
+#include "file_view.h"
+#include "task.h"
+#include "utf8.h"
+#include "terminal.h"
+#include "ui.h"
 
 int main() {
 	SETUP_TESTS;
@@ -31,8 +31,26 @@ int main() {
 	r = cd(path, "c/");
 	TEST(r == 0 && strcmp(path, "/a/b/c") == 0, "");
 
-	r = cd(path, "d///e");
+	r = cd(path, "d/////////////////////////////////e");
 	TEST(r == 0 && strcmp(path, "/a/b/c/d/e") == 0, "");
+
+	r = cd(path, "/d/////e/////////////////////////////////////////////////////f");
+	TEST(r == 0 && strcmp(path, "/d/e/f") == 0, "");
+
+	r = cd(path, "//d//e//f");
+	TEST(r == 0 && strcmp(path, "/d/e/f") == 0, "");
+
+	r = cd(path, "/////////");
+	TEST(r == 0 && strcmp(path, "/") == 0, "");
+
+	memset(path, '/', 5);
+	path[6] = 0;
+	r = cd(path, "/////////");
+	TEST(r == 0 && strcmp(path, "/") == 0, "");
+
+	memset(path, 0, sizeof(path));
+	r = cd(path, "dir");
+	TEST(r == 0 && strcmp(path, "/dir") == 0, "");
 
 	memset(path, 0, sizeof(path));
 	path[0] = '/';

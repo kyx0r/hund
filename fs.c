@@ -17,7 +17,7 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "include/fs.h"
+#include "fs.h"
 
 /*
  * Chmods given file using plus and minus masks

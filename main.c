@@ -28,8 +28,8 @@
 #include <string.h>
 #include <limits.h>
 
-#include "include/ui.h"
-#include "include/task.h"
+#include "ui.h"
+#include "task.h"
 
 /*
  * GENERAL TODO
@@ -43,6 +43,7 @@
  * - Swap panels
  * - Copy/move: merge+overwrite fails with "file exists" error lol
  * - Rename/copy/move: display conflicts in list and allow user to browse the list
+ * - Creating links: offer relative or absolute link path
  */
 
 static char* get_editor(void) {
@@ -54,7 +55,8 @@ static char* get_editor(void) {
 
 static int open_file_with(char* const p, char* const f) {
 	char exeimg[PATH_BUF_SIZE];
-	strcpy(exeimg, "/usr/bin");
+	static const char* const bin = "/usr/bin";
+	memcpy(exeimg, bin, sizeof(bin)-1);
 	append_dir(exeimg, p);
 	char* const arg[] = { exeimg, f, NULL };
 	return spawn(arg);
@@ -96,7 +98,7 @@ static void cmd_find(struct ui* const i) {
 	char t[NAME_BUF_SIZE];
 	char* t_top = t;
 	memset(t, 0, sizeof(t));
-	strcpy(i->prch, "/");
+	memcpy(i->prch, "/", 2);
 	i->prompt = t;
 	int r;
 	const fnum_t S = i->pv->selection;
@@ -1052,7 +1054,7 @@ int main(int argc, char* argv[]) {
 	t.in = t.out = -1;
 
 	i.mt = MSG_INFO;
-	strcpy(i.msg, "Type ? for help and license notice.");
+	strncpy(i.msg, "Type ? for help and license notice.", MSG_BUFFER_SIZE);
 	while (i.run) { // TODO but task may be still running
 		ui_draw(&i);
 		process_input(&i, &t);

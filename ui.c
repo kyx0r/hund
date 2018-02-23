@@ -17,7 +17,7 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "include/ui.h"
+#include "ui.h"
 
 /* This file contains UI-related functions
  * These functions are supposed to draw elements of UI.
@@ -268,6 +268,7 @@ static void stringify_pug(const mode_t m, const uid_t u, const gid_t g,
 }
 
 static void _statusbar(struct ui* const i) {
+	// TODO It's very wide.
 	const struct file_record* const _hfr = hfr(i->pv);
 	struct tm T;
 	if (!_hfr || !localtime_r(&(_hfr->s.st_mtim.tv_sec), &T)) {
@@ -277,7 +278,7 @@ static void _statusbar(struct ui* const i) {
 
 	char status[10+2+10+2+10+1+1];
 	const fnum_t nhf = (i->pv->show_hidden ? 0 : i->pv->num_hidden);
-	int n = snprintf(status, sizeof(status),
+	int status_len = snprintf(status, sizeof(status),
 			"%uf %u%c %us, %c%.*s",
 			i->pv->num_files-nhf,
 			i->pv->num_hidden,
@@ -299,7 +300,7 @@ static void _statusbar(struct ui* const i) {
 	}
 	append_theme(&i->B, THEME_STATUSBAR);
 	fill(&i->B, ' ', 1);
-	append(&i->B, status, n);
+	append(&i->B, status, status_len);
 	fill(&i->B, ' ', i->scrw-cw-sw); // Padding
 	append(&i->B, i->user, strnlen(i->user, LOGIN_MAX_LEN));
 	fill(&i->B, ' ', 1);
