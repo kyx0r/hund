@@ -33,20 +33,26 @@
  * - rescanning file_list (if needed)
  */
 
-/* checks if file is visible at the moment */
+/*
+ * Checks if file is visible at the moment.
+ * Invalid selections are assumed to be invisible.
+ * Everything on empty list is invisible.
+ * These assumptions make visible() more useful.
+ *
+ */
 /* Truth table - is file visible at the moment?
  *          file.ext | .hidden.ext
  * show_hidden = 1 |1|1|
  * show_hidden = 0 |1|0|
  */
 bool visible(const struct file_view* const fv, const fnum_t i) {
-	return i < fv->num_files && (fv->show_hidden
-		|| fv->file_list[i]->file_name[0] != '.');
+	return fv->num_files && i < fv->num_files
+		&& (fv->show_hidden || fv->file_list[i]->name[0] != '.');
 }
 
 /* Highlighted File Record */
 struct file_record* hfr(const struct file_view* const fv) {
-	return (fv->num_files && fv->selection < fv->num_files
+	return (visible(fv, fv->selection)
 			? fv->file_list[fv->selection] : NULL);
 }
 
@@ -89,7 +95,7 @@ void delete_file_list(struct file_view* const fv) {
  */
 fnum_t file_on_list(const struct file_view* const fv, const char* const name) {
 	fnum_t i = 0;
-	while (i < fv->num_files && strcmp(fv->file_list[i]->file_name, name)) {
+	while (i < fv->num_files && strcmp(fv->file_list[i]->name, name)) {
 		i += 1;
 	}
 	return (i == fv->num_files ? (fnum_t)-1 : i);
@@ -98,7 +104,7 @@ fnum_t file_on_list(const struct file_view* const fv, const char* const name) {
 /* Finds and highlighs file with given name */
 void file_highlight(struct file_view* const fv, const char* const N) {
 	fnum_t i = 0;
-	while (i < fv->num_files && strcmp(fv->file_list[i]->file_name, N)) {
+	while (i < fv->num_files && strcmp(fv->file_list[i]->name, N)) {
 		i += 1;
 	}
 	if (i == fv->num_files) return;
@@ -115,7 +121,7 @@ bool file_find(struct file_view* const fv, const char* const name,
 	if (start <= end) {
 		for (fnum_t i = start; i <= end; ++i) {
 			if (visible(fv, i) &&
-			    contains(fv->file_list[i]->file_name, name)) {
+			    contains(fv->file_list[i]->name, name)) {
 				fv->selection = i;
 				return true;
 			}
@@ -125,7 +131,7 @@ bool file_find(struct file_view* const fv, const char* const name,
 	else if (end < start) {
 		for (fnum_t i = start; i >= end; --i) {
 			if (visible(fv, i) &&
-					contains(fv->file_list[i]->file_name, name)) {
+					contains(fv->file_list[i]->name, name)) {
 				fv->selection = i;
 				return true;
 			}
@@ -139,7 +145,7 @@ bool file_find(struct file_view* const fv, const char* const name,
 
 bool file_view_select_file(struct file_view* const fv) {
 	struct file_record* fr;
-	if ((fr = hfr(fv)) && visible(fv, fv->selection)) {
+	if ((fr = hfr(fv))) {
 		if ((fr->selected = !fr->selected)) {
 			fv->num_selected += 1;
 		}
@@ -152,12 +158,10 @@ bool file_view_select_file(struct file_view* const fv) {
 }
 
 int file_view_enter_selected_dir(struct file_view* const fv) {
-	if (!fv->num_files || !visible(fv, fv->selection)) {
-		return 0;
-	}
-	const char* const fn = fv->file_list[fv->selection]->file_name;
+	const struct file_record* H;
+	if (!(H = hfr(fv))) return 0;
 	int err;
-	if ((err = cd(fv->wd, fn))
+	if ((err = append_dir(fv->wd, H->name))
 	|| (err = file_view_scan_dir(fv))) {
 		file_view_up_dir(fv);
 		return err;
@@ -180,7 +184,7 @@ int file_view_up_dir(struct file_view* const fv) {
 
 void file_view_toggle_hidden(struct file_view* const fv) {
 	fv->show_hidden = !fv->show_hidden;
-	if (!fv->num_files || !visible(fv, fv->selection)) {
+	if (!visible(fv, fv->selection)) {
 		first_entry(fv);
 	}
 	if (!fv->show_hidden) {
@@ -223,7 +227,7 @@ static int frcmp(const enum compare cmp,
 		const struct file_record* const b) {
 	switch (cmp) {
 	case CMP_NAME:
-		return strcmp(a->file_name, b->file_name);
+		return strcmp(a->name, b->name);
 	case CMP_SIZE:
 		return (a->s.st_size < b->s.st_size ? -1 : 1);
 	case CMP_DATE:
@@ -304,11 +308,12 @@ void file_view_sort(struct file_view* const fv) {
 }
 
 char* file_view_path_to_selected(struct file_view* const fv) {
-	// TODO buffer
-	if (!fv->num_files) return NULL;
-	char* p = malloc(PATH_BUF_SIZE);
-	strncpy(p, fv->wd, PATH_BUF_SIZE);
-	if (cd(p, fv->file_list[fv->selection]->file_name)) {
+	const struct file_record* H;
+	if (!(H = hfr(fv))) return NULL;
+	const size_t wdl = strnlen(fv->wd, PATH_MAX_LEN);
+	char* p = malloc(wdl+1+NAME_BUF_SIZE);
+	memcpy(p, fv->wd, wdl+1);
+	if (append_dir(p, H->name)) {
 		free(p);
 		return NULL;
 	}
@@ -317,7 +322,7 @@ char* file_view_path_to_selected(struct file_view* const fv) {
 
 void file_view_sorting_changed(struct file_view* const fv) {
 	char before[NAME_BUF_SIZE];
-	strncpy(before, fv->file_list[fv->selection]->file_name, NAME_BUF_SIZE);
+	strncpy(before, fv->file_list[fv->selection]->name, NAME_BUF_SIZE);
 	file_view_sort(fv);
 	file_highlight(fv, before);
 }
@@ -333,7 +338,7 @@ void file_view_selected_to_list(struct file_view* const fv,
 		fr->selected = true;
 		list->len = 1;
 		list->str = malloc(sizeof(char*));
-		list->str[0] = strdup(fr->file_name);
+		list->str[0] = strdup(fr->name);
 		return;
 	}
 	list->len = 0;
@@ -341,7 +346,7 @@ void file_view_selected_to_list(struct file_view* const fv,
 	fnum_t f = 0, s = 0;
 	for (; f < fv->num_files && s < fv->num_selected; ++f) {
 		if (!fv->file_list[f]->selected) continue;
-		const char* const fn = fv->file_list[f]->file_name;
+		const char* const fn = fv->file_list[f]->name;
 		const size_t fnl = strnlen(fn, NAME_MAX_LEN);
 		list->str[list->len] = malloc(fnl+1);
 		memcpy(list->str[list->len], fn, fnl+1);
@@ -355,7 +360,7 @@ void select_from_list(struct file_view* const fv,
 	for (fnum_t i = 0; i < L->len; ++i) {
 		if (!L->str[i]) continue;
 		for (fnum_t s = 0; s < fv->num_files; ++s) {
-			if (!strcmp(L->str[i], fv->file_list[s]->file_name)) {
+			if (!strcmp(L->str[i], fv->file_list[s]->name)) {
 				fv->file_list[s]->selected = true;
 				fv->num_selected += 1;
 				break;

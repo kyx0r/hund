@@ -50,7 +50,6 @@ bool same_fs(const char* const a, const char* const b) {
 void file_list_clean(struct file_record*** const fl, fnum_t* const nf) {
 	if (!*nf) return;
 	for (fnum_t i = 0; i < *nf; ++i) {
-		free((*fl)[i]->file_name);
 		free((*fl)[i]);
 	}
 	free(*fl);
@@ -102,7 +101,8 @@ int scan_dir(const char* const wd, struct file_record*** const fl,
 		if (de->d_name[0] == '.') {
 			*nhf += 1;
 		}
-		struct file_record* nfr = malloc(sizeof(struct file_record));
+		const size_t nl = strnlen(de->d_name, NAME_MAX_LEN);
+		struct file_record* nfr = malloc(sizeof(*nfr)+nl+1);
 		if (!nfr) {
 			err = ENOMEM;
 			*nhf = 0;
@@ -111,19 +111,12 @@ int scan_dir(const char* const wd, struct file_record*** const fl,
 		}
 		(*fl)[gf] = nfr;
 		gf += 1;
-		const size_t namelen = strnlen(de->d_name, NAME_MAX_LEN);
-		nfr->file_name = malloc(namelen+1);
+		nfr->nl = (unsigned char)nl;
 		nfr->dir_volume = -1;
 		nfr->selected = false;
-		if (!nfr->file_name) {
-			err = ENOMEM;
-			*nhf = 0;
-			file_list_clean(fl, nf);
-			break;
-		}
-		strncpy(nfr->file_name, de->d_name, namelen+1);
+		strncpy(nfr->name, de->d_name, nl+1);
 		strncpy(fpath, wd, PATH_BUF_SIZE);
-		if ((err = append_dir(fpath, nfr->file_name))
+		if ((err = append_dir(fpath, nfr->name))
 		   || lstat(fpath, &nfr->s)) {
 			err = errno; // TODO
 			memset(&nfr->s, 0, sizeof(struct stat));
@@ -313,7 +306,7 @@ int cd(char* const current, const char* const dest) {
 		struct passwd* pwd = getpwuid(geteuid());
 		const size_t pwl = strnlen(pwd->pw_dir, PATH_MAX_LEN);
 		memcpy(B, pwd->pw_dir, pwl);
-		memset(B+pwl+1, 0, PATH_BUF_SIZE-pwl);
+		memset(B+pwl, 0, PATH_BUF_SIZE-pwl);
 		Bl = pwl;
 		a += 2;
 		rem -= 2;
@@ -331,7 +324,7 @@ int cd(char* const current, const char* const dest) {
 		}
 		else {
 			memcpy(B, current, cl);
-			memset(B+cl+1, 0, PATH_BUF_SIZE-cl);
+			memset(B+cl, 0, PATH_BUF_SIZE-cl);
 			Bl = cl;
 			if (B[Bl-1] == '/') {
 				B[--Bl] = 0;
@@ -340,7 +333,7 @@ int cd(char* const current, const char* const dest) {
 	}
 	const char* b;
 	while (rem) {
-		b = strchr(a, '/');
+		b = memchr(a, '/', rem);
 
 		if (!b) b = a+rem;
 		else rem -= 1;

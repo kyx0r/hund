@@ -157,7 +157,7 @@ static void _entry(struct ui* const i, const struct file_view* const fv,
 	const enum theme_element fsym = mode2theme(cfr->s.st_mode);
 
 	char name[NAME_BUF_SIZE];
-	cut_unwanted(cfr->file_name, name, '.', NAME_BUF_SIZE);
+	cut_unwanted(cfr->name, name, '.', NAME_BUF_SIZE);
 
 	char sbuf[SIZE_BUF_SIZE];
 	pretty_size(cfr->s.st_size, sbuf);
@@ -326,7 +326,7 @@ static void _statusbar(struct ui* const i) {
 void _cmd_and_keyseqs(struct ui* const i, const enum command c,
 		const struct input2cmd* const k[], const size_t ki) {
 	// TODO some valid inputs such as SPACE are invisible
-	const int maxsequences = INPUT_LIST_LENGTH-1;
+	const size_t maxsequences = 4;
 	const size_t seqwid = 8; // TODO may not be enough
 	size_t W = 0;
 	append(&i->B, CSI_CLEAR_LINE);
@@ -359,9 +359,9 @@ void _cmd_and_keyseqs(struct ui* const i, const enum command c,
 			j += 1;
 		}
 		W += 1;
-		fill(&i->B, ' ', seqwid - w);
+		if (seqwid > w) fill(&i->B, ' ', seqwid - w);
 	}
-	fill(&i->B, ' ', (maxsequences-W) * seqwid);
+	if (maxsequences > W) fill(&i->B, ' ', (maxsequences-W) * seqwid);
 	append(&i->B, cmd_help[c], strlen(cmd_help[c]));
 }
 
@@ -800,8 +800,6 @@ int spawn(char* const arg[]) {
 	int ret = 0, status = 0, nullfd;
 	write(STDOUT_FILENO, CSI_CLEAR_ALL);
 	if ((ret = stop_raw_mode(&global_i->T))) return ret;
-	global_i->mt = MSG_INFO;
-	strcpy(global_i->msg, "external program is running...");
 	pid_t pid = fork();
 	if (pid == 0) {
 		nullfd = open("/dev/null", O_WRONLY, 0100);
@@ -815,8 +813,11 @@ int spawn(char* const arg[]) {
 		// TODO ???
 		close(nullfd);
 		if (execve(arg[0], arg, environ)) ret = errno;
+		return ret;
 	}
 	else {
+		global_i->mt = MSG_INFO;
+		strcpy(global_i->msg, "external program is running...");
 		while (waitpid(pid, &status, 0) == -1);
 	}
 	global_i->msg[0] = 0;

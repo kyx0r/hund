@@ -85,11 +85,11 @@ int relative_chmod(const char* const, const mode_t, const mode_t);
 typedef unsigned int fnum_t; // Number of Files
 
 struct file_record {
-	char* file_name;
-	// TODO keep file_name length?
 	struct stat s;
 	ssize_t dir_volume;
 	bool selected;
+	unsigned char nl;
+	char name[];
 };
 
 #define S_ISTOOSPECIAL(M) (((M & S_IFMT) == S_IFBLK) \
