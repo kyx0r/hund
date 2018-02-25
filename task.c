@@ -228,39 +228,41 @@ static int _copy_some(struct task* const t,
 }
 
 /*
- * path = path of the source
- * wd = root directory of the operation (which part of src is to be changed to dst)
- * dst = directory to which source is to be moved/copied
- * newname = new name for destination
- * result = place to put the end result
+ * P = Path of the source
+ * W = Working directory: root directory of the operation
+ * D = Destination; directory to which source is to be moved/copied
  *
- * TODO wd can be a number - slice to cut out and replace
+ * N = New name for destination
+ * O = Old name
+ *
+ * R = Result; place to put the end result
+ *
+ * TODO ENAMETOOLONG
  */
-void build_new_path(const char* const path, const char* const wd,
-		const char* const dst, const char* const oldname,
-		const char* const newname, char* const result) {
-	strncpy(result, path, PATH_BUF_SIZE);
-	if (newname) {
-		const size_t dst_len = strnlen(dst, PATH_MAX_LEN);
-		const size_t newname_len = strnlen(newname, NAME_MAX_LEN);
-		char* _dst = malloc(dst_len+1+newname_len+1);
-		strncpy(_dst, dst, dst_len+1);
-		append_dir(_dst, newname);
-		const size_t wd_len = strnlen(wd, PATH_MAX_LEN);
-		const size_t oldname_len = strnlen(oldname, NAME_MAX_LEN);
-		char* _wd = malloc(wd_len+1+oldname_len+1);
-		strncpy(_wd, wd, wd_len+1);
-		append_dir(_wd, oldname);
-		substitute(result, _wd, _dst);
-		free(_wd);
-		free(_dst);
-	}
-	else if (!strncmp(wd, "/", 2)) {
-		substitute(result, wd+1, dst);
+void build_new_path(const char* const P, const char* const W,
+		const char* const D, const char* const O,
+		const char* const N, char* const R) {
+	const size_t Plen = strnlen(P, PATH_MAX_LEN);
+	const size_t Dlen = strnlen(D, PATH_MAX_LEN);
+	const size_t Wlen = strnlen(W, PATH_MAX_LEN);
+	size_t Nlen, Olen;
+	if (N) {
+		Nlen = strnlen(N, NAME_MAX_LEN);
+		Olen = strnlen(O, NAME_MAX_LEN);
 	}
 	else {
-		substitute(result, wd, dst);
+		Nlen = Olen = 0;
 	}
+	const size_t new_len = Dlen+1+Nlen;
+	size_t old_len = Wlen+1+Olen;
+	if (!memcmp(W, "/", 2)) {
+		old_len -= 1;
+	}
+	memcpy(R, P, Plen+1);
+	memmove(R+new_len, R+old_len, abs(Plen-old_len)+1);
+	memcpy(R, D, Dlen);
+	R[Dlen] = '/';
+	memcpy(R+Dlen+1, N, Nlen);
 }
 
 /*
