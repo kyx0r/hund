@@ -123,7 +123,6 @@ bool path_is_relative(const char* const);
 int prettify_path_i(const char* const, const char* const);
 int current_dir_i(const char* const);
 
-bool substitute(char* const, const char* const, const char* const);
 size_t imb(const char*, const char*);
 bool contains(const char* const, const char* const);
 

@@ -419,19 +419,6 @@ int current_dir_i(const char* const path) {
 	return i+1; // i will point last slash in path
 }
 
-/*
- * Finds SubString at the begining of STRing and changes it ti RepLacement
- */
-bool substitute(char* const str, const char* const SS, const char* const R) {
-	const size_t ss_l = strnlen(SS, PATH_MAX_LEN);
-	const size_t str_l = strnlen(str, PATH_MAX_LEN);
-	if (ss_l > str_l || memcmp(str, SS, ss_l)) return false;
-	const size_t repl_l = strnlen(R, PATH_MAX_LEN);
-	memmove(str+repl_l, str+ss_l, str_l-ss_l+1);
-	memcpy(str, R, repl_l);
-	return true;
-}
-
 /* Initial Matching Bytes */
 size_t imb(const char* a, const char* b) {
 	size_t m = 0;
