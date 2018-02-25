@@ -94,6 +94,7 @@ static void open_selected_with(struct ui* const i, char* const w) {
 }
 
 static void cmd_find(struct ui* const i) {
+	if (!i->pv->num_files) return;
 	char t[NAME_BUF_SIZE];
 	char* t_top = t;
 	memset(t, 0, sizeof(t));
@@ -213,7 +214,6 @@ inline static bool _solve_name_conflicts_if_any(struct ui* const i,
 
 static void prepare_task(struct ui* const i, struct task* const t,
 		const enum task_type tt) {
-	if (!i->pv->num_files) return;
 	static const struct select_option o[] = {
 		{ KUTF8("n"), "no" },
 		{ KUTF8("y"), "yes" },
@@ -221,6 +221,7 @@ static void prepare_task(struct ui* const i, struct task* const t,
 	struct string_list S = { NULL, 0 }; // Selected
 	struct string_list R = { NULL, 0 }; // Renamed
 	file_view_selected_to_list(i->pv, &S);
+	if (!S.len) return;
 	if (tt & (TASK_MOVE | TASK_COPY)) {
 		if (!_solve_name_conflicts_if_any(i, &S, &R)) {
 			free_list(&S);
