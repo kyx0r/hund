@@ -96,9 +96,13 @@ struct input get_input(int timeout_us) {
 	return i;
 }
 
+/*
+ * TODO maybe close stderr? redirect?
+ */
 int start_raw_mode(struct termios* const before) {
 	const int fd = STDIN_FILENO;
 	memset(before, 0, sizeof(struct termios));
+	write(STDOUT_FILENO, CSI_SCREEN_ALTERNATIVE);
 	if (tcgetattr(fd, before) == -1) return errno;
 	struct termios raw;
 	memcpy(&raw, before, sizeof(struct termios));
@@ -107,7 +111,9 @@ int start_raw_mode(struct termios* const before) {
 }
 
 int stop_raw_mode(struct termios* const before) {
-	return (tcsetattr(STDIN_FILENO, TCSAFLUSH, before) == -1 ? errno : 0);
+	int r = (tcsetattr(STDIN_FILENO, TCSAFLUSH, before) == -1 ? errno : 0);
+	write(STDOUT_FILENO, CSI_SCREEN_NORMAL);
+	return r;
 }
 
 int char_attr(char* const B, const size_t S,
