@@ -302,16 +302,7 @@ int cd(char* const current, const char* const dest) {
 	size_t Bl;
 	const char* a = dest;
 	size_t rem = strnlen(dest, PATH_MAX_LEN);
-	if (dest[0] == '~') { // TODO TEST
-		struct passwd* pwd = getpwuid(geteuid());
-		const size_t pwl = strnlen(pwd->pw_dir, PATH_MAX_LEN);
-		memcpy(B, pwd->pw_dir, pwl);
-		memset(B+pwl, 0, PATH_BUF_SIZE-pwl);
-		Bl = pwl;
-		a += 2;
-		rem -= 2;
-	}
-	else if (dest[0] == '/') {
+	if (dest[0] == '/') {
 		memset(B, 0, sizeof(B));
 		Bl = 0;
 		a += 1;
@@ -338,15 +329,25 @@ int cd(char* const current, const char* const dest) {
 		if (!b) b = a+rem;
 		else rem -= 1;
 
-		if (b-a == 1 && !memcmp(a, ".", 1)) {
-			rem -= 1;
-		}
+		if (b-a == 1 && !memcmp(a, ".", 1));
 		else if (b-a == 2 && !memcmp(a, "..", 2)) {
 			while (Bl > 0 && B[Bl-1] != '/') {
 				B[--Bl] = 0;
 			}
 			B[--Bl] = 0;
-			rem -= 2;
+		}
+		else if (b-a == 1 && a == dest && !memcmp(a, "~", 1)) {
+			const char* home;
+			if (!(home = getenv("HOME"))) {
+				errno = 0;
+				struct passwd* pwd = getpwuid(geteuid());
+				if (!pwd) return errno;
+				home = pwd->pw_dir;
+			}
+			const size_t hl = strnlen(home, PATH_MAX_LEN);
+			memcpy(B, home, hl);
+			memset(B+hl, 0, PATH_BUF_SIZE-hl);
+			Bl = hl;
 		}
 		else if (b-a) {
 			if (Bl + 1 + (b-a) >= PATH_MAX_LEN) {
@@ -355,8 +356,8 @@ int cd(char* const current, const char* const dest) {
 			B[Bl++] = '/';
 			memcpy(B+Bl, a, b-a);
 			Bl += b-a;
-			rem -= b-a;
 		}
+		rem -= b-a;
 		a = b+1;
 	}
 	if (B[0] == 0) {
