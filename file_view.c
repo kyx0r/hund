@@ -334,6 +334,10 @@ void file_view_selected_to_list(struct file_view* const fv,
 		struct string_list* const list) {
 	if (!fv->num_selected) {
 		struct file_record* const fr = hfr(fv);
+		if (!fr) {
+			memset(list, 0, sizeof(*list));
+			return;
+		}
 		fv->num_selected = 1;
 		fr->selected = true;
 		list->len = 1;
