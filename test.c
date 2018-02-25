@@ -17,74 +17,132 @@ int main() {
 
 	int r;
 
+	char home[PATH_MAX];
+	strcpy(home, getenv("HOME"));
+
 	char path[PATH_MAX] = "/";
+	r = cd(path, "~");
+	TESTVAL(r, 0, "");
+	TESTSTR(path, home, "");
+
+	r = cd(path, "~/");
+	TESTVAL(r, 0, "");
+	TESTSTR(path, home, "");
+
+	strcat(home, "/file");
+	r = cd(path, "~/file");
+	TESTVAL(r, 0, "");
+	TESTSTR(path, home, "");
+
+	strcpy(home, "/~file");
+	memset(path, 0, sizeof(path));
+
+	r = cd(path, "~file");
+	TESTVAL(r, 0, "");
+	TESTSTR(path, home, "");
+
+	memset(path, 0, sizeof(path));
+
 	r = cd(path, "");
-	TEST(r == 0 && strcmp(path, "/") == 0, "");
+	TESTVAL(r, 0, "");
+	TESTSTR(path, "/", "");
+
+	r = cd(path, "");
+	TESTVAL(r, 0, "");
+	TESTSTR(path, "/", "");
 
 	path[0] = 0;
 	r = cd(path, "");
-	TEST(r == 0 && strcmp(path, "/") == 0, "");
+	TESTVAL(r, 0, "");
+	TESTSTR(path, "/", "");
 
 	r = cd(path, "/a/b/");
-	TEST(r == 0 && strcmp(path, "/a/b") == 0, "");
+	TESTVAL(r, 0, "");
+	TESTSTR(path, "/a/b", "");
 
 	r = cd(path, "c/");
-	TEST(r == 0 && strcmp(path, "/a/b/c") == 0, "");
+	TESTVAL(r, 0, "");
+	TESTSTR(path, "/a/b/c", "");
 
 	r = cd(path, "d/////////////////////////////////e");
-	TEST(r == 0 && strcmp(path, "/a/b/c/d/e") == 0, "");
+	TESTVAL(r, 0, "");
+	TESTSTR(path, "/a/b/c/d/e", "");
 
 	r = cd(path, "/d/////e/////////////////////////////////////////////////////f");
-	TEST(r == 0 && strcmp(path, "/d/e/f") == 0, "");
+	TESTVAL(r, 0, "");
+	TESTSTR(path, "/d/e/f", "");
 
 	r = cd(path, "//d//e//f");
-	TEST(r == 0 && strcmp(path, "/d/e/f") == 0, "");
+	TESTVAL(r, 0, "");
+	TESTSTR(path, "/d/e/f", "");
 
 	r = cd(path, "/////////");
-	TEST(r == 0 && strcmp(path, "/") == 0, "");
+	TESTVAL(r, 0, "");
+	TESTSTR(path, "/", "");
+
+	r = cd(path, "home");
+	TESTVAL(r, 0, "");
+	TESTSTR(path, "/home", "");
+
+	r = cd(path, "user");
+	TESTVAL(r, 0, "");
+	TESTSTR(path, "/home/user", "");
 
 	memset(path, '/', 5);
 	path[6] = 0;
 	r = cd(path, "/////////");
-	TEST(r == 0 && strcmp(path, "/") == 0, "");
+	TESTVAL(r, 0, "");
+	TESTSTR(path, "/", "");
 
 	memset(path, 0, sizeof(path));
 	r = cd(path, "dir");
-	TEST(r == 0 && strcmp(path, "/dir") == 0, "");
+	TESTVAL(r, 0, "");
+	TESTSTR(path, "/dir", "");
 
 	memset(path, 0, sizeof(path));
 	path[0] = '/';
 	r = cd(path, "usr");
-	TEST(r == 0 && strcmp(path, "/usr") == 0, "entered directory in root (respect /)");
+	TESTVAL(r, 0, "");
+	TESTSTR(path, "/usr", "entered directory in root (respect /)");
 
 	r = cd(path, "bin");
-	TEST(r == 0 && strcmp(path, "/usr/bin") == 0, "correct path");
+	TESTVAL(r, 0, "");
+	TESTSTR(path, "/usr/bin", "correct path");
 
 	r = cd(path, ".");
-	TEST(r == 0 && strcmp(path, "/usr/bin") == 0, "path unchanged");
+	TESTVAL(r, 0, "");
+	TESTSTR(path, "/usr/bin", "path unchanged");
 
 	r = cd(path, "..");
-	TEST(r == 0 && strcmp(path, "/usr") == 0, "");
+	TESTVAL(r, 0, "");
+	TESTSTR(path, "/usr", "");
 
 	r = cd(path, "..");
-	TEST(r == 0 && strcmp(path, "/") == 0, "");
+	TESTVAL(r, 0, "");
+	TESTSTR(path, "/", "");
 
 	r = cd(path, "..");
-	TEST(r == 0 && strcmp(path, "/") == 0, "");
+	TESTVAL(r, 0, "");
+	TESTSTR(path, "/", "");
 
 	r = cd(path, "lol/../wat");
-	TEST(r == 0 && strcmp(path, "/wat") == 0, "");
+	TESTVAL(r, 0, "");
+	TESTSTR(path, "/wat", "");
 
 	memset(path, 0, sizeof(path));
 	path[0] = '/';
 	memset(path+1, 'a', PATH_MAX-3); // 1 to leave null-terminator, 1 for /, 1 for b
 	r = cd(path, "b");
-	TEST(r && strlen(path) == PATH_MAX-2, "path filled");
+	TESTVAL(r, ENAMETOOLONG, "");
+	TESTVAL(strlen(path), PATH_MAX-2, "path filled");
 
 	r = cd(path, "end");
-	TEST(r && strlen(path) == PATH_MAX-2, "respect PATH_MAX; leave path unchanged");
+	TESTVAL(r, ENAMETOOLONG, "");
+	TESTVAL(strlen(path), PATH_MAX-2, "respect PATH_MAX; leave path unchanged");
+
 	r = append_dir(path, "end");
-	TEST(r && strlen(path) == PATH_MAX-2, "respect PATH_MAX; leave path unchanged");
+	TESTVAL(r, ENAMETOOLONG, "");
+	TESTVAL(strlen(path), PATH_MAX-2, "respect PATH_MAX; leave path unchanged");
 
 	TEST(!path_is_relative("/"), "absolute");
 	TEST(!path_is_relative("/etc/netctl"), "absolute");
@@ -100,19 +158,20 @@ int main() {
 	strcpy(path, "/dope/");
 	char dir5[] = "./wat/lol/../wut";
 	cd(path, dir5);
-	TEST(strcmp(path, "/dope/wat/wut") == 0, "");
+	TESTSTR(path, "/dope/wat/wut", "");
 
 	cd(path, "/home/user");
-	TEST(strcmp(path, "/home/user") == 0, "");
+	TESTSTR(path, "/home/user", "");
 
 	char path7[PATH_MAX+1] = "/home/user/images/memes";
 	int e = append_dir(path7, "lol");
-	TEST(e == 0 && !strcmp(path7, "/home/user/images/memes/lol"), "");
+	TESTVAL(e, 0, "");
+	TESTSTR(path7, "/home/user/images/memes/lol", "");
 
-	TEST(imb("1234567", "123") == 3, "");
-	TEST(imb("1234567", "023") == 0, "");
-	TEST(imb("1234567", "1234567") == 7, "");
-	TEST(imb("1034567", "1214567") == 1, "");
+	TESTVAL(imb("1234567", "123"), 3, "");
+	TESTVAL(imb("1234567", "023"), 0, "");
+	TESTVAL(imb("1234567", "1234567"), 7, "");
+	TESTVAL(imb("1034567", "1214567"), 1, "");
 
 	TEST(contains("lol", "lol"), "");
 	TEST(contains("lolz", "lol"), "");
@@ -130,61 +189,61 @@ int main() {
 
 	char buf[SIZE_BUF_SIZE];
 	pretty_size(100, buf);
-	TEST(!strcmp(buf, "100B"), "");
+	TESTSTR(buf, "100B", "");
 	pretty_size(999, buf);
-	TEST(!strcmp(buf, "999B"), "");
+	TESTSTR(buf, "999B", "");
 	pretty_size(1000, buf);
-	TEST(!strcmp(buf, "0.97K"), "");
+	TESTSTR(buf, "0.97K", "");
 	pretty_size(1023, buf);
-	TEST(!strcmp(buf, "0.99K"), "");
+	TESTSTR(buf, "0.99K", "");
 	pretty_size(1024, buf);
-	TEST(!strcmp(buf, "1K"), "");
+	TESTSTR(buf, "1K", "");
 	pretty_size(1035, buf);
-	TEST(!strcmp(buf, "1.01K"), "");
+	TESTSTR(buf, "1.01K", "");
 	pretty_size(1024+512, buf);
-	TEST(!strcmp(buf, "1.5K"), "");
+	TESTSTR(buf, "1.5K", "");
 	pretty_size(1024+1023, buf);
-	TEST(!strcmp(buf, "1.99K"), "");
+	TESTSTR(buf, "1.99K", "");
 	pretty_size(2048, buf);
-	TEST(!strcmp(buf, "2K"), "");
+	TESTSTR(buf, "2K", "");
 
 	pretty_size(1024*1000, buf);
-	TEST(!strcmp(buf, "0.97M"), "");
+	TESTSTR(buf, "0.97M", "");
 
 	pretty_size((off_t) 1, buf);
-	TEST(!strcmp(buf, "1B"), "");
+	TESTSTR(buf, "1B", "");
 
 	pretty_size((off_t) 1<<10, buf);
-	TEST(!strcmp(buf, "1K"), "");
+	TESTSTR(buf, "1K", "");
 
 	pretty_size((off_t) 1<<20, buf);
-	TEST(!strcmp(buf, "1M"), "");
+	TESTSTR(buf, "1M", "");
 
 	pretty_size((off_t) 1<<30, buf);
-	TEST(!strcmp(buf, "1G"), "");
+	TESTSTR(buf, "1G", "");
 
 	pretty_size((off_t) 1<<40, buf);
-	TEST(!strcmp(buf, "1T"), "");
+	TESTSTR(buf, "1T", "");
 
 	pretty_size((off_t) 1<<50, buf);
-	TEST(!strcmp(buf, "1P"), "");
+	TESTSTR(buf, "1P", "");
 
 	pretty_size((off_t) 1<<60, buf);
-	TEST(!strcmp(buf, "1E"), "");
+	TESTSTR(buf, "1E", "");
 
 	off_t s = (off_t) 1 << 60;
 	s += (off_t) 1 << 59;
 	pretty_size(s, buf);
-	TEST(!strcmp(buf, "1.5E"), "");
+	TESTSTR(buf, "1.5E", "");
 	s += (off_t) 1 << 58;
 	pretty_size(s, buf);
-	TEST(!strcmp(buf, "1.75E"), "");
+	TESTSTR(buf, "1.75E", "");
 	s += (off_t) 1 << 57;
 	pretty_size(s, buf);
-	TEST(!strcmp(buf, "1.87E"), "");
+	TESTSTR(buf, "1.87E", "");
 	s = 0x7fffffffffffffff;
 	pretty_size(s, buf);
-	TEST(!strcmp(buf, "7.99E"), "");
+	TESTSTR(buf, "7.99E", "");
 
 	END_SECTION("fs");
 
@@ -202,7 +261,7 @@ int main() {
 	};
 
 	for (unsigned i = 0; i < sizeof(tup)/sizeof(struct test_utf8_pair); ++i) {
-		TEST(tup[i].cp == utf8_b2cp(tup[i].b), "sample pairs of glyphs and codepoints match");
+		TESTVAL(tup[i].cp, utf8_b2cp(tup[i].b), "sample pairs of glyphs and codepoints match");
 	}
 
 	bool symmetric = true;
@@ -255,8 +314,8 @@ int main() {
 
 	for (size_t i = 0; i < sizeof(svs)/sizeof(struct string_and_width); ++i) {
 		TEST(utf8_width(svs[i].s) <= strlen(svs[i].s), "apparent width <= length; loose, but always true");
-		TEST(utf8_width(svs[i].s) == svs[i].w, "");
-		TEST(utf8_width(svs[i].s) == utf8_wtill(svs[i].s, svs[i].s+strlen(svs[i].s)), "");
+		TESTVAL(utf8_width(svs[i].s), svs[i].w, "");
+		TESTVAL(utf8_width(svs[i].s), utf8_wtill(svs[i].s, svs[i].s+strlen(svs[i].s)), "");
 		TEST(utf8_validate(svs[i].s), "all valid strings are valid");
 	}
 
@@ -277,31 +336,31 @@ int main() {
 		TEST(!utf8_validate(sis[i]), "all invalid strings are invalid");
 	}
 
-	TEST(utf8_w2nb("łaka łaką", 2) == 3, "");
-	TEST(utf8_w2nb("qq", 2) == 2, "");
-	TEST(utf8_w2nb("", 2) == 0, "");
-	TEST(utf8_w2nb("a", 0) == 0, "");
-	TEST(utf8_w2nb("a", 666) == 1, "");
-	TEST(utf8_w2nb("łłłłł", 666) == 10, "");
+	TESTVAL(utf8_w2nb("łaka łaką", 2), 3, "");
+	TESTVAL(utf8_w2nb("qq", 2), 2, "");
+	TESTVAL(utf8_w2nb("", 2), 0, "");
+	TESTVAL(utf8_w2nb("a", 0), 0, "");
+	TESTVAL(utf8_w2nb("a", 666), 1, "");
+	TESTVAL(utf8_w2nb("łłłłł", 666), 10, "");
 
 	char inserted[20] = "łąkała";
 	utf8_insert(inserted, "ń", 2);
-	TEST(!strcmp(inserted, "łąńkała"), "");
+	TESTSTR(inserted, "łąńkała", "");
 	utf8_insert(inserted, "ł", 5);
-	TEST(!strcmp(inserted, "łąńkałła"), "");
+	TESTSTR(inserted, "łąńkałła", "");
 	utf8_remove(inserted, 0);
-	TEST(!strcmp(inserted, "ąńkałła"), "");
+	TESTSTR(inserted, "ąńkałła", "");
 	utf8_remove(inserted, 4);
-	TEST(!strcmp(inserted, "ąńkała"), "");
+	TESTSTR(inserted, "ąńkała", "");
 	utf8_remove(inserted, 4);
-	TEST(!strcmp(inserted, "ąńkaa"), "");
-	TEST(utf8_wtill(inserted, inserted+5) == 3, "");
+	TESTSTR(inserted, "ąńkaa", "");
+	TESTVAL(utf8_wtill(inserted, inserted+5), 3, "");
 
 	char inv[NAME_MAX];
 	cut_unwanted("works", inv, 'x', NAME_MAX);
-	TEST(!strcmp(inv, "works"), "");
-	cut_unwanted("\xffwor\e\b\a\nks", inv, '.', NAME_MAX);
-	TEST(!strcmp(inv, ".wor....ks"), "");
+	TESTSTR(inv, "works", "");
+	cut_unwanted("\xffwor\x1b\b\a\nks", inv, '.', NAME_MAX);
+	TESTSTR(inv, ".wor....ks", "");
 
 	END_SECTION("utf8");
 
@@ -311,19 +370,19 @@ int main() {
 	build_new_path("/home/user/doc/dir/file.txt",
 			"/home/user/doc", "/home/user/.trash",
 			"dir", "repl", result);
-	TEST(!strcmp(result, "/home/user/.trash/repl/file.txt"), "");
+	TESTSTR(result, "/home/user/.trash/repl/file.txt", "");
 
 	build_new_path("/home/user/doc/dir/file.txt",
 			"/home/user/doc", "/home/user/.trash", "doc", NULL, result);
-	TEST(!strcmp(result, "/home/user/.trash/dir/file.txt"), "");
+	TESTSTR(result, "/home/user/.trash/dir/file.txt", "");
 
 	build_new_path("/home/user/doc/dir",
 			"/home/user", "/home/root/.trash", "user", NULL, result);
-	TEST(!strcmp(result, "/home/root/.trash/doc/dir"), "");
+	TESTSTR(result, "/home/root/.trash/doc/dir", "");
 
 	build_new_path("/root",
 			"/", "/home", "root", NULL, result);
-	TEST(!strcmp(result, "/home/root"), "");
+	TESTSTR(result, "/home/root", "");
 
 	free(result);
 
@@ -341,19 +400,19 @@ int main() {
 	append(&ab, "pls", 3);
 	append(&ab, "pls", 0);
 	TEST(!memcmp(ab.buf, "lolpls", 6), "");
-	TEST(ab.top == 6, "");
-	TEST(ab.capacity == 100, "");
+	TESTVAL(ab.top, 6, "");
+	TESTVAL(ab.capacity, 100, "");
 
 	fill(&ab, ';', 3);
 	TEST(!memcmp(ab.buf, "lolpls;;;", 9), "");
-	TEST(ab.top == 9, "");
-	TEST(ab.capacity == 100, "");
+	TESTVAL(ab.top, 9, "");
+	TESTVAL(ab.capacity, 100, "");
 
 	fill(&ab, '.', 91);
-	TEST(ab.capacity == 100, "");
+	TESTVAL(ab.capacity, 100, "");
 
 	fill(&ab, ' ', 1);
-	TEST(ab.capacity == 101, "");
+	TESTVAL(ab.capacity, 101, "");
 
 	free(ab.buf);
 
