@@ -366,25 +366,59 @@ int main() {
 
 	SECTION("task");
 
-	char* result = malloc(PATH_MAX);
+
+	char result[PATH_BUF_SIZE];
 	build_new_path("/home/user/doc/dir/file.txt",
 			"/home/user/doc", "/home/user/.trash",
 			"dir", "repl", result);
 	TESTSTR(result, "/home/user/.trash/repl/file.txt", "");
 
 	build_new_path("/home/user/doc/dir/file.txt",
-			"/home/user/doc", "/home/user/.trash", "doc", NULL, result);
+			"/home/user/doc", "/b",
+			"dir", "repl", result);
+	TESTSTR(result, "/b/repl/file.txt", "");
+
+
+	build_new_path("/aaa/file.txt",
+			"/", "/home/user",
+			"aaa", "b", result);
+	TESTSTR(result, "/home/user/b/file.txt", "");
+
+	build_new_path("/a/b/c/d/e/f/file.txt",
+			"/a/b/c", "/home",
+			"d", "xxx", result);
+	TESTSTR(result, "/home/xxx/e/f/file.txt", "");
+
+	build_new_path("/a/b/c/d/e/f/file.txt",
+			"/a/b/c", "/home",
+			"d", NULL, result);
+	TESTSTR(result, "/home/d/e/f/file.txt", "");
+
+	build_new_path("/home/user/doc/dir/file.txt",
+			"/home/user/doc", "/home/user/.trash",
+			"file.txt", NULL, result);
 	TESTSTR(result, "/home/user/.trash/dir/file.txt", "");
 
 	build_new_path("/home/user/doc/dir",
-			"/home/user", "/home/root/.trash", "user", NULL, result);
+			"/home/user", "/home/root/.trash",
+			"dir", NULL, result);
 	TESTSTR(result, "/home/root/.trash/doc/dir", "");
 
 	build_new_path("/root",
-			"/", "/home", "root", NULL, result);
+			"/", "/home",
+			"/", NULL, result);
 	TESTSTR(result, "/home/root", "");
 
-	free(result);
+	build_new_path("/root/file.txt",
+			"/root", "/wazzup",
+			"root", NULL, result);
+	TESTSTR(result, "/wazzup/file.txt", "");
+
+	build_new_path("/roooooot/file.txt",
+			"/roooooot", "/q",
+			"roooooot", NULL, result);
+	TESTSTR(result, "/q/file.txt", "");
+
 
 	END_SECTION("task");
 
