@@ -55,8 +55,7 @@ static char* get_editor(void) {
 
 static int open_file_with(char* const p, char* const f) {
 	char exeimg[PATH_BUF_SIZE];
-	static const char* const bin = "/usr/bin";
-	memcpy(exeimg, bin, sizeof(bin)-1);
+	memcpy(exeimg, "/usr/bin", 9);
 	append_dir(exeimg, p);
 	char* const arg[] = { exeimg, f, NULL };
 	return spawn(arg);
@@ -167,45 +166,49 @@ inline static void estimate_volume_for_selected(struct file_view* const fv) {
 #endif
 
 /*
- * If failed to solve conflicts, returns false and frees lists.
+ * Returns:
+ * true - success and there are files to work with (skipping may empty list)
+ * false - failure or aborted
  */
-inline static bool _solve_name_conflicts(struct ui* const i,
+inline static bool _solve_name_conflicts_if_any(struct ui* const i,
 		struct string_list* const s, struct string_list* const r) {
-	static const char* const question = "Conflicting target names.";
+	static const char* const question = "Conflicting names.";
 	static const struct select_option o[] = {
 		{ KUTF8("s"), "skip" },
 		{ KUTF8("r"), "rename" },
 		{ KUTF8("m"), "merge" },
 		{ KUTF8("a"), "abort" }
 	};
-	const int d = ui_select(i, question, o, 4);
-	if (!d) {
-		remove_conflicting(i->sv, s);
-		list_copy(r, s);
-		return s->len;
-	}
-	if (d == 1 && s->len) {
-		list_copy(r, s);
-		bool solved;
-		do {
-			if (edit_list(r, r)) { // TODO error message
-				free_list(s);
-				free_list(r);
+	int err;
+	bool was_conflict = false;
+	list_copy(r, s);
+	while (conflicts_with_existing(i->sv, r)) {
+		was_conflict = true;
+		switch (ui_select(i, question, o, 4)) {
+		case 0:
+			remove_conflicting(i->sv, s);
+			list_copy(r, s);
+			return s->len;
+		case 1:
+			if ((err = edit_list(r, r))) {
+				failed(i, "editor", strerror(err));
 				return false;
 			}
-			if ((solved = !conflicts_with_existing(i->sv, r))) {
-				return true;
-			}
-		} while (!solved && ui_select(i, question, o, 4));
+			break;
+		case 2:
+			// merge policy is chosen after estimating
+			// (if there are any conflicts in the tree)
+			free_list(r);
+			return true;
+		case 3:
+		default:
+			return false;
+		}
 	}
-	else if (d == 2) {
-		r->len = s->len;
-		r->str = calloc(r->len, sizeof(char*));
-		return true;
+	if (!was_conflict) {
+		free_list(r);
 	}
-	free_list(s);
-	free_list(r);
-	return false;
+	return true;
 }
 
 static void prepare_task(struct ui* const i, struct task* const t,
@@ -218,13 +221,12 @@ static void prepare_task(struct ui* const i, struct task* const t,
 	struct string_list S = { NULL, 0 }; // Selected
 	struct string_list R = { NULL, 0 }; // Renamed
 	file_view_selected_to_list(i->pv, &S);
-	if ((tt & (TASK_MOVE | TASK_COPY))
-	&& conflicts_with_existing(i->sv, &S)) {
-		if (!_solve_name_conflicts(i, &S, &R)) return;
-	}
-	else {
-		R.len = S.len;
-		R.str = calloc(R.len, sizeof(char*));
+	if (tt & (TASK_MOVE | TASK_COPY)) {
+		if (!_solve_name_conflicts_if_any(i, &S, &R)) {
+			free_list(&S);
+			free_list(&R);
+			return;
+		}
 	}
 	enum task_flags tf = TF_NONE;
 	if (tt == TASK_CHMOD && S_ISDIR(i->perm[0])
@@ -269,7 +271,7 @@ static int _rename(char* const op, char* const np,
  */
 static int rename_trivial(const char* const wd,
 		struct string_list* const S, struct string_list* const R) {
-	int err;
+	int err = 0;
 	const size_t wdl = strnlen(wd, PATH_MAX_LEN);
 	char* op = malloc(wdl+1+NAME_BUF_SIZE);
 	if (!op) {
@@ -283,29 +285,30 @@ static int rename_trivial(const char* const wd,
 	memcpy(op, wd, wdl+1);
 	memcpy(np, wd, wdl+1);
 	for (fnum_t f = 0; f < S->len; ++f) {
-		if (!S->str[f]) continue;
+		if (!S->str[f]) {
+			continue;
+		}
 		if ((err = _rename(op, np, S->str[f], R->str[f]))) {
-			free(op);
-			free(np);
-			return err;
+			break;
 		}
 	}
 	free(op);
 	free(np);
-	return 0;
+	return err;
 }
 
 static int rename_interdependent(const char* const wd,
 		struct string_list* const N,
 		struct assign* const A, const fnum_t Al) {
-	int err;
+	int err = 0;
 	const size_t wdl = strnlen(wd, PATH_MAX_LEN);
 	char* op = malloc(wdl+1+NAME_BUF_SIZE);
 	memcpy(op, wd, wdl+1);
 	char* np = malloc(wdl+1+NAME_BUF_SIZE);
 	memcpy(np, wd, wdl+1);
-	char tn[NAME_BUF_SIZE]; // Temponary file Name TODO does not have to be that long
-	snprintf(tn, sizeof(tn), ".hund.rename.tmpdir.%08x", getpid());
+	static const char* const tmpdirn = ".hund.rename.tmpdir.";
+	char tn[sizeof(tmpdirn)+8];
+	snprintf(tn, sizeof(tn), "%s%08x", tmpdirn, getpid());
 	fnum_t tc; // Temponary file Content
 	for (;;) {
 		fnum_t i = 0;
@@ -317,9 +320,7 @@ static int rename_interdependent(const char* const wd,
 		tc = A[i].to;
 		const fnum_t tv = A[i].to;
 		if ((err = _rename(op, np, N->str[A[i].from], tn))) {
-			free(op);
-			free(np);
-			return err;
+			break;
 		}
 		fnum_t from = A[i].from;
 		do {
@@ -341,15 +342,13 @@ static int rename_interdependent(const char* const wd,
 			A[j].from = A[j].to = (fnum_t)-1;
 		} while (from != tv);
 		if ((err = _rename(op, np, tn, N->str[tc]))) {
-			free(op);
-			free(np);
-			return err;
+			break;
 		}
 		A[i].from = A[i].to = (fnum_t)-1;
 	}
 	free(op);
 	free(np);
-	return 0;
+	return err;
 }
 
 static void cmd_rename(struct ui* const i) {
@@ -406,7 +405,6 @@ static void cmd_rename(struct ui* const i) {
 	free_list(&N);
 	free(a);
 
-	free_list(&S);
 	if (ui_rescan(i, i->pv, NULL)) {
 		select_from_list(i->pv, &R);
 	}
@@ -565,7 +563,8 @@ static void process_input(struct ui* const i, struct task* const t) {
 			errno = 0;
 			struct passwd* pwd = getpwnam(name);
 			if (!pwd) {
-				failed(i, "chown", "Such user does not exist");
+				err = errno;
+				failed(i, "chown", strerror(err));
 			}
 			else {
 				i->o[1] = pwd->pw_uid;
@@ -581,7 +580,8 @@ static void process_input(struct ui* const i, struct task* const t) {
 			errno = 0;
 			struct group* grp = getgrnam(name);
 			if (!grp) {
-				failed(i, "chgrp", "Such group does not exist");
+				err = errno;
+				failed(i, "chgrp", strerror(err));
 			}
 			else {
 				i->g[1] = grp->gr_gid;
@@ -673,7 +673,7 @@ static void process_input(struct ui* const i, struct task* const t) {
 		tmp = i->pv;
 		i->pv = i->sv;
 		i->sv = tmp;
-		if (i->pv->num_files && !visible(i->pv, i->pv->selection)) {
+		if (!visible(i->pv, i->pv->selection)) {
 			first_entry(i->pv);
 		}
 		break;
@@ -818,8 +818,7 @@ static void task_progress(struct ui* const i,
 }
 
 /* Return value: false = abort, true = go on */
-inline static bool _conflict_policy(struct ui* const i,
-		struct task* const t) {
+inline static bool _conflict_policy(struct ui* const i, struct task* const t) {
 	char question[64];
 	snprintf(question, sizeof(question),
 			"There are %d conflicts",
@@ -844,8 +843,7 @@ inline static bool _conflict_policy(struct ui* const i,
 	return true;
 }
 
-inline static bool _symlink_policy(struct ui* const i,
-		struct task* const t) {
+inline static bool _symlink_policy(struct ui* const i, struct task* const t) {
 	char question[64];
 	snprintf(question, sizeof(question),
 			"There are %d symlinks", t->symlinks);
@@ -875,8 +873,7 @@ inline static bool _symlink_policy(struct ui* const i,
 	return true;
 }
 
-inline static bool _confirm_removal(struct ui* const i,
-		struct task* const t) {
+inline static bool _confirm_removal(struct ui* const i, struct task* const t) {
 	static const struct select_option o[] = {
 		{ KUTF8("n"), "no" },
 		{ KUTF8("y"), "yes" }
@@ -894,7 +891,7 @@ inline static bool _confirm_removal(struct ui* const i,
 static void task_execute(struct ui* const i, struct task* const t) {
 	// TODO error handling is chaotic
 	task_action ta = NULL;
-	char msg[256]; // TODO
+	char msg[512]; // TODO
 	static const struct select_option o[] = {
 		{ KUTF8("n"), "no" },
 		{ KUTF8("y"), "yes" },

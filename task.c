@@ -86,9 +86,10 @@ void task_action_estimate(struct task* const t, int* const c) {
 	if ((t->t == TASK_COPY || t->t == TASK_MOVE) && Q) {
 		char new_path[PATH_BUF_SIZE];
 		build_new_path(t->tw.cpath, t->src, t->dst,
-				t->sources.str[t->current_source],
-				t->renamed.str[t->current_source],
-				new_path);
+			t->sources.str[t->current_source],
+			(t->renamed.len ?
+				t->renamed.str[t->current_source] : NULL),
+			new_path);
 		if (!access(new_path, F_OK)) {
 			t->conflicts += 1;
 		}
@@ -388,6 +389,7 @@ int tree_walk_step(struct tree_walk* const tw) {
 /*
  * npath is a buffer to be used by build_new_path()
  * buf is a buffer to be used by _copy_some()
+ * TODO simplify
  */
 static int _at_step(struct task* const t, int* const c,
 		char* const new_path, char* const buf, const size_t bufsize) {
@@ -398,13 +400,14 @@ static int _at_step(struct task* const t, int* const c,
 	const bool sc = t->tf & TF_SKIP_CONFLICTS;
 	const bool ov = t->tf & TF_OVERWRITE_CONFLICTS;
 	if (copy && !ov) {
-		rfn = t->renamed.str[t->current_source];
+		rfn = (t->renamed.len ?
+			t->renamed.str[t->current_source] : NULL);
 	}
 	if (copy && remove && same_fs(t->src, t->dst)) {
 		build_new_path(t->tw.cpath, t->src,
 				t->dst, tfn, rfn, new_path);
 		if (rename(t->tw.cpath, new_path)) return errno;
-		t->tw.tws = AT_EXIT; // TODO should it be after or before rename() ?
+		t->tw.tws = AT_EXIT;
 		t->size_done = t->size_total;
 		t->files_done = t->files_total;
 		t->dirs_done = t->dirs_total;
