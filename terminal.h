@@ -161,6 +161,7 @@ int char_attr(char* const, const size_t, const int,
 int move_cursor(const unsigned int, const unsigned int);
 int window_size(int* const, int* const);
 
+#define APPEND_BUFFER_INC 64
 struct append_buffer {
 	char* buf;
 	size_t top;

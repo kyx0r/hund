@@ -155,13 +155,18 @@ int window_size(int* const R, int* const C) {
 }
 
 size_t append(struct append_buffer* const ab, const char* const b, const size_t s) {
-	if ((ab->capacity - ab->top) < s) {
-		void* tmp = realloc(ab->buf, ab->top+s);
+	size_t S = 0;
+	while (S < s) {
+		S += APPEND_BUFFER_INC;
+	}
+	if ((ab->capacity - ab->top) < S) {
+		void* tmp = realloc(ab->buf, ab->capacity+S);
 		if (!tmp) return 0;
 		ab->buf = tmp;
-		ab->capacity = ab->top+s;
+		ab->capacity += S;
 	}
 	memcpy(ab->buf+ab->top, b, s);
+	//memset(ab->buf+ab->top+s, 0, S-s);
 	ab->top += s;
 	return s;
 }
