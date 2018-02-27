@@ -47,7 +47,7 @@ bool same_fs(const char* const a, const char* const b) {
 /*
  * Cleans up list created by scan_dir()
  */
-void file_list_clean(struct file_record*** const fl, fnum_t* const nf) {
+void file_list_clean(struct file*** const fl, fnum_t* const nf) {
 	if (!*nf) return;
 	for (fnum_t i = 0; i < *nf; ++i) {
 		free((*fl)[i]);
@@ -69,7 +69,7 @@ void file_list_clean(struct file_record*** const fl, fnum_t* const nf) {
  * nf = Number of Files
  * nhf = Number of Hidden Files
  */
-int scan_dir(const char* const wd, struct file_record*** const fl,
+int scan_dir(const char* const wd, struct file*** const fl,
 		fnum_t* const nf, fnum_t* const nhf) {
 	file_list_clean(fl, nf);
 	*nhf = 0;
@@ -89,7 +89,7 @@ int scan_dir(const char* const wd, struct file_record*** const fl,
 		return err;
 	}
 	rewinddir(dir);
-	void* tmp = calloc(*nf, sizeof(struct file_record*));
+	void* tmp = calloc(*nf, sizeof(struct file*));
 	if (!tmp) {
 		closedir(dir);
 		return ENOMEM;
@@ -102,7 +102,7 @@ int scan_dir(const char* const wd, struct file_record*** const fl,
 			*nhf += 1;
 		}
 		const size_t nl = strnlen(de->d_name, NAME_MAX_LEN);
-		struct file_record* nfr = malloc(sizeof(*nfr)+nl+1);
+		struct file* nfr = malloc(sizeof(*nfr)+nl+1);
 		if (!nfr) {
 			err = ENOMEM;
 			*nhf = 0;
@@ -442,16 +442,18 @@ bool contains(const char* const str, const char* const subs) {
 	return false;
 }
 
-fnum_t list_push(struct string_list* const list, const char* const s) {
-	void* tmp = realloc(list->str, (list->len+1) * sizeof(char*));
+fnum_t list_push(struct string_list* const L, const char* const s, size_t sl) {
+	void* tmp = realloc(L->arr, (L->len+1) * sizeof(struct string*));
 	if (!tmp) return (fnum_t)-1;
-	list->str = tmp;
-	const size_t slen = strnlen(s, NAME_MAX_LEN);
-	list->str[list->len] = malloc(slen+1);
-	memcpy(list->str[list->len], s, slen+1);
-	list->str[list->len][slen] = 0;
-	list->len += 1;
-	return list->len - 1;
+	L->arr = tmp;
+	if (sl == (size_t)-1) {
+		sl = strnlen(s, NAME_MAX_LEN);
+	}
+	L->arr[L->len] = malloc(sizeof(struct string)+sl+1);
+	L->arr[L->len]->len = sl;
+	memcpy(L->arr[L->len]->str, s, sl+1);
+	L->len += 1;
+	return L->len - 1;
 }
 
 /*
@@ -484,19 +486,21 @@ int file_to_list(const int fd, struct string_list* const list) {
 		}
 		*nl = 0;
 		nlen = nl-name;
-		void* tmp_str = realloc(list->str, (list->len+1)*sizeof(char*));
+		void* tmp_str = realloc(list->arr,
+				(list->len+1)*sizeof(struct string*));
 		if (!tmp_str) {
 			int e = errno;
 			free_list(list);
 			return e;
 		}
-		list->str = tmp_str;
+		list->arr = tmp_str;
 		if (nlen) {
-			list->str[list->len] = malloc(nlen+1);
-			strncpy(list->str[list->len], name, nlen+1);
+			list->arr[list->len] = malloc(sizeof(struct string)+nlen+1);
+			list->arr[list->len]->len = nlen;
+			memcpy(list->arr[list->len]->str, name, nlen+1);
 		}
 		else {
-			list->str[list->len] = NULL;
+			list->arr[list->len] = NULL;
 		}
 		top = NAME_BUF_SIZE-(nlen+1);
 		memmove(name, name+nlen+1, top);
@@ -510,36 +514,37 @@ int list_to_file(const struct string_list* const list, int fd) {
 	if (lseek(fd, 0, SEEK_SET)) return errno;
 	char name[NAME_BUF_SIZE];
 	for (fnum_t i = 0; i < list->len; ++i) {
-		const size_t len = strnlen(list->str[i], NAME_MAX_LEN);
-		memcpy(name, list->str[i], len);
-		name[len] = '\n';
-		if (write(fd, name, len+1) <= 0) return errno;
+		memcpy(name, list->arr[i]->str, list->arr[i]->len);
+		name[list->arr[i]->len] = '\n';
+		if (write(fd, name, list->arr[i]->len+1) <= 0) return errno;
 	}
 	return 0;
 }
 
-void list_copy(struct string_list* const dst_list,
-		const struct string_list* const src_list) {
-	dst_list->len = src_list->len;
-	dst_list->str = malloc(dst_list->len*sizeof(char*));
-	for (fnum_t i = 0; i < dst_list->len; ++i) {
-		dst_list->str[i] = strdup(src_list->str[i]);
+void list_copy(struct string_list* const D, const struct string_list* const S) {
+	D->len = S->len;
+	D->arr = malloc(D->len*sizeof(struct string*));
+	for (fnum_t i = 0; i < D->len; ++i) {
+		D->arr[i] = malloc(sizeof(struct string) +S->arr[i]->len);
+		memcpy(D->arr[i]->str, S->arr[i]->str, S->arr[i]->len+1);
+		D->arr[i]->len = S->arr[i]->len;
 	}
 }
 
 void free_list(struct string_list* const list) {
-	if (!list->str) return;
+	if (!list->arr) return;
 	for (fnum_t i = 0; i < list->len; ++i) {
-		if (list->str[i]) free(list->str[i]);
+		if (list->arr[i]) free(list->arr[i]);
 	}
-	free(list->str);
-	list->str = NULL;
+	free(list->arr);
+	list->arr = NULL;
 	list->len = 0;
 }
 
-fnum_t string_on_list(const struct string_list* const L, const char* const S) {
+fnum_t string_on_list(const struct string_list* const L,
+		const char* const s, size_t sl) {
 	for (fnum_t f = 0; f < L->len; ++f) {
-		if (!strcmp(S, L->str[f])) {
+		if (!memcmp(s, L->arr[f]->str, MIN(sl, L->arr[f]->len)+1)) {
 			return f;
 		}
 	}
@@ -549,7 +554,7 @@ fnum_t string_on_list(const struct string_list* const L, const char* const S) {
 fnum_t blank_lines(const struct string_list* const list) {
 	fnum_t n = 0;
 	for (fnum_t i = 0; i < list->len; ++i) {
-		if (!list->str[i]) n += 1;
+		if (!list->arr[i]->str) n += 1;
 	}
 	return n;
 }
@@ -562,9 +567,10 @@ bool duplicates_on_list(const struct string_list* const list) {
 	for (fnum_t f = 0; f < list->len; ++f) {
 		for (fnum_t g = 0; g < list->len; ++g) {
 			if (f == g) continue;
-			if (list->str[f]
-			    && list->str[g]
-			    && !strcmp(list->str[f], list->str[g])) return true;
+			const char* const a = list->arr[f]->str;
+			const char* const b = list->arr[g]->str;
+			size_t s = 1+MIN(list->arr[f]->len, list->arr[g]->len);
+			if (a && b && !memcmp(a, b, s)) return true;
 		}
 	}
 	return false;

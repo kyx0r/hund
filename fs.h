@@ -53,6 +53,8 @@
 #define LOGIN_BUF_SIZE (LOGIN_NAME_MAX+1)
 #define LOGIN_MAX_LEN (LOGIN_NAME_MAX)
 
+#define MIN(A,B) (((A) < (B)) ? (A) : (B))
+
 /* From LSB to MSB, by bit index */
 static const char* const mode_bit_meaning[] = {
 	"execute/sears by others",
@@ -84,7 +86,7 @@ int relative_chmod(const char* const, const mode_t, const mode_t);
 
 typedef unsigned int fnum_t; // Number of Files
 
-struct file_record {
+struct file {
 	struct stat s;
 	ssize_t dir_volume;
 	bool selected;
@@ -102,9 +104,9 @@ struct file_record {
 
 bool same_fs(const char* const, const char* const);
 
-void file_list_clean(struct file_record*** const, fnum_t* const);
+void file_list_clean(struct file*** const, fnum_t* const);
 
-int scan_dir(const char* const, struct file_record*** const,
+int scan_dir(const char* const, struct file*** const,
 		fnum_t* const, fnum_t* const);
 
 int link_copy(const char* const, const char* const, const char* const);
@@ -126,17 +128,22 @@ int current_dir_i(const char* const);
 size_t imb(const char*, const char*);
 bool contains(const char* const, const char* const);
 
+struct string {
+	unsigned char len;
+	char str[];
+};
+
 struct string_list {
-	char** str;
+	struct string** arr;
 	fnum_t len;
 };
 
-fnum_t list_push(struct string_list* const, const char* const);
+fnum_t list_push(struct string_list* const, const char* const, size_t);
 int file_to_list(const int, struct string_list* const);
 int list_to_file(const struct string_list* const, int);
 void list_copy(struct string_list* const, const struct string_list* const);
 void free_list(struct string_list* const);
-fnum_t string_on_list(const struct string_list* const, const char* const);
+fnum_t string_on_list(const struct string_list* const, const char* const, size_t);
 
 fnum_t blank_lines(const struct string_list* const);
 bool duplicates_on_list(const struct string_list* const);

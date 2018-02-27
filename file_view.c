@@ -51,7 +51,7 @@ bool visible(const struct file_view* const fv, const fnum_t i) {
 }
 
 /* Highlighted File Record */
-struct file_record* hfr(const struct file_view* const fv) {
+struct file* hfr(const struct file_view* const fv) {
 	return (visible(fv, fv->selection)
 			? fv->file_list[fv->selection] : NULL);
 }
@@ -144,7 +144,7 @@ bool file_find(struct file_view* const fv, const char* const name,
 }
 
 bool file_view_select_file(struct file_view* const fv) {
-	struct file_record* fr;
+	struct file* fr;
 	if ((fr = hfr(fv))) {
 		if ((fr->selected = !fr->selected)) {
 			fv->num_selected += 1;
@@ -158,7 +158,7 @@ bool file_view_select_file(struct file_view* const fv) {
 }
 
 int file_view_enter_selected_dir(struct file_view* const fv) {
-	const struct file_record* H;
+	const struct file* H;
 	if (!(H = hfr(fv))) return 0;
 	int err;
 	if ((err = append_dir(fv->wd, H->name))
@@ -223,8 +223,8 @@ int file_view_scan_dir(struct file_view* const fv) {
  *  ...just like memcmp, strcmp
  */
 static int frcmp(const enum compare cmp,
-		const struct file_record* const a,
-		const struct file_record* const b) {
+		const struct file* const a,
+		const struct file* const b) {
 	switch (cmp) {
 	case CMP_NAME:
 		return strcmp(a->name, b->name);
@@ -254,7 +254,7 @@ static int frcmp(const enum compare cmp,
  * S = source
  */
 inline static void merge(const enum compare cmp, const int scending,
-		struct file_record** D, struct file_record** S,
+		struct file** D, struct file** S,
 		const fnum_t beg, const fnum_t mid, const fnum_t end) {
 	fnum_t sa = beg;
 	fnum_t sb = mid;
@@ -280,12 +280,11 @@ inline static void merge(const enum compare cmp, const int scending,
 	}
 }
 
-#define MIN(A,B) (((A) < (B)) ? (A) : (B))
 void merge_sort(struct file_view* const fv, const enum compare cmp) {
-	struct file_record** tmp;
-	struct file_record** A = fv->file_list;
-	struct file_record** B = calloc(fv->num_files,
-			sizeof(struct file_record*));
+	struct file** tmp;
+	struct file** A = fv->file_list;
+	struct file** B = calloc(fv->num_files,
+			sizeof(struct file*));
 	for (fnum_t L = 1; L < fv->num_files; L *= 2) {
 		for (fnum_t S = 0; S < fv->num_files; S += L+L) {
 			const fnum_t mid = MIN(S+L, fv->num_files);
@@ -299,7 +298,6 @@ void merge_sort(struct file_view* const fv, const enum compare cmp) {
 	fv->file_list = A;
 	free(B);
 }
-#undef MIN
 
 void file_view_sort(struct file_view* const fv) {
 	for (size_t i = 0; i < FV_ORDER_SIZE; ++i) {
@@ -308,7 +306,7 @@ void file_view_sort(struct file_view* const fv) {
 }
 
 char* file_view_path_to_selected(struct file_view* const fv) {
-	const struct file_record* H;
+	const struct file* H;
 	if (!(H = hfr(fv))) return NULL;
 	const size_t wdl = strnlen(fv->wd, PATH_MAX_LEN);
 	char* p = malloc(wdl+1+NAME_BUF_SIZE);
@@ -333,7 +331,7 @@ void file_view_sorting_changed(struct file_view* const fv) {
 void file_view_selected_to_list(struct file_view* const fv,
 		struct string_list* const list) {
 	if (!fv->num_selected) {
-		struct file_record* const fr = hfr(fv);
+		struct file* const fr = hfr(fv);
 		if (!fr) {
 			memset(list, 0, sizeof(*list));
 			return;
@@ -341,19 +339,22 @@ void file_view_selected_to_list(struct file_view* const fv,
 		fv->num_selected = 1;
 		fr->selected = true;
 		list->len = 1;
-		list->str = malloc(sizeof(char*));
-		list->str[0] = strdup(fr->name);
+		list->arr = malloc(sizeof(struct string*));
+		list->arr[0] = malloc(sizeof(struct string)+fr->nl+1);
+		list->arr[0]->len = fr->nl;
+		memcpy(list->arr[0]->str, fr->name, fr->nl+1);
 		return;
 	}
 	list->len = 0;
-	list->str = calloc(fv->num_selected, sizeof(char*));
+	list->arr = calloc(fv->num_selected, sizeof(struct string*));
 	fnum_t f = 0, s = 0;
 	for (; f < fv->num_files && s < fv->num_selected; ++f) {
 		if (!fv->file_list[f]->selected) continue;
 		const char* const fn = fv->file_list[f]->name;
-		const size_t fnl = strnlen(fn, NAME_MAX_LEN);
-		list->str[list->len] = malloc(fnl+1);
-		memcpy(list->str[list->len], fn, fnl+1);
+		const size_t fnl = fv->file_list[f]->nl;
+		list->arr[list->len] = malloc(sizeof(struct string)+fnl+1);
+		list->arr[list->len]->len = fnl;
+		memcpy(list->arr[list->len]->str, fn, fnl+1);
 		list->len += 1;
 		s += 1;
 	}
@@ -362,9 +363,9 @@ void file_view_selected_to_list(struct file_view* const fv,
 void select_from_list(struct file_view* const fv,
 		const struct string_list* const L) {
 	for (fnum_t i = 0; i < L->len; ++i) {
-		if (!L->str[i]) continue;
+		if (!L->arr[i]->len) continue;
 		for (fnum_t s = 0; s < fv->num_files; ++s) {
-			if (!strcmp(L->str[i], fv->file_list[s]->name)) {
+			if (!strcmp(L->arr[i]->str, fv->file_list[s]->name)) {
 				fv->file_list[s]->selected = true;
 				fv->num_selected += 1;
 				break;
@@ -401,7 +402,7 @@ bool rename_prepare(const struct file_view* const fv,
 	*a = calloc(S->len, sizeof(struct assign));
 	bool* tofree = calloc(S->len, sizeof(bool));
 	for (fnum_t f = 0; f < R->len; ++f) {
-		if (strchr(R->str[f], '/')) {
+		if (memchr(R->arr[f]->str, '/', R->arr[f]->len)) {
 			// TODO signal what is wrong
 			free(*a);
 			*a = NULL;
@@ -409,20 +410,22 @@ bool rename_prepare(const struct file_view* const fv,
 			free(tofree);
 			return false;
 		}
-		const fnum_t Ri = file_on_list(fv, R->str[f]);
+		struct string* Rs = R->arr[f];
+		struct string* Ss = S->arr[f];
+		const fnum_t Ri = file_on_list(fv, Rs->str);
 		if (Ri == (fnum_t)-1) continue;
-		const fnum_t Si = string_on_list(S, R->str[f]);
+		const fnum_t Si = string_on_list(S, Rs->str, Rs->len);
 		if (Si != (fnum_t)-1) {
-			const fnum_t NSi = string_on_list(N, S->str[f]);
+			const fnum_t NSi = string_on_list(N, Ss->str, Ss->len);
 			if (NSi == (fnum_t)-1) {
-				(*a)[*at].from = list_push(N, S->str[f]);
+				(*a)[*at].from = list_push(N, Ss->str, Ss->len);
 			}
 			else {
 				(*a)[*at].from = NSi;
 			}
-			const fnum_t NRi = string_on_list(N, R->str[f]);
+			const fnum_t NRi = string_on_list(N, Rs->str, Rs->len);
 			if (NRi == (fnum_t)-1) {
-				(*a)[(*at)].to = list_push(N, R->str[f]);
+				(*a)[(*at)].to = list_push(N, Rs->str, Rs->len);
 			}
 			else {
 				(*a)[(*at)].to = NRi;
@@ -439,7 +442,7 @@ bool rename_prepare(const struct file_view* const fv,
 		}
 	}
 	for (fnum_t f = 0; f < R->len; ++f) {
-		if (!strcmp(S->str[f], R->str[f])) {
+		if (!strcmp(S->arr[f]->str, R->arr[f]->str)) {
 			tofree[f] = true;
 		}
 	}
@@ -463,9 +466,9 @@ bool rename_prepare(const struct file_view* const fv,
 	}
 	for (fnum_t f = 0; f < R->len; ++f) {
 		if (!tofree[f]) continue;
-		free(S->str[f]);
-		free(R->str[f]);
-		S->str[f] = R->str[f] = NULL;
+		free(S->arr[f]);
+		free(R->arr[f]);
+		S->arr[f] = R->arr[f] = NULL;
 	}
 	free(tofree);
 	return true;
@@ -474,7 +477,9 @@ bool rename_prepare(const struct file_view* const fv,
 bool conflicts_with_existing(struct file_view* const fv,
 		const struct string_list* const list) {
 	for (fnum_t f = 0; f < list->len; ++f) {
-		if (file_on_list(fv, list->str[f]) != (fnum_t)-1) return true;
+		if (file_on_list(fv, list->arr[f]->str) != (fnum_t)-1) {
+			return true;
+		}
 	}
 	return false;
 }
@@ -483,8 +488,8 @@ void remove_conflicting(struct file_view* const fv,
 		struct string_list* const list) {
 	struct string_list repl = { NULL, 0 };
 	for (fnum_t f = 0; f < list->len; ++f) {
-		if (file_on_list(fv, list->str[f]) == (fnum_t)-1) {
-			list_push(&repl, list->str[f]);
+		if (file_on_list(fv, list->arr[f]->str) == (fnum_t)-1) {
+			list_push(&repl, list->arr[f]->str, list->arr[f]->len);
 		}
 	}
 	free_list(list);

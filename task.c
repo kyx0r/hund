@@ -86,9 +86,9 @@ void task_action_estimate(struct task* const t, int* const c) {
 	if ((t->t == TASK_COPY || t->t == TASK_MOVE) && Q) {
 		char new_path[PATH_BUF_SIZE];
 		build_new_path(t->tw.cpath, t->src, t->dst,
-			t->sources.str[t->current_source],
+			t->sources.arr[t->current_source]->str,
 			(t->renamed.len ?
-				t->renamed.str[t->current_source] : NULL),
+				t->renamed.arr[t->current_source]->str : NULL),
 			new_path);
 		if (!access(new_path, F_OK)) {
 			t->conflicts += 1;
@@ -104,7 +104,7 @@ void task_action_estimate(struct task* const t, int* const c) {
 void task_do(struct task* const t, int c, task_action ta,
 		const enum task_state onend) {
 	if (t->tw.tws == AT_NOWHERE) {
-		const char* const source = t->sources.str[t->current_source];
+		const char* const source = t->sources.arr[t->current_source]->str;
 		const size_t src_len = strnlen(t->src, PATH_MAX_LEN);
 		const size_t source_len = strnlen(source, NAME_MAX_LEN);
 		const size_t path_len = src_len+1+source_len;
@@ -228,41 +228,49 @@ static int _copy_some(struct task* const t,
 }
 
 /*
- * P = Path of the source
- * W = Working directory: root directory of the operation
- * D = Destination; directory to which source is to be moved/copied
+ * P = Full path of the source
+ * swd = Source Working Directory
+ * dwd = Destination Working Directory
+ * S = Source Directory
+ * D = Destination Directory
+ * R = Result
  *
- * N = New name for destination
- * O = Old name
- *
- * R = Result; place to put the end result
- *
- * TODO ENAMETOOLONG
+ * TODO errors
  */
-void build_new_path(const char* const P, const char* const W,
-		const char* const D, const char* const O,
-		const char* const N, char* const R) {
-	const size_t Plen = strnlen(P, PATH_MAX_LEN);
-	const size_t Dlen = strnlen(D, PATH_MAX_LEN);
-	const size_t Wlen = strnlen(W, PATH_MAX_LEN);
-	size_t Nlen, Olen;
-	if (N) {
-		Nlen = strnlen(N, NAME_MAX_LEN);
-		Olen = strnlen(O, NAME_MAX_LEN);
+int build_new_path(const char* const P, const char* const swd,
+		const char* const dwd, const char* const S,
+		const char* const D, char* R) {
+	size_t D_len;
+	size_t old_len = strnlen(swd, PATH_MAX_LEN);
+	if (S && D) {
+		D_len = strnlen(D, NAME_MAX_LEN);
+		old_len += 1+strnlen(S, NAME_MAX_LEN);
 	}
 	else {
-		Nlen = Olen = 0;
+		D_len = 0;
 	}
-	const size_t new_len = Dlen+1+Nlen;
-	size_t old_len = Wlen+1+Olen;
-	if (!memcmp(W, "/", 2)) {
+	const size_t dwd_len = strnlen(dwd, PATH_MAX_LEN);
+	//if (dwd_len+D_len > PATH_MAX_LEN) return ENAMETOOLONG;
+	memcpy(R, dwd, dwd_len);
+	R += dwd_len;
+	if (*(R-1) != '/') {
+		*R = '/';
+		R += 1;
+	}
+	memcpy(R, D, D_len);
+	R += D_len;
+	if (*(R-1) != '/') {
+		*R = '/';
+		R += 1;
+	}
+	const char* lp = P+old_len;
+	if (*lp == '/') {
+		lp += 1;
 		old_len -= 1;
 	}
-	memcpy(R, P, Plen+1);
-	memmove(R+new_len, R+old_len, abs(Plen-old_len)+1);
-	memcpy(R, D, Dlen);
-	R[Dlen] = '/';
-	memcpy(R+Dlen+1, N, Nlen);
+	const size_t P_len = strnlen(P, PATH_MAX_LEN);
+	memcpy(R, lp, P_len-old_len+1);
+	return 0;
 }
 
 /*
@@ -397,13 +405,13 @@ static int _at_step(struct task* const t, int* const c,
 		char* const new_path, char* const buf, const size_t bufsize) {
 	const bool copy = t->t & (TASK_COPY | TASK_MOVE);
 	const bool remove = t->t & (TASK_MOVE | TASK_REMOVE);
-	const char* const tfn = t->sources.str[t->current_source];
+	const char* const tfn = t->sources.arr[t->current_source]->str;
 	const char* rfn = NULL;
 	const bool sc = t->tf & TF_SKIP_CONFLICTS;
 	const bool ov = t->tf & TF_OVERWRITE_CONFLICTS;
 	if (copy && !ov) {
 		rfn = (t->renamed.len ?
-			t->renamed.str[t->current_source] : NULL);
+			t->renamed.arr[t->current_source]->str : NULL);
 	}
 	if (copy && remove && same_fs(t->src, t->dst)) {
 		build_new_path(t->tw.cpath, t->src,

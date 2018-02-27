@@ -150,7 +150,7 @@ static void _entry(struct ui* const i, const struct file_view* const fv,
 		const size_t width, const fnum_t e) {
 	// TODO scroll filenames that are too long to fit in the panel width
 	// TODO signal invalid filenames
-	const struct file_record* const cfr = fv->file_list[e];
+	const struct file* const cfr = fv->file_list[e];
 	const bool hl = e == fv->selection && fv == i->pv;
 
 	// File SYMbol
@@ -269,7 +269,7 @@ static void stringify_pug(const mode_t m, const uid_t u, const gid_t g,
 
 static void _statusbar(struct ui* const i) {
 	// TODO It's very wide.
-	const struct file_record* const _hfr = hfr(i->pv);
+	const struct file* const _hfr = hfr(i->pv);
 	struct tm T;
 	if (!_hfr || !localtime_r(&(_hfr->s.st_mtim.tv_sec), &T)) {
 		memset(&T, 0, sizeof(struct tm));
@@ -470,19 +470,18 @@ static void _bottombar(struct ui* const i) {
 		i->mt = MSG_NONE;
 	}
 	else if (i->prompt) {
+		// TODO allow very long prompts
 		const size_t aw = utf8_width(i->prch);
 		const size_t pw = utf8_width(i->prompt);
-		size_t padding, prompt_slice;
+		size_t padding;
 		if ((size_t)i->scrw > pw+aw) {
 			padding = i->scrw-(pw+aw);
-			prompt_slice = pw;
 		}
 		else {
 			padding = 0;
-			prompt_slice = i->scrw-aw;
 		}
 		append(&i->B, i->prch, aw);
-		append(&i->B, i->prompt, utf8_w2nb(i->prompt, prompt_slice));
+		append(&i->B, i->prompt, strlen(i->prompt));
 		if (padding) {
 			fill(&i->B, ' ', padding);
 		}
@@ -508,7 +507,7 @@ void ui_draw(struct ui* const i) {
 		_help(i);
 	}
 	else if (i->m == MODE_MANAGER || i->m == MODE_WAIT) { // TODO mode wait
-		const struct file_record* const H = hfr(i->pv);
+		const struct file* const H = hfr(i->pv);
 		if (H) {
 			stringify_pug(H->s.st_mode, H->s.st_uid,
 					H->s.st_gid, i->perms,
@@ -591,7 +590,7 @@ int ui_select(struct ui* const i, const char* const q,
 	const int oldtimeout = i->timeout;
 	i->timeout = -1;
 	int T = 0;
-	char P[500]; // TODO
+	char P[512]; // TODO
 	i->prch[0] = 0;
 	i->prompt = P;
 	T += snprintf(P+T, sizeof(P)-T, "%s ", q);
@@ -796,7 +795,6 @@ inline void failed(struct ui* const i, const char* const what,
 
 int spawn(char* const arg[]) {
 	// TODO errors
-	// TODO that global...
 	int ret = 0, status = 0, nullfd;
 	write(STDOUT_FILENO, CSI_CLEAR_ALL);
 	if ((ret = stop_raw_mode(&global_i->T))) return ret;
@@ -804,13 +802,8 @@ int spawn(char* const arg[]) {
 	if (pid == 0) {
 		nullfd = open("/dev/null", O_WRONLY, 0100);
 		if (dup2(nullfd, STDERR_FILENO) == -1) ret = errno;
-		/*
-		 * TODO redirect to tmp file
-		 * if not empty, offer to show it's contents in pager
-		 */
 
 		//if (dup2(nullfd, STDOUT_FILENO) == -1) ret = errno;
-		// TODO ???
 		close(nullfd);
 		if (execve(arg[0], arg, environ)) ret = errno;
 		return ret;

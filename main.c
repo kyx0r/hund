@@ -44,6 +44,7 @@
  * - Copy/move: merge+overwrite fails with "file exists" error lol
  * - Rename/copy/move: display conflicts in list and allow user to browse the list
  * - Creating links: offer relative or absolute link path
+ * - Optimize string operations. (include info about it's length)
  */
 
 static char* get_editor(void) {
@@ -189,7 +190,7 @@ inline static bool _solve_name_conflicts_if_any(struct ui* const i,
 		case 0:
 			remove_conflicting(i->sv, s);
 			list_copy(r, s);
-			return s->len;
+			return s->len != 0;
 		case 1:
 			if ((err = edit_list(r, r))) {
 				failed(i, "editor", strerror(err));
@@ -286,10 +287,10 @@ static int rename_trivial(const char* const wd,
 	memcpy(op, wd, wdl+1);
 	memcpy(np, wd, wdl+1);
 	for (fnum_t f = 0; f < S->len; ++f) {
-		if (!S->str[f]) {
+		if (!S->arr[f]->len) {
 			continue;
 		}
-		if ((err = _rename(op, np, S->str[f], R->str[f]))) {
+		if ((err = _rename(op, np, S->arr[f]->str, R->arr[f]->str))) {
 			break;
 		}
 	}
@@ -320,7 +321,7 @@ static int rename_interdependent(const char* const wd,
 
 		tc = A[i].to;
 		const fnum_t tv = A[i].to;
-		if ((err = _rename(op, np, N->str[A[i].from], tn))) {
+		if ((err = _rename(op, np, N->arr[A[i].from]->str, tn))) {
 			break;
 		}
 		fnum_t from = A[i].from;
@@ -334,7 +335,7 @@ static int rename_interdependent(const char* const wd,
 			}
 			if (j == (fnum_t)-1) break;
 			if ((err = _rename(op, np,
-				N->str[A[j].from], N->str[A[j].to]))) {
+				N->arr[A[j].from]->str, N->arr[A[j].to]->str))) {
 				free(op);
 				free(np);
 				return err;
@@ -342,7 +343,7 @@ static int rename_interdependent(const char* const wd,
 			from = A[j].from;
 			A[j].from = A[j].to = (fnum_t)-1;
 		} while (from != tv);
-		if ((err = _rename(op, np, tn, N->str[tc]))) {
+		if ((err = _rename(op, np, tn, N->arr[tc]->str))) {
 			break;
 		}
 		A[i].from = A[i].to = (fnum_t)-1;
@@ -394,15 +395,11 @@ static void cmd_rename(struct ui* const i) {
 			return;
 		}
 	} while (!ok);
-	if ((err = rename_trivial(i->pv->wd, &S, &R))) {
+	if ((err = rename_trivial(i->pv->wd, &S, &R))
+	&& (err = rename_interdependent(i->pv->wd, &N, a, al))) {
 		failed(i, "rename", strerror(err));
 	}
 	free_list(&S);
-
-	if ((err = rename_interdependent(i->pv->wd, &N, a, al))) {
-		// TODO if both fail, this one will overwrite the previous
-		failed(i, "rename", strerror(err));
-	}
 	free_list(&N);
 	free(a);
 
@@ -443,11 +440,11 @@ inline static void cmd_mkdir(struct ui* const i) {
 	memcpy(path, i->pv->wd, wdl+1);
 	edit_list(&F, &F);
 	for (fnum_t f = 0; f < F.len; ++f) {
-		if (!F.str[f]) continue;
-		if (strchr(F.str[f], '/')) {
+		if (!F.arr[f]->len) continue;
+		if (memchr(F.arr[f]->str, '/', F.arr[f]->len+1)) {
 			failed(i, "mkdir", "name contains '/'");
 		}
-		else if ((err = append_dir(path, F.str[f]))
+		else if ((err = append_dir(path, F.arr[f]->str))
 		|| (mkdir(path, MKDIR_DEFAULT_PERM) ? (err = errno) : 0)) {
 			failed(i, "mkdir", strerror(err));
 		}
@@ -508,8 +505,8 @@ static void cmd_mklnk(struct ui* const i) {
 	memcpy(target, i->pv->wd, target_l+1);
 	memcpy(slpath, i->sv->wd, slpath_l+1);
 	for (fnum_t f = 0; f < sf.len; ++f) {
-		append_dir(target, sf.str[f]);
-		append_dir(slpath, sf.str[f]);
+		append_dir(target, sf.arr[f]->str);
+		append_dir(slpath, sf.arr[f]->str);
 		symlink(target, slpath); // TODO err
 		up_dir(slpath);
 		up_dir(target);

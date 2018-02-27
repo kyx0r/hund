@@ -40,8 +40,8 @@ static const char default_order[FV_ORDER_SIZE] = {
 };
 
 struct file_view {
-	char wd[PATH_MAX+1];
-	struct file_record** file_list;
+	char wd[PATH_BUF_SIZE];
+	struct file** file_list;
 	fnum_t num_files;
 	fnum_t num_hidden;
 	fnum_t selection;
@@ -52,7 +52,7 @@ struct file_view {
 };
 
 bool visible(const struct file_view* const, const fnum_t);
-struct file_record* hfr(const struct file_view* const);
+struct file* hfr(const struct file_view* const);
 
 void first_entry(struct file_view* const);
 void last_entry(struct file_view* const);

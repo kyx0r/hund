@@ -142,9 +142,8 @@ void task_do(struct task* const, int, task_action, const enum task_state);
 
 void task_clean(struct task* const);
 
-void build_new_path(const char* const, const char* const,
-		const char* const, const char* const, const char* const,
-		char* const);
+int build_new_path(const char* const, const char* const, const char* const,
+		const char* const, const char* const, char*);
 
 int tree_walk_start(struct tree_walk* const, const char* const, const bool);
 void tree_walk_end(struct tree_walk* const);
