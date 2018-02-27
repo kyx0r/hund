@@ -368,57 +368,94 @@ int main() {
 
 
 	char result[PATH_BUF_SIZE];
-	build_new_path("/home/user/doc/dir/file.txt",
+	static const char* bnp[][6] = {
+		{ "/home/user/doc/dir/file.txt",
 			"/home/user/doc", "/home/user/.trash",
-			"dir", "repl", result);
-	TESTSTR(result, "/home/user/.trash/repl/file.txt", "");
-
-	build_new_path("/home/user/doc/dir/file.txt",
+			"dir", "repl",
+			"/home/user/.trash/repl/file.txt"
+		},
+		{ "/home/user/doc/dir/file.txt",
 			"/home/user/doc", "/b",
-			"dir", "repl", result);
-	TESTSTR(result, "/b/repl/file.txt", "");
-
-
-	build_new_path("/aaa/file.txt",
+			"dir", "repl",
+			"/b/repl/file.txt"
+		},
+		{ "/aaa/file.txt",
 			"/", "/home/user",
-			"aaa", "b", result);
-	TESTSTR(result, "/home/user/b/file.txt", "");
-
-	build_new_path("/a/b/c/d/e/f/file.txt",
+			"aaa", "b",
+			"/home/user/b/file.txt"
+		},
+		{ "/a/b/c/d/e/f/file.txt",
 			"/a/b/c", "/home",
-			"d", "xxx", result);
-	TESTSTR(result, "/home/xxx/e/f/file.txt", "");
-
-	build_new_path("/a/b/c/d/e/f/file.txt",
+			"d", "xxx",
+			"/home/xxx/e/f/file.txt"
+		},
+		{ "/a/b/c/d/e/f/file.txt",
 			"/a/b/c", "/home",
-			"d", NULL, result);
-	TESTSTR(result, "/home/d/e/f/file.txt", "");
-
-	build_new_path("/home/user/doc/dir/file.txt",
+			"d", NULL,
+			"/home/d/e/f/file.txt"
+		},
+		{ "/home/user/doc/dir/file.txt",
 			"/home/user/doc", "/home/user/.trash",
-			"file.txt", NULL, result);
-	TESTSTR(result, "/home/user/.trash/dir/file.txt", "");
-
-	build_new_path("/home/user/doc/dir",
+			NULL, NULL,
+			"/home/user/.trash/dir/file.txt"
+		},
+		{ "/home/user/doc/dir",
 			"/home/user", "/home/root/.trash",
-			"dir", NULL, result);
-	TESTSTR(result, "/home/root/.trash/doc/dir", "");
-
-	build_new_path("/root",
+			NULL, NULL,
+			"/home/root/.trash/doc/dir"
+		},
+		{ "/home/root",
+			"/home", "/",
+			NULL, NULL,
+			"/root"
+		},
+		{ "/home/boot/deep/file.txt",
+			"/home", "/",
+			"boot", "shoe",
+			"/shoe/deep/file.txt"
+		},
+		{ "/root",
 			"/", "/home",
-			"/", NULL, result);
-	TESTSTR(result, "/home/root", "");
-
-	build_new_path("/root/file.txt",
+			NULL, NULL,
+			"/home/root"
+		},
+		{ "/root/doot.txt",
+			"/", "/",
+			"root", "boot",
+			"/boot/doot.txt"
+		},
+		{ "/root/file.txt",
 			"/root", "/wazzup",
-			"root", NULL, result);
-	TESTSTR(result, "/wazzup/file.txt", "");
-
-	build_new_path("/roooooot/file.txt",
+			NULL, NULL,
+			"/wazzup/file.txt"
+		},
+		{ "/roooooot/file.txt",
 			"/roooooot", "/q",
-			"roooooot", NULL, result);
-	TESTSTR(result, "/q/file.txt", "");
-
+			NULL, NULL,
+			"/q/file.txt"
+		},
+		{ "/file.txt",
+			"/", "/",
+			NULL, NULL,
+			"/file.txt"
+		},
+		{ "/dir/file.txt",
+			"/dir", "/dir",
+			NULL, NULL,
+			"/dir/file.txt"
+		},
+		{ "/gear/bear",
+			"/", "/boot",
+			"gear", "beer",
+			"/boot/beer/bear"
+		},
+	};
+	for (size_t i = 0; i < sizeof(bnp)/sizeof(bnp[0]); ++i) {
+		build_new_path(bnp[i][0], bnp[i][1],
+				bnp[i][2], bnp[i][3],
+				bnp[i][4], result);
+		TESTSTR(result, bnp[i][5], "");
+	}
 
 	END_SECTION("task");
 
@@ -449,6 +486,14 @@ int main() {
 	TESTVAL(ab.capacity, 101, "");
 
 	free(ab.buf);
+	memset(&ab, 0, sizeof(struct append_buffer));
+	append(&ab, "?", 1);
+	TESTVAL(ab.capacity, APPEND_BUFFER_INC, "");
+	append(&ab, path, APPEND_BUFFER_INC-1);
+	TESTVAL(ab.capacity, APPEND_BUFFER_INC, "");
+	append(&ab, "?", 1);
+	TESTVAL(ab.capacity, APPEND_BUFFER_INC*2, "");
+
 
 	END_SECTION("terminal");
 
