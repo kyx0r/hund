@@ -1,12 +1,11 @@
 .git
 tags
-obj/
 *.o
 hund
-test/testme
-test/safe/
 stderr.txt
 strace.txt
 valgrind.txt
 br
 vg
+test/
+testme
