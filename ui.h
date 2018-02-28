@@ -93,6 +93,9 @@ enum command {
 	CMD_SELECT_ALL,
 	CMD_SELECT_NONE,
 
+	CMD_MARK_NEW,
+	CMD_MARK_JUMP,
+
 	CMD_FIND,
 
 	CMD_CHMOD,
@@ -255,159 +258,159 @@ struct input2cmd {
 
 #define IS_CTRL(I,K) (((I).t == I_CTRL) && ((I).utf[0] == (K)))
 
-#define KEND { .t = I_NONE }
 #define KUTF8(K) { .t = I_UTF8, .utf = K }
 #define KSPEC(K) { .t = (K) }
 #define KCTRL(K) { .t = I_CTRL, .utf[0] = (K) }
 
 static struct input2cmd default_mapping[] = {
 	/* MODE MANGER */
-	{ { KUTF8("q"), KUTF8("q"), KEND }, MODE_MANAGER, CMD_QUIT },
+	{ { KUTF8("q"), KUTF8("q") }, MODE_MANAGER, CMD_QUIT },
 
-	{ { KUTF8("g"), KEND }, MODE_MANAGER, CMD_ENTRY_FIRST },
-	{ { KSPEC(I_HOME), KEND }, MODE_MANAGER, CMD_ENTRY_FIRST },
+	{ { KUTF8("g"), KUTF8("g") }, MODE_MANAGER, CMD_ENTRY_FIRST },
+	{ { KSPEC(I_HOME) }, MODE_MANAGER, CMD_ENTRY_FIRST },
 
-	{ { KUTF8("G"), KEND }, MODE_MANAGER, CMD_ENTRY_LAST },
-	{ { KSPEC(I_END), KEND }, MODE_MANAGER, CMD_ENTRY_LAST },
+	{ { KUTF8("G") }, MODE_MANAGER, CMD_ENTRY_LAST },
+	{ { KSPEC(I_END) }, MODE_MANAGER, CMD_ENTRY_LAST },
 
-	{ { KCTRL('B'), KEND }, MODE_MANAGER, CMD_SCREEN_UP },
-	{ { KCTRL('F'), KEND }, MODE_MANAGER, CMD_SCREEN_DOWN },
+	{ { KCTRL('B') }, MODE_MANAGER, CMD_SCREEN_UP },
+	{ { KCTRL('F') }, MODE_MANAGER, CMD_SCREEN_DOWN },
 
-	{ { KUTF8("j"), KEND }, MODE_MANAGER, CMD_ENTRY_DOWN },
-	{ { KCTRL('N'), KEND }, MODE_MANAGER, CMD_ENTRY_DOWN },
-	{ { KSPEC(I_ARROW_DOWN), KEND }, MODE_MANAGER, CMD_ENTRY_DOWN },
+	{ { KUTF8("j") }, MODE_MANAGER, CMD_ENTRY_DOWN },
+	{ { KCTRL('N') }, MODE_MANAGER, CMD_ENTRY_DOWN },
+	{ { KSPEC(I_ARROW_DOWN) }, MODE_MANAGER, CMD_ENTRY_DOWN },
 
-	{ { KUTF8("k"), KEND }, MODE_MANAGER, CMD_ENTRY_UP },
-	{ { KCTRL('P'), KEND }, MODE_MANAGER, CMD_ENTRY_UP },
-	{ { KSPEC(I_ARROW_UP), KEND }, MODE_MANAGER, CMD_ENTRY_UP },
+	{ { KUTF8("k") }, MODE_MANAGER, CMD_ENTRY_UP },
+	{ { KCTRL('P') }, MODE_MANAGER, CMD_ENTRY_UP },
+	{ { KSPEC(I_ARROW_UP) }, MODE_MANAGER, CMD_ENTRY_UP },
 
-	{ { KUTF8("c"), KUTF8("p"), KEND }, MODE_MANAGER, CMD_COPY },
+	{ { KUTF8("g"), KUTF8("c") }, MODE_MANAGER, CMD_COPY },
+	{ { KUTF8("g"), KUTF8("r") }, MODE_MANAGER, CMD_REMOVE },
+	{ { KUTF8("g"), KUTF8("n") }, MODE_MANAGER, CMD_RENAME },
+	{ { KUTF8("g"), KUTF8("m") }, MODE_MANAGER, CMD_MOVE },
+	{ { KUTF8("g"), KUTF8("l")}, MODE_MANAGER, CMD_LINK },
 
-	{ { KUTF8("r"), KUTF8("m"), KEND }, MODE_MANAGER, CMD_REMOVE },
+	{ { KCTRL('I') }, MODE_MANAGER, CMD_SWITCH_PANEL },
 
-	{ { KUTF8("r"), KUTF8("n"), KEND }, MODE_MANAGER, CMD_RENAME },
+	{ { KUTF8("z") }, MODE_MANAGER, CMD_DUP_PANEL },
 
-	{ { KUTF8("m"), KUTF8("v"), KEND }, MODE_MANAGER, CMD_MOVE },
+	{ { KUTF8("r"), KUTF8("r") }, MODE_MANAGER, CMD_REFRESH },
+	{ { KCTRL('L') }, MODE_MANAGER, CMD_REFRESH },
 
-	{ { KUTF8("m"), KUTF8("l"), KEND}, MODE_MANAGER, CMD_LINK },
+	{ { KUTF8("g"), KUTF8("d") }, MODE_MANAGER, CMD_CREATE_DIR },
 
-	{ { KCTRL('I'), KEND }, MODE_MANAGER, CMD_SWITCH_PANEL },
+	{ { KUTF8("u") }, MODE_MANAGER, CMD_UP_DIR },
+	{ { KUTF8("h") }, MODE_MANAGER, CMD_UP_DIR },
+	{ { KSPEC(I_BACKSPACE) }, MODE_MANAGER, CMD_UP_DIR },
 
-	{ { KUTF8("z"), KEND }, MODE_MANAGER, CMD_DUP_PANEL },
+	{ { KUTF8("i") }, MODE_MANAGER, CMD_ENTER_DIR },
+	{ { KCTRL('J') }, MODE_MANAGER, CMD_ENTER_DIR },
+	{ { KUTF8("l") }, MODE_MANAGER, CMD_ENTER_DIR },
+	{ { KCTRL('M') }, MODE_MANAGER, CMD_ENTER_DIR },
 
-	{ { KUTF8("r"), KUTF8("r"), KEND }, MODE_MANAGER, CMD_REFRESH },
-	{ { KCTRL('L'), KEND }, MODE_MANAGER, CMD_REFRESH },
+	{ { KUTF8("p") }, MODE_MANAGER, CMD_PAGER },
+	{ { KUTF8("o") }, MODE_MANAGER, CMD_OPEN_FILE },
+	{ { KUTF8("e") }, MODE_MANAGER, CMD_EDIT_FILE },
 
-	{ { KUTF8("m"), KUTF8("k"), KEND }, MODE_MANAGER, CMD_CREATE_DIR },
+	{ { KUTF8("+"), KUTF8("x") }, MODE_MANAGER, CMD_QUICK_PLUS_X },
 
-	{ { KUTF8("u"), KEND }, MODE_MANAGER, CMD_UP_DIR },
-	{ { KUTF8("h"), KEND }, MODE_MANAGER, CMD_UP_DIR },
-	{ { KSPEC(I_BACKSPACE), KEND }, MODE_MANAGER, CMD_UP_DIR },
+	{ { KUTF8("v") }, MODE_MANAGER, CMD_SELECT_FILE },
+	{ { KUTF8("V"), KUTF8("a") }, MODE_MANAGER, CMD_SELECT_ALL },
+	{ { KUTF8("V"), KUTF8("0") }, MODE_MANAGER, CMD_SELECT_NONE },
 
-	{ { KUTF8("i"), KEND }, MODE_MANAGER, CMD_ENTER_DIR },
-	{ { KCTRL('J'), KEND }, MODE_MANAGER, CMD_ENTER_DIR },
-	{ { KUTF8("l"), KEND }, MODE_MANAGER, CMD_ENTER_DIR },
-	{ { KCTRL('M'), KEND }, MODE_MANAGER, CMD_ENTER_DIR },
+	{ { KUTF8("m") }, MODE_MANAGER, CMD_MARK_NEW }, // TODO
+	{ { KUTF8("'") }, MODE_MANAGER, CMD_MARK_JUMP },
 
-	{ { KUTF8("p"), KEND }, MODE_MANAGER, CMD_PAGER },
-	{ { KUTF8("o"), KEND }, MODE_MANAGER, CMD_OPEN_FILE },
-	{ { KUTF8("e"), KUTF8("d"), KEND }, MODE_MANAGER, CMD_EDIT_FILE },
-	{ { KUTF8("+"), KUTF8("x"), KEND }, MODE_MANAGER, CMD_QUICK_PLUS_X },
-	{ { KUTF8("v"), KEND }, MODE_MANAGER, CMD_SELECT_FILE },
-	{ { KUTF8("V"), KUTF8("a"), KEND }, MODE_MANAGER, CMD_SELECT_ALL },
-	{ { KUTF8("V"), KUTF8("0"), KEND }, MODE_MANAGER, CMD_SELECT_NONE },
+	{ { KUTF8("/") }, MODE_MANAGER, CMD_FIND },
+	{ { KCTRL('V') }, MODE_MANAGER, CMD_DIR_VOLUME },
 
-	{ { KUTF8("/"), KEND }, MODE_MANAGER, CMD_FIND },
-	{ { KCTRL('V'), KEND }, MODE_MANAGER, CMD_DIR_VOLUME },
+	{ { KUTF8("x") }, MODE_MANAGER, CMD_TOGGLE_HIDDEN },
+	{ { KCTRL('H') }, MODE_MANAGER, CMD_TOGGLE_HIDDEN },
 
-	{ { KUTF8("x"), KEND }, MODE_MANAGER, CMD_TOGGLE_HIDDEN },
-	{ { KCTRL('H'), KEND }, MODE_MANAGER, CMD_TOGGLE_HIDDEN },
+	{ { KUTF8("?") }, MODE_MANAGER, CMD_HELP },
 
-	{ { KUTF8("?"), KEND }, MODE_MANAGER, CMD_HELP },
+	{ { KUTF8("c"), KUTF8("d") }, MODE_MANAGER, CMD_CD },
 
-	{ { KUTF8("c"), KUTF8("d"), KEND }, MODE_MANAGER, CMD_CD },
+	{ { KUTF8("c"), KUTF8("c") }, MODE_MANAGER, CMD_CHMOD },
 
-	{ { KUTF8("c"), KUTF8("h"), KEND }, MODE_MANAGER, CMD_CHMOD },
-
-	{ { KUTF8("s"), KUTF8("r"), KEND }, MODE_MANAGER, CMD_SORT_REVERSE },
-	{ { KUTF8("s"), KUTF8("c"), KEND }, MODE_MANAGER, CMD_SORT_CHANGE },
+	{ { KUTF8("s"), KUTF8("r") }, MODE_MANAGER, CMD_SORT_REVERSE },
+	{ { KUTF8("s"), KUTF8("c") }, MODE_MANAGER, CMD_SORT_CHANGE },
 
 	/* MODE CHMOD */
-	{ { KUTF8("q"), KUTF8("q"), KEND }, MODE_CHMOD, CMD_RETURN },
-	{ { KUTF8("c"), KUTF8("h"), KEND }, MODE_CHMOD, CMD_CHANGE },
+	{ { KUTF8("q"), KUTF8("q") }, MODE_CHMOD, CMD_RETURN },
+	{ { KUTF8("c"), KUTF8("c") }, MODE_CHMOD, CMD_CHANGE },
 
-	{ { KUTF8("c"), KUTF8("o"), KEND }, MODE_CHMOD, CMD_CHOWN },
-	{ { KUTF8("c"), KUTF8("g"), KEND }, MODE_CHMOD, CMD_CHGRP },
+	{ { KUTF8("c"), KUTF8("o") }, MODE_CHMOD, CMD_CHOWN },
+	{ { KUTF8("c"), KUTF8("g") }, MODE_CHMOD, CMD_CHGRP },
 
-	{ { KUTF8("+"), KUTF8("r"), KEND }, MODE_CHMOD, CMD_A_PLUS_R, },
-	{ { KUTF8("-"), KUTF8("r"), KEND }, MODE_CHMOD, CMD_A_MINUS_R, },
+	{ { KUTF8("+"), KUTF8("r") }, MODE_CHMOD, CMD_A_PLUS_R, },
+	{ { KUTF8("-"), KUTF8("r") }, MODE_CHMOD, CMD_A_MINUS_R, },
 
-	{ { KUTF8("+"), KUTF8("w"), KEND }, MODE_CHMOD, CMD_A_PLUS_W, },
-	{ { KUTF8("-"), KUTF8("w"), KEND }, MODE_CHMOD, CMD_A_MINUS_W, },
+	{ { KUTF8("+"), KUTF8("w") }, MODE_CHMOD, CMD_A_PLUS_W, },
+	{ { KUTF8("-"), KUTF8("w") }, MODE_CHMOD, CMD_A_MINUS_W, },
 
-	{ { KUTF8("+"), KUTF8("x"), KEND }, MODE_CHMOD, CMD_A_PLUS_X, },
-	{ { KUTF8("-"), KUTF8("x"), KEND }, MODE_CHMOD, CMD_A_MINUS_X, },
+	{ { KUTF8("+"), KUTF8("x") }, MODE_CHMOD, CMD_A_PLUS_X, },
+	{ { KUTF8("-"), KUTF8("x") }, MODE_CHMOD, CMD_A_MINUS_X, },
 
-	{ { KUTF8("u"), KUTF8("+"), KUTF8("r"), KEND }, MODE_CHMOD, CMD_U_PLUS_R, },
-	{ { KUTF8("u"), KUTF8("-"), KUTF8("r"), KEND }, MODE_CHMOD, CMD_U_MINUS_R, },
+	{ { KUTF8("u"), KUTF8("+"), KUTF8("r") }, MODE_CHMOD, CMD_U_PLUS_R, },
+	{ { KUTF8("u"), KUTF8("-"), KUTF8("r") }, MODE_CHMOD, CMD_U_MINUS_R, },
 
-	{ { KUTF8("u"), KUTF8("+"), KUTF8("w"), KEND }, MODE_CHMOD, CMD_U_PLUS_W, },
-	{ { KUTF8("u"), KUTF8("-"), KUTF8("w"), KEND }, MODE_CHMOD, CMD_U_MINUS_W, },
+	{ { KUTF8("u"), KUTF8("+"), KUTF8("w") }, MODE_CHMOD, CMD_U_PLUS_W, },
+	{ { KUTF8("u"), KUTF8("-"), KUTF8("w") }, MODE_CHMOD, CMD_U_MINUS_W, },
 
-	{ { KUTF8("u"), KUTF8("+"), KUTF8("x"), KEND }, MODE_CHMOD, CMD_U_PLUS_X, },
-	{ { KUTF8("u"), KUTF8("-"), KUTF8("x"), KEND }, MODE_CHMOD, CMD_U_MINUS_X, },
+	{ { KUTF8("u"), KUTF8("+"), KUTF8("x") }, MODE_CHMOD, CMD_U_PLUS_X, },
+	{ { KUTF8("u"), KUTF8("-"), KUTF8("x") }, MODE_CHMOD, CMD_U_MINUS_X, },
 
-	{ { KUTF8("u"), KUTF8("+"), KUTF8("s"), KEND }, MODE_CHMOD, CMD_U_PLUS_IOX, },
-	{ { KUTF8("u"), KUTF8("-"), KUTF8("s"), KEND }, MODE_CHMOD, CMD_U_MINUS_IOX, },
+	{ { KUTF8("u"), KUTF8("+"), KUTF8("s") }, MODE_CHMOD, CMD_U_PLUS_IOX, },
+	{ { KUTF8("u"), KUTF8("-"), KUTF8("s") }, MODE_CHMOD, CMD_U_MINUS_IOX, },
 
-	{ { KUTF8("g"), KUTF8("+"), KUTF8("r"), KEND }, MODE_CHMOD, CMD_G_PLUS_R, },
-	{ { KUTF8("g"), KUTF8("-"), KUTF8("r"), KEND }, MODE_CHMOD, CMD_G_MINUS_R, },
+	{ { KUTF8("g"), KUTF8("+"), KUTF8("r") }, MODE_CHMOD, CMD_G_PLUS_R, },
+	{ { KUTF8("g"), KUTF8("-"), KUTF8("r") }, MODE_CHMOD, CMD_G_MINUS_R, },
 
-	{ { KUTF8("g"), KUTF8("+"), KUTF8("w"), KEND }, MODE_CHMOD, CMD_G_PLUS_W, },
-	{ { KUTF8("g"), KUTF8("-"), KUTF8("w"), KEND }, MODE_CHMOD, CMD_G_MINUS_W, },
+	{ { KUTF8("g"), KUTF8("+"), KUTF8("w") }, MODE_CHMOD, CMD_G_PLUS_W, },
+	{ { KUTF8("g"), KUTF8("-"), KUTF8("w") }, MODE_CHMOD, CMD_G_MINUS_W, },
 
-	{ { KUTF8("g"), KUTF8("+"), KUTF8("x"), KEND }, MODE_CHMOD, CMD_G_PLUS_X, },
-	{ { KUTF8("g"), KUTF8("-"), KUTF8("x"), KEND }, MODE_CHMOD, CMD_G_MINUS_X, },
+	{ { KUTF8("g"), KUTF8("+"), KUTF8("x") }, MODE_CHMOD, CMD_G_PLUS_X, },
+	{ { KUTF8("g"), KUTF8("-"), KUTF8("x") }, MODE_CHMOD, CMD_G_MINUS_X, },
 
-	{ { KUTF8("g"), KUTF8("+"), KUTF8("s"), KEND }, MODE_CHMOD, CMD_G_PLUS_IOX, },
-	{ { KUTF8("g"), KUTF8("-"), KUTF8("s"), KEND }, MODE_CHMOD, CMD_G_MINUS_IOX, },
+	{ { KUTF8("g"), KUTF8("+"), KUTF8("s") }, MODE_CHMOD, CMD_G_PLUS_IOX, },
+	{ { KUTF8("g"), KUTF8("-"), KUTF8("s") }, MODE_CHMOD, CMD_G_MINUS_IOX, },
 
-	{ { KUTF8("o"), KUTF8("+"), KUTF8("r"), KEND }, MODE_CHMOD, CMD_O_PLUS_R, },
-	{ { KUTF8("o"), KUTF8("-"), KUTF8("r"), KEND }, MODE_CHMOD, CMD_O_MINUS_R, },
+	{ { KUTF8("o"), KUTF8("+"), KUTF8("r") }, MODE_CHMOD, CMD_O_PLUS_R, },
+	{ { KUTF8("o"), KUTF8("-"), KUTF8("r") }, MODE_CHMOD, CMD_O_MINUS_R, },
 
-	{ { KUTF8("o"), KUTF8("+"), KUTF8("w"), KEND }, MODE_CHMOD, CMD_O_PLUS_W, },
-	{ { KUTF8("o"), KUTF8("-"), KUTF8("w"), KEND }, MODE_CHMOD, CMD_O_MINUS_W, },
+	{ { KUTF8("o"), KUTF8("+"), KUTF8("w") }, MODE_CHMOD, CMD_O_PLUS_W, },
+	{ { KUTF8("o"), KUTF8("-"), KUTF8("w") }, MODE_CHMOD, CMD_O_MINUS_W, },
 
-	{ { KUTF8("o"), KUTF8("+"), KUTF8("x"), KEND }, MODE_CHMOD, CMD_O_PLUS_X, },
-	{ { KUTF8("o"), KUTF8("-"), KUTF8("x"), KEND }, MODE_CHMOD, CMD_O_MINUS_X, },
+	{ { KUTF8("o"), KUTF8("+"), KUTF8("x") }, MODE_CHMOD, CMD_O_PLUS_X, },
+	{ { KUTF8("o"), KUTF8("-"), KUTF8("x") }, MODE_CHMOD, CMD_O_MINUS_X, },
 
-	{ { KUTF8("+"), KUTF8("t"), KEND }, MODE_CHMOD, CMD_O_PLUS_SB, },
-	{ { KUTF8("-"), KUTF8("t"), KEND }, MODE_CHMOD, CMD_O_MINUS_SB, },
+	{ { KUTF8("+"), KUTF8("t") }, MODE_CHMOD, CMD_O_PLUS_SB, },
+	{ { KUTF8("-"), KUTF8("t") }, MODE_CHMOD, CMD_O_MINUS_SB, },
 
-	{ { KUTF8("u"), KUTF8("0"), KEND }, MODE_CHMOD, CMD_U_ZERO, },
-	{ { KUTF8("g"), KUTF8("0"), KEND }, MODE_CHMOD, CMD_G_ZERO, },
-	{ { KUTF8("o"), KUTF8("0"), KEND }, MODE_CHMOD, CMD_O_ZERO, },
+	{ { KUTF8("u"), KUTF8("0") }, MODE_CHMOD, CMD_U_ZERO, },
+	{ { KUTF8("g"), KUTF8("0") }, MODE_CHMOD, CMD_G_ZERO, },
+	{ { KUTF8("o"), KUTF8("0") }, MODE_CHMOD, CMD_O_ZERO, },
 
-	{ { KUTF8("u"), KUTF8("="), KEND }, MODE_CHMOD, CMD_U_RESET, },
-	{ { KUTF8("g"), KUTF8("="), KEND }, MODE_CHMOD, CMD_G_RESET, },
-	{ { KUTF8("o"), KUTF8("="), KEND }, MODE_CHMOD, CMD_O_RESET, },
+	{ { KUTF8("u"), KUTF8("=") }, MODE_CHMOD, CMD_U_RESET, },
+	{ { KUTF8("g"), KUTF8("=") }, MODE_CHMOD, CMD_G_RESET, },
+	{ { KUTF8("o"), KUTF8("=") }, MODE_CHMOD, CMD_O_RESET, },
 
 	/* MODE WAIT */
-	{ { KUTF8("q"), KUTF8("q"), KEND }, MODE_WAIT, CMD_TASK_QUIT },
-	{ { KUTF8("p"), KUTF8("p"), KEND }, MODE_WAIT, CMD_TASK_PAUSE },
-	{ { KUTF8("r"), KUTF8("r"), KEND }, MODE_WAIT, CMD_TASK_RESUME },
+	{ { KUTF8("q"), KUTF8("q") }, MODE_WAIT, CMD_TASK_QUIT },
+	{ { KUTF8("p"), KUTF8("p") }, MODE_WAIT, CMD_TASK_PAUSE },
+	{ { KUTF8("r"), KUTF8("r") }, MODE_WAIT, CMD_TASK_RESUME },
 
 
 	/* MODE HELP */
-	{ { KUTF8("q"), KEND }, MODE_HELP, CMD_HELP_QUIT },
+	{ { KUTF8("q") }, MODE_HELP, CMD_HELP_QUIT },
 
-	{ { KUTF8("j"), KEND }, MODE_HELP, CMD_HELP_DOWN },
-	{ { KCTRL('N'), KEND }, MODE_HELP, CMD_HELP_DOWN },
-	{ { KSPEC(I_ARROW_DOWN), KEND }, MODE_HELP, CMD_HELP_DOWN },
+	{ { KUTF8("j") }, MODE_HELP, CMD_HELP_DOWN },
+	{ { KCTRL('N') }, MODE_HELP, CMD_HELP_DOWN },
+	{ { KSPEC(I_ARROW_DOWN) }, MODE_HELP, CMD_HELP_DOWN },
 
-	{ { KUTF8("k"), KEND }, MODE_HELP, CMD_HELP_UP },
-	{ { KCTRL('P'), KEND }, MODE_HELP, CMD_HELP_UP },
-	{ { KSPEC(I_ARROW_UP), KEND }, MODE_HELP, CMD_HELP_UP },
+	{ { KUTF8("k") }, MODE_HELP, CMD_HELP_UP },
+	{ { KCTRL('P') }, MODE_HELP, CMD_HELP_UP },
+	{ { KSPEC(I_ARROW_UP) }, MODE_HELP, CMD_HELP_UP },
 };
 
 static const size_t default_mapping_length =
@@ -456,6 +459,8 @@ static const char* const cmd_help[] = {
 	[CMD_SELECT_ALL] = "Select all visible files.",
 	[CMD_SELECT_NONE] = "Unselect all files.",
 
+	[CMD_MARK_NEW] = "Set mark at highlighted file.",
+	[CMD_MARK_JUMP] = "Jump to a mark.",
 	[CMD_FIND] = "Search for files in current directory.",
 
 	[CMD_CHMOD] = "Change permissions of selected files.",

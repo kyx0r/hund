@@ -45,7 +45,98 @@
  * - Rename/copy/move: display conflicts in list and allow user to browse the list
  * - Creating links: offer relative or absolute link path
  * - Optimize string operations. (include info about it's length)
+ * - Keybindings must make more sense
  */
+
+struct mark_path {
+	size_t len[2];
+	char data[];
+};
+
+struct marks {
+	struct mark_path* az['z'-'a'];
+	struct mark_path* AZ['Z'-'A'];
+};
+
+void marks_free(struct marks* const);
+struct mark_path* marks_get(const struct marks* const, const char);
+struct mark_path* marks_set(struct marks* const, const char,
+		const char* const, size_t, const char* const, size_t);
+void marks_input(struct ui* const, struct marks* const);
+void marks_jump(struct ui* const, struct marks* const);
+
+void marks_free(struct marks* const M) {
+	for (size_t i = 0; i < 'z'-'a'; ++i) {
+		if (M->az[i]) free(M->az[i]);
+	}
+	for (size_t i = 0; i < 'Z'-'A'; ++i) {
+		if (M->AZ[i]) free(M->AZ[i]);
+	}
+	memset(M, 0, sizeof(struct marks));
+}
+
+struct mark_path* marks_get(const struct marks* const M, const char C) {
+	if ('a' <= C && C <= 'z') {
+		return M->az[C-'a'];
+	}
+	else if ('A' <= C && C <= 'Z') {
+		return M->AZ[C-'A'];
+	}
+	return NULL;
+}
+
+struct mark_path* marks_set(struct marks* const M, const char C,
+		const char* const wd, size_t wdlen,
+		const char* const n, size_t nlen) {
+	struct mark_path** mp;
+	if ('a' <= C && C <= 'z') {
+		mp = &M->az[C-'a'];
+	}
+	else if ('A' <= C && C <= 'Z') {
+		mp = &M->AZ[C-'A'];
+	}
+	else {
+		return NULL;
+	}
+	if (*mp) free(*mp);
+	*mp = malloc(sizeof(struct mark_path)+wdlen+1+nlen+1);
+	memcpy((*mp)->data, wd, wdlen+1);
+	memcpy((*mp)->data+wdlen+1, n, nlen+1);
+	(*mp)->len[0] = wdlen;
+	(*mp)->len[1] = nlen;
+	return *mp;
+}
+
+void marks_input(struct ui* const i, struct marks* const m) {
+	const struct input in = get_input(-1);
+	if (in.t != I_UTF8) return;
+	const struct file* f = hfr(i->pv);
+	if (!f) return;
+	marks_set(m, in.utf[0], i->pv->wd,
+		strnlen(i->pv->wd, PATH_MAX_LEN), f->name, f->nl);
+}
+
+void marks_jump(struct ui* const i, struct marks* const m) {
+	const struct input in = get_input(-1);
+	if (in.t != I_UTF8) return;
+	struct mark_path* mp = marks_get(m, in.utf[0]);
+	if (!mp) {
+		failed(i, "jump to mark", "Unknown mark");
+		return;
+	}
+	mp->data[mp->len[0]] = '/';
+	if (access(mp->data, F_OK)) {
+		int e = errno;
+		failed(i, "jump to mark", strerror(e));
+		mp->data[mp->len[0]] = 0;
+		return;
+	}
+	mp->data[mp->len[0]] = 0;
+	memcpy(i->pv->wd, mp->data, mp->len[0]+1);
+	if (ui_rescan(i, i->pv, NULL)) {
+		file_highlight(i->pv, mp->data+mp->len[0]+1);
+	}
+}
 
 static char* get_editor(void) {
 	char* ed = getenv("VISUAL");
@@ -529,7 +620,8 @@ static void cmd_quick_chmod_plus_x(struct ui* const i) {
 	ui_rescan(i, i->pv, NULL);
 }
 
-static void process_input(struct ui* const i, struct task* const t) {
+static void process_input(struct ui* const i, struct task* const t,
+		struct marks* const m) {
 	char *path = NULL, *name = NULL;
 	struct file_view* tmp = NULL;
 	int err = 0;
@@ -761,6 +853,12 @@ static void process_input(struct ui* const i, struct task* const t) {
 		for (fnum_t f = 0; f < i->pv->num_files; ++f) {
 			i->pv->file_list[f]->selected = false;
 		}
+		break;
+	case CMD_MARK_NEW:
+		marks_input(i, m);
+		break;
+	case CMD_MARK_JUMP:
+		marks_jump(i, m);
 		break;
 	case CMD_FIND:
 		cmd_find(i);
@@ -1048,16 +1146,20 @@ int main(int argc, char* argv[]) {
 	memset(&t, 0, sizeof(struct task));
 	t.in = t.out = -1;
 
+	struct marks m;
+	memset(&m, 0, sizeof(struct marks));
+
 	i.mt = MSG_INFO;
 	strncpy(i.msg, "Type ? for help and license notice.", MSG_BUFFER_SIZE);
 	while (i.run) { // TODO but task may be still running
 		ui_draw(&i);
-		process_input(&i, &t);
+		process_input(&i, &t, &m);
 		task_execute(&i, &t);
 	}
 	for (int v = 0; v < 2; ++v) {
 		delete_file_list(&fvs[v]);
 	}
+	marks_free(&m);
 	task_clean(&t);
 	ui_end(&i);
 	memset(fvs, 0, sizeof(fvs));
