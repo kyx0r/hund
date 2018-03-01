@@ -71,7 +71,13 @@ void task_action_chmod(struct task* const t, int* const c) {
 void task_action_estimate(struct task* const t, int* const c) {
 	switch (t->tw.tws) {
 	case AT_LINK:
+		if (!(t->tf & (TF_ANY_LINK_METHOD))) {
+			*c = 0;
+			return;
+		}
+		t->files_total += 1;
 		t->symlinks += 1;
+		break;
 	case AT_FILE:
 		t->files_total += 1;
 		break;
@@ -112,12 +118,15 @@ void task_do(struct task* const t, int c, task_action ta,
 		memcpy(path, t->src, path_len+1);
 		append_dir(path, source);
 
-		t->err = tree_walk_start(&t->tw, path, t->tf & TF_DEREF_LINKS);
+		t->err = tree_walk_start(&t->tw, path);
 		free(path);
 		if (t->err) {
 			t->tw.tws = AT_NOWHERE;
 			return;
 		}
+	}
+	if (t->tf & TF_DEREF_LINKS) {
+		t->tw.tl = true;
 	}
 	while (t->tw.tws != AT_EXIT && !t->err && c > 0) {
 		ta(t, &c);
@@ -318,12 +327,11 @@ static int _stat_file(struct tree_walk* const tw) {
 	return 0;
 }
 
-int tree_walk_start(struct tree_walk* const tw,
-		const char* const path, const bool tl) {
+int tree_walk_start(struct tree_walk* const tw, const char* const path) {
 	if (tw->cpath) free(tw->cpath);
 	tw->cpath = malloc(PATH_BUF_SIZE);
 	strncpy(tw->cpath, path, PATH_BUF_SIZE);
-	tw->tl = tl;
+	tw->tl = false;
 	if (tw->dt) free(tw->dt);
 	tw->dt = calloc(1, sizeof(struct dirtree));
 	return _stat_file(tw);

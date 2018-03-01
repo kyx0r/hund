@@ -37,7 +37,6 @@
  * - IDEA: Detecting file formats -> display name of a program that
  *     would open highlighted file
  * - Dir scanning via task?
- * - When "dereferencing", calculate additional file volume
  * - After renaming, highlight one of the renamed files (?)
  *   - Or add command jumping to next/prev selected file
  * - Swap panels
@@ -940,9 +939,7 @@ inline static bool _conflict_policy(struct ui* const i, struct task* const t) {
 }
 
 inline static bool _symlink_policy(struct ui* const i, struct task* const t) {
-	char question[64];
-	snprintf(question, sizeof(question),
-			"There are %d symlinks", t->symlinks);
+	static const char* const q = "There are symlinks";
 	static const struct select_option o[] = {
 		{ KUTF8("r"), "raw" },
 		{ KUTF8("c"), "recalculate" },
@@ -950,9 +947,12 @@ inline static bool _symlink_policy(struct ui* const i, struct task* const t) {
 		{ KUTF8("s"), "skip" },
 		{ KUTF8("a"), "abort" }
 	};
-	switch (ui_select(i, question, o, 5)) {
+	switch (ui_select(i, q, o, 5)) {
 	case 0:
 		t->tf |= TF_RAW_LINKS;
+		break;
+	case 1:
+		t->tf |= TF_RECALCULATE_LINKS;
 		break;
 	case 2:
 		t->tf |= TF_DEREF_LINKS;
@@ -962,7 +962,6 @@ inline static bool _symlink_policy(struct ui* const i, struct task* const t) {
 		break;
 	case 4:
 		return false;
-	case 1:
 	default:
 		break;
 	}
@@ -999,6 +998,16 @@ static void task_execute(struct ui* const i, struct task* const t) {
 		i->timeout = 500;
 		i->m = MODE_WAIT;
 		task_do(t, 1024*10, task_action_estimate, TS_CONFIRM);
+		if (t->t & (TASK_COPY | TASK_MOVE)
+		&& t->tw.tws == AT_LINK
+		&& !(t->tf & (TF_ANY_LINK_METHOD))) {
+			if (!_symlink_policy(i, t)) {
+				t->ts = TS_FINISHED;
+			}
+		}
+		else if (t->t & TASK_REMOVE) {
+			t->tf |= TF_RAW_LINKS;
+		}
 		if (t->err) t->ts = TS_FAILED;
 		break;
 	case TS_CONFIRM:
@@ -1007,8 +1016,7 @@ static void task_execute(struct ui* const i, struct task* const t) {
 			t->ts = TS_FINISHED;
 		}
 		else if (t->t & (TASK_COPY | TASK_MOVE)) {
-			if ((t->conflicts && !_conflict_policy(i, t))
-			|| (t->symlinks && !_symlink_policy(i, t))) {
+			if ((t->conflicts && !_conflict_policy(i, t))) {
 				t->ts = TS_FINISHED;
 			}
 		}
@@ -1042,8 +1050,8 @@ static void task_execute(struct ui* const i, struct task* const t) {
 			}
 			i->mt = MSG_INFO;
 			snprintf(i->msg, MSG_BUFFER_SIZE,
-					"processed %u files & dirs",
-					t->files_done+t->dirs_done);
+					"processed %u files, %u dirs",
+					t->files_done, t->dirs_done);
 		}
 		task_clean(t);
 		i->m = MODE_MANAGER;

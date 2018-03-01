@@ -24,7 +24,7 @@
 	#define _DEFAULT_SOURCE
 #endif
 
-#if defined(__OpenBSD__)
+#if defined(__OpenBSD__) // TODO
 	#define HAS_FALLOCATE 0
 #else
 	#define HAS_FALLOCATE 1
@@ -86,6 +86,9 @@ enum task_flags {
 	TF_DEREF_LINKS = 1<<3, // If copying/moving links, copy what they point to
 	TF_SKIP_LINKS = 1<<4,
 	TF_RECURSIVE_CHMOD = 1<<5,
+	TF_RECALCULATE_LINKS = 1<<6,
+	TF_ANY_LINK_METHOD = (TF_RAW_LINKS | TF_DEREF_LINKS
+		| TF_SKIP_LINKS | TF_RECALCULATE_LINKS),
 };
 
 enum task_state {
@@ -145,7 +148,7 @@ void task_clean(struct task* const);
 int build_new_path(const char* const, const char* const, const char* const,
 		const char* const, const char* const, char*);
 
-int tree_walk_start(struct tree_walk* const, const char* const, const bool);
+int tree_walk_start(struct tree_walk* const, const char* const);
 void tree_walk_end(struct tree_walk* const);
 int tree_walk_step(struct tree_walk* const);
 
