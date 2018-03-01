@@ -33,13 +33,11 @@
 
 /*
  * GENERAL TODO
- * - Messages may be blocked by other messages
  * - IDEA: Detecting file formats -> display name of a program that
  *     would open highlighted file
  * - Dir scanning via task?
  * - After renaming, highlight one of the renamed files (?)
  *   - Or add command jumping to next/prev selected file
- * - Swap panels
  * - Copy/move: merge+overwrite fails with "file exists" error lol
  * - Rename/copy/move: display conflicts in list and allow user to browse the list
  * - Creating links: offer relative or absolute link path
@@ -169,7 +167,7 @@ static int edit_list(struct string_list* const in,
 
 static void open_selected_with(struct ui* const i, char* const w) {
 	char* path;
-	if ((path = file_view_path_to_selected(i->pv))) {
+	if ((path = panel_path_to_selected(i->pv))) {
 		const mode_t m = hfr(i->pv)->s.st_mode;
 		if (S_ISREG(m) || S_ISLNK(m)) { // TODO
 			int err;
@@ -209,7 +207,7 @@ static void cmd_find(struct ui* const i) {
 		}
 		else if (r == 2 || t_top != t) {
 			if (IS_CTRL(o, 'V')) {
-				file_view_select_file(i->pv);
+				panel_select_file(i->pv);
 				continue;
 			}
 			else if (IS_CTRL(o, 'N') && i->pv->selection < N-1) {
@@ -227,7 +225,7 @@ static void cmd_find(struct ui* const i) {
 }
 
 #if 0
-inline static void estimate_volume_for_selected(struct file_view* const fv) {
+inline static void estimate_volume_for_selected(struct panel* const fv) {
 	// TODO REDO
 	int sink_fc = 0, sink_dc = 0;
 	fnum_t f = 0, s = 0;
@@ -311,7 +309,7 @@ static void prepare_task(struct ui* const i, struct task* const t,
 	};
 	struct string_list S = { NULL, 0 }; // Selected
 	struct string_list R = { NULL, 0 }; // Renamed
-	file_view_selected_to_list(i->pv, &S);
+	panel_selected_to_list(i->pv, &S);
 	if (!S.len) return;
 	if (tt & (TASK_MOVE | TASK_COPY)) {
 		if (!_solve_name_conflicts_if_any(i, &S, &R)) {
@@ -456,7 +454,7 @@ static void cmd_rename(struct ui* const i) {
 		{ KUTF8("a"), "abort" }
 	};
 	bool ok = true;
-	file_view_selected_to_list(i->pv, &S);
+	panel_selected_to_list(i->pv, &S);
 	do {
 		if ((err = edit_list(&S, &R))) {
 			failed(i, "edit", strerror(err));
@@ -579,7 +577,7 @@ inline static void cmd_change_sorting(struct ui* const i) {
 		memmove(&i->pv->order[0], &i->pv->order[1], FV_ORDER_SIZE-1);
 		i->pv->order[FV_ORDER_SIZE-1] = 0;
 	}
-	file_view_sorting_changed(i->pv);
+	panel_sorting_changed(i->pv);
 }
 
 static void cmd_mklnk(struct ui* const i) {
@@ -587,7 +585,7 @@ static void cmd_mklnk(struct ui* const i) {
 	//char tmpn[] = "/tmp/hund.XXXXXXXX";
 	//int tmpfd = mkstemp(tmpn);
 	struct string_list sf = { NULL, 0 };
-	file_view_selected_to_list(i->pv, &sf);
+	panel_selected_to_list(i->pv, &sf);
 	const size_t target_l = strnlen(i->pv->wd, PATH_MAX_LEN);
 	const size_t slpath_l = strnlen(i->sv->wd, PATH_MAX_LEN);
 	char* target = malloc(target_l+1+NAME_BUF_SIZE);
@@ -612,7 +610,7 @@ static void cmd_mklnk(struct ui* const i) {
 static void cmd_quick_chmod_plus_x(struct ui* const i) {
 	char* path = NULL;
 	struct stat s;
-	if (!(path = file_view_path_to_selected(i->pv))) return;
+	if (!(path = panel_path_to_selected(i->pv))) return;
 	if (stat(path, &s) || !S_ISREG(s.st_mode)) return;
 	const mode_t nm = s.st_mode | (S_IXUSR | S_IXGRP | S_IXOTH);
 	chmod(path, nm);
@@ -622,7 +620,7 @@ static void cmd_quick_chmod_plus_x(struct ui* const i) {
 static void process_input(struct ui* const i, struct task* const t,
 		struct marks* const m) {
 	char *path = NULL, *name = NULL;
-	struct file_view* tmp = NULL;
+	struct panel* tmp = NULL;
 	int err = 0;
 	const enum command cmd = get_cmd(i);
 	switch (cmd) {
@@ -773,6 +771,13 @@ static void process_input(struct ui* const i, struct task* const t,
 			i->sv->show_hidden = i->pv->show_hidden;
 		}
 		break;
+	case CMD_SWAP_PANELS:
+		tmp = malloc(sizeof(struct panel));
+		memcpy(tmp, i->pv, sizeof(struct panel));
+		memcpy(i->pv, i->sv, sizeof(struct panel));
+		memcpy(i->sv, tmp, sizeof(struct panel));
+		free(tmp);
+		break;
 	case CMD_ENTRY_DOWN:
 		jump_n_entries(i->pv, 1);
 		break;
@@ -786,13 +791,13 @@ static void process_input(struct ui* const i, struct task* const t,
 		jump_n_entries(i->pv, -(i->ph-1));
 		break;
 	case CMD_ENTER_DIR:
-		err = file_view_enter_selected_dir(i->pv);
+		err = panel_enter_selected_dir(i->pv);
 		if (err && err != ENOTDIR) {
 			failed(i, "enter dir", strerror(err));
 		}
 		break;
 	case CMD_UP_DIR:
-		if ((err = file_view_up_dir(i->pv))) {
+		if ((err = panel_up_dir(i->pv))) {
 			failed(i, "up dir", strerror(err));
 		}
 		break;
@@ -834,7 +839,7 @@ static void process_input(struct ui* const i, struct task* const t,
 		//estimate_volume_for_selected(i->pv);
 		break;
 	case CMD_SELECT_FILE:
-		if (file_view_select_file(i->pv)) {
+		if (panel_select_file(i->pv)) {
 			jump_n_entries(i->pv, 1);
 		}
 		break;
@@ -869,7 +874,7 @@ static void process_input(struct ui* const i, struct task* const t,
 		last_entry(i->pv);
 		break;
 	case CMD_CHMOD:
-		if ((path = file_view_path_to_selected(i->pv))) {
+		if ((path = panel_path_to_selected(i->pv))) {
 			chmod_open(i, path);
 		}
 		else {
@@ -877,14 +882,14 @@ static void process_input(struct ui* const i, struct task* const t,
 		}
 		break;
 	case CMD_TOGGLE_HIDDEN:
-		file_view_toggle_hidden(i->pv);
+		panel_toggle_hidden(i->pv);
 		break;
 	case CMD_REFRESH:
 		ui_rescan(i, i->pv, NULL);
 		break;
 	case CMD_SORT_REVERSE:
 		i->pv->scending = -i->pv->scending;
-		file_view_sorting_changed(i->pv);
+		panel_sorting_changed(i->pv);
 		break;
 	case CMD_SORT_CHANGE:
 		cmd_change_sorting(i);
@@ -1006,7 +1011,7 @@ static void task_execute(struct ui* const i, struct task* const t) {
 			}
 		}
 		else if (t->t & TASK_REMOVE) {
-			t->tf |= TF_RAW_LINKS;
+			t->tf |= TF_RAW_LINKS; // TODO
 		}
 		if (t->err) t->ts = TS_FAILED;
 		break;
@@ -1061,7 +1066,7 @@ static void task_execute(struct ui* const i, struct task* const t) {
 	}
 }
 
-inline static int _init_wd(struct file_view fvs[2], char* const init_wd[2]) {
+inline static int _init_wd(struct panel fvs[2], char* const init_wd[2]) {
 	int e;
 	for (int v = 0; v < 2; ++v) {
 		const char* const d = (init_wd[v] ? init_wd[v] : "");
@@ -1070,7 +1075,7 @@ inline static int _init_wd(struct file_view fvs[2], char* const init_wd[2]) {
 			// TODO display error?
 		}
 		else if ((e = cd(fvs[v].wd, d))
-		|| (e = file_view_scan_dir(&fvs[v]))) {
+		|| (e = panel_scan_dir(&fvs[v]))) {
 			return e;
 		}
 		first_entry(&fvs[v]);
@@ -1134,7 +1139,7 @@ int main(int argc, char* argv[]) {
 		optind += 1;
 	}
 
-	struct file_view fvs[2];
+	struct panel fvs[2];
 	memset(fvs, 0, sizeof(fvs));
 	fvs[0].scending = 1;
 	memcpy(fvs[0].order, default_order, FV_ORDER_SIZE);

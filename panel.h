@@ -17,8 +17,8 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef FILE_VIEW_H
-#define FILE_VIEW_H
+#ifndef PANEL_H
+#define PANEL_H
 
 #include "fs.h"
 #include "utf8.h"
@@ -39,7 +39,7 @@ static const char default_order[FV_ORDER_SIZE] = {
 	CMP_ISDIR
 };
 
-struct file_view {
+struct panel {
 	char wd[PATH_BUF_SIZE];
 	struct file** file_list;
 	fnum_t num_files;
@@ -51,38 +51,36 @@ struct file_view {
 	bool show_hidden;
 };
 
-bool visible(const struct file_view* const, const fnum_t);
-struct file* hfr(const struct file_view* const);
+bool visible(const struct panel* const, const fnum_t);
+struct file* hfr(const struct panel* const);
 
-void first_entry(struct file_view* const);
-void last_entry(struct file_view* const);
+void first_entry(struct panel* const);
+void last_entry(struct panel* const);
 
-void jump_n_entries(struct file_view* const, const int);
+void jump_n_entries(struct panel* const, const int);
 
-void delete_file_list(struct file_view* const);
-fnum_t file_on_list(const struct file_view* const, const char* const);
-void file_highlight(struct file_view* const, const char* const);
+void delete_file_list(struct panel* const);
+fnum_t file_on_list(const struct panel* const, const char* const);
+void file_highlight(struct panel* const, const char* const);
 
-bool file_find(struct file_view* const, const char* const, fnum_t, fnum_t);
+bool file_find(struct panel* const, const char* const, fnum_t, fnum_t);
 
-bool file_view_select_file(struct file_view* const);
-int file_view_enter_selected_dir(struct file_view* const);
-int file_view_up_dir(struct file_view* const);
+bool panel_select_file(struct panel* const);
+int panel_enter_selected_dir(struct panel* const);
+int panel_up_dir(struct panel* const);
 
-void file_view_toggle_hidden(struct file_view* const);
+void panel_toggle_hidden(struct panel* const);
 
-int file_view_scan_dir(struct file_view* const);
-void file_view_sort(struct file_view* const);
+int panel_scan_dir(struct panel* const);
+void panel_sort(struct panel* const);
 
-char* file_view_path_to_selected(struct file_view* const);
+char* panel_path_to_selected(struct panel* const);
 
-void file_view_sorting_changed(struct file_view* const);
+void panel_sorting_changed(struct panel* const);
 
-void file_view_selected_to_list(struct file_view* const,
-		struct string_list* const);
+void panel_selected_to_list(struct panel* const, struct string_list* const);
 
-void select_from_list(struct file_view* const,
-		const struct string_list* const);
+void select_from_list(struct panel* const, const struct string_list* const);
 
 /*
  * TODO find a better name
@@ -91,12 +89,12 @@ struct assign {
 	fnum_t from, to;
 };
 
-bool rename_prepare(const struct file_view* const, struct string_list* const,
+bool rename_prepare(const struct panel* const, struct string_list* const,
 		struct string_list* const, struct string_list* const,
 		struct assign** const, fnum_t* const);
 
-bool conflicts_with_existing(struct file_view* const,
+bool conflicts_with_existing(struct panel* const,
 		const struct string_list* const);
 
-void remove_conflicting(struct file_view* const, struct string_list* const);
+void remove_conflicting(struct panel* const, struct string_list* const);
 #endif

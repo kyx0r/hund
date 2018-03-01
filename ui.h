@@ -30,7 +30,7 @@
 #include <sys/wait.h>
 #include <signal.h>
 
-#include "file_view.h"
+#include "panel.h"
 #include "utf8.h"
 #include "terminal.h"
 
@@ -82,6 +82,7 @@ enum command {
 	CMD_REFRESH,
 	CMD_SWITCH_PANEL,
 	CMD_DUP_PANEL,
+	CMD_SWAP_PANELS,
 
 	CMD_DIR_VOLUME,
 	CMD_TOGGLE_HIDDEN,
@@ -292,6 +293,7 @@ static struct input2cmd default_mapping[] = {
 	{ { KCTRL('I') }, MODE_MANAGER, CMD_SWITCH_PANEL },
 
 	{ { KUTF8("z") }, MODE_MANAGER, CMD_DUP_PANEL },
+	{ { KUTF8("Z") }, MODE_MANAGER, CMD_SWAP_PANELS },
 
 	{ { KUTF8("r"), KUTF8("r") }, MODE_MANAGER, CMD_REFRESH },
 	{ { KCTRL('L') }, MODE_MANAGER, CMD_REFRESH },
@@ -317,7 +319,7 @@ static struct input2cmd default_mapping[] = {
 	{ { KUTF8("V"), KUTF8("a") }, MODE_MANAGER, CMD_SELECT_ALL },
 	{ { KUTF8("V"), KUTF8("0") }, MODE_MANAGER, CMD_SELECT_NONE },
 
-	{ { KUTF8("m") }, MODE_MANAGER, CMD_MARK_NEW }, // TODO
+	{ { KUTF8("m") }, MODE_MANAGER, CMD_MARK_NEW },
 	{ { KUTF8("'") }, MODE_MANAGER, CMD_MARK_JUMP },
 
 	{ { KUTF8("/") }, MODE_MANAGER, CMD_FIND },
@@ -448,6 +450,7 @@ static const char* const cmd_help[] = {
 	[CMD_REFRESH] = "Rescan directories and redraw UI.",
 	[CMD_SWITCH_PANEL] = "Switch active panel.",
 	[CMD_DUP_PANEL] = "Open current directory in the other panel.",
+	[CMD_SWAP_PANELS] = "",
 
 	[CMD_DIR_VOLUME] = "Calcualte volume of selected directory.",
 	[CMD_TOGGLE_HIDDEN] = "Toggle between hiding/showing hidden files.",
@@ -578,9 +581,9 @@ struct ui {
 	struct append_buffer B;
 	struct termios T;
 
-	struct file_view* fvs[2];
-	struct file_view* pv;
-	struct file_view* sv;
+	struct panel* fvs[2];
+	struct panel* pv;
+	struct panel* sv;
 
 	size_t helpy;
 
@@ -605,8 +608,8 @@ struct ui {
 	char group[LOGIN_BUF_SIZE];
 };
 
-void ui_init(struct ui* const, struct file_view* const,
-		struct file_view* const);
+void ui_init(struct ui* const, struct panel* const,
+		struct panel* const);
 void ui_end(struct ui* const);
 void ui_draw(struct ui* const);
 void ui_update_geometry(struct ui* const);
@@ -629,8 +632,8 @@ int fill_textbox(struct ui* const, char* const,
 int prompt(struct ui* const, char* const, char*, const size_t);
 
 void failed(struct ui* const, const char* const, const char* const);
-bool ui_rescan(struct ui* const, struct file_view* const,
-		struct file_view* const);
+bool ui_rescan(struct ui* const, struct panel* const,
+		struct panel* const);
 int spawn(char* const[]);
 
 size_t append_theme(struct append_buffer* const, const enum theme_element);

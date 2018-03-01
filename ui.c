@@ -21,7 +21,7 @@
 
 /* This file contains UI-related functions
  * These functions are supposed to draw elements of UI.
- * They are supposed to read file_view contents, but never modify it.
+ * They are supposed to read panel contents, but never modify it.
  */
 
 static enum theme_element mode2theme(const mode_t m) {
@@ -43,16 +43,16 @@ static enum theme_element mode2theme(const mode_t m) {
 struct ui* global_i;
 static void handle_winch(int sig) {
 	if (sig != SIGWINCH) return;
-	//free(global_i->B.buf);
-	//global_i->B.top = global_i->B.capacity = 0;
-	//global_i->B.buf = NULL;
+	free(global_i->B.buf);
+	global_i->B.top = global_i->B.capacity = 0;
+	global_i->B.buf = NULL;
 	write(STDOUT_FILENO, CSI_CLEAR_ALL);
 	ui_update_geometry(global_i);
 	ui_draw(global_i);
 }
 
-void ui_init(struct ui* const i, struct file_view* const pv,
-		struct file_view* const sv) {
+void ui_init(struct ui* const i, struct panel* const pv,
+		struct panel* const sv) {
 	setlocale(LC_ALL, "");
 	i->scrh = i->scrw = i->pw[0] = i->pw[1] = 0;
 	i->ph = i->pxoff[0] = i->pxoff[1] = 0;
@@ -146,7 +146,7 @@ static void _pathbars(struct ui* const i) {
 	append(&i->B, "\r\n", 2);
 }
 
-static void _entry(struct ui* const i, const struct file_view* const fv,
+static void _entry(struct ui* const i, const struct panel* const fv,
 		const size_t width, const fnum_t e) {
 	// TODO scroll filenames that are too long to fit in the panel width
 	// TODO signal invalid filenames
@@ -209,7 +209,7 @@ static void _entry(struct ui* const i, const struct file_view* const fv,
  * At which index should I start looking
  * for visible entries to catch all that can be displayed
  */
-static fnum_t _start_search_index(const struct file_view* const s,
+static fnum_t _start_search_index(const struct panel* const s,
 		const fnum_t nhf, const fnum_t me) {
 	fnum_t eo = 0; // Entries Over
 	fnum_t oi = 1; // Over Index
@@ -773,14 +773,14 @@ int prompt(struct ui* const i, char* const t,
  * success = true
  * failure = false
  */
-bool ui_rescan(struct ui* const i, struct file_view* const a,
-		struct file_view* const b) {
+bool ui_rescan(struct ui* const i, struct panel* const a,
+		struct panel* const b) {
 	int err;
-	if (a && (err = file_view_scan_dir(a))) {
+	if (a && (err = panel_scan_dir(a))) {
 		failed(i, "directory scan", strerror(err));
 		return false;
 	}
-	if (b && (err = file_view_scan_dir(b))) {
+	if (b && (err = panel_scan_dir(b))) {
 		failed(i, "directory scan", strerror(err));
 		return false;
 	}
