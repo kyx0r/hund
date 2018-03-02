@@ -33,12 +33,9 @@
 
 /*
  * GENERAL TODO
- * - IDEA: Detecting file formats -> display name of a program that
- *     would open highlighted file
  * - Dir scanning via task?
  * - After renaming, highlight one of the renamed files (?)
  *   - Or add command jumping to next/prev selected file
- * - Copy/move: merge+overwrite fails with "file exists" error lol
  * - Rename/copy/move: display conflicts in list and allow user to browse the list
  * - Creating links: offer relative or absolute link path
  * - Optimize string operations. (include info about it's length)
@@ -973,28 +970,18 @@ inline static bool _symlink_policy(struct ui* const i, struct task* const t) {
 	return true;
 }
 
-inline static bool _confirm_removal(struct ui* const i, struct task* const t) {
-	static const struct select_option o[] = {
-		{ KUTF8("n"), "no" },
-		{ KUTF8("y"), "yes" }
-	};
-	char question[80];
-	snprintf(question, sizeof(question),
-			"Remove %u files?", t->files_total);
-	switch (ui_select(i, question, o, 2)) {
-	case 1: return true;
-	default:
-	case 0: return false;
-	}
-}
-
 static void task_execute(struct ui* const i, struct task* const t) {
 	// TODO error handling is chaotic
 	task_action ta = NULL;
 	char msg[512]; // TODO
-	static const struct select_option o[] = {
+	static const struct select_option remove_o[] = {
 		{ KUTF8("n"), "no" },
-		{ KUTF8("y"), "yes" },
+		{ KUTF8("y"), "yes" }
+	};
+	static const struct select_option error_o[] = {
+		{ KUTF8("t"), "try again" },
+		{ KUTF8("s"), "skip" },
+		{ KUTF8("a"), "abort" },
 	};
 	switch (t->ts) {
 	case TS_CLEAN:
@@ -1003,22 +990,26 @@ static void task_execute(struct ui* const i, struct task* const t) {
 		i->timeout = 500;
 		i->m = MODE_WAIT;
 		task_do(t, 1024*10, task_action_estimate, TS_CONFIRM);
-		if (t->t & (TASK_COPY | TASK_MOVE)
-		&& t->tw.tws == AT_LINK
-		&& !(t->tf & (TF_ANY_LINK_METHOD))) {
-			if (!_symlink_policy(i, t)) {
-				t->ts = TS_FINISHED;
+		if (t->tw.tws == AT_LINK && !(t->tf & (TF_ANY_LINK_METHOD))) {
+			if (t->t & (TASK_COPY | TASK_MOVE)) {
+				if (!_symlink_policy(i, t)) {
+					t->ts = TS_FINISHED;
+				}
 			}
-		}
-		else if (t->t & TASK_REMOVE) {
-			t->tf |= TF_RAW_LINKS; // TODO
+			else if (t->t & TASK_REMOVE) {
+				t->tf |= TF_RAW_LINKS; // TODO
+			}
 		}
 		if (t->err) t->ts = TS_FAILED;
 		break;
 	case TS_CONFIRM:
 		t->ts = TS_RUNNING;
-		if (t->t == TASK_REMOVE && !_confirm_removal(i, t)) {
-			t->ts = TS_FINISHED;
+		if (t->t == TASK_REMOVE) {
+			snprintf(msg, sizeof(msg),
+				"Remove %u files?", t->files_total);
+			if (!ui_select(i, msg, remove_o, 2)) {
+				t->ts = TS_FINISHED;
+			}
 		}
 		else if (t->t & (TASK_COPY | TASK_MOVE)) {
 			if ((t->conflicts && !_conflict_policy(i, t))) {
@@ -1041,11 +1032,15 @@ static void task_execute(struct ui* const i, struct task* const t) {
 		i->timeout = -1;
 		task_progress(i, t, "||");
 		break;
-	case TS_FAILED: // TODO
-		snprintf(msg, sizeof(msg), "@ '%s'\r\n(%d) %s. Continue?",
-				t->tw.cpath, t->err, strerror(t->err));
+	case TS_FAILED:
+		snprintf(msg, sizeof(msg), "@ %s\r\n(%d) %s.",
+			t->tw.cpath, t->err, strerror(t->err));
 		t->err = 0;
-		t->ts = (ui_select(i, msg, o, 2) ? TS_RUNNING : TS_FINISHED);
+		switch (ui_select(i, msg, error_o, 3)) {
+		case 0: t->ts = TS_RUNNING; break;
+		case 1: t->ts = TS_RUNNING; break; // TODO
+		case 2: t->ts = TS_FINISHED; break;
+		}
 		break;
 	case TS_FINISHED:
 		i->timeout = -1;
@@ -1055,8 +1050,8 @@ static void task_execute(struct ui* const i, struct task* const t) {
 			}
 			i->mt = MSG_INFO;
 			snprintf(i->msg, MSG_BUFFER_SIZE,
-					"processed %u files, %u dirs",
-					t->files_done, t->dirs_done);
+				"processed %u files (%u symlinks), %u dirs",
+				t->files_done, t->symlinks, t->dirs_done);
 		}
 		task_clean(t);
 		i->m = MODE_MANAGER;

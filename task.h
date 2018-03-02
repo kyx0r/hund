@@ -106,7 +106,7 @@ struct task {
 	enum task_state ts;
 	enum task_flags tf;
 
-	//    vvv basically pointers to file_view->wd; to not free
+	//    vvv basically pointers to panel->wd; to not free
 	char* src; // Source directory path
 	char* dst; // Destination directory path
 	struct string_list sources; // Files to be copied
@@ -144,9 +144,6 @@ void task_action_copyremove(struct task* const, int* const);
 void task_do(struct task* const, int, task_action, const enum task_state);
 
 void task_clean(struct task* const);
-
-int build_new_path(const char* const, const char* const, const char* const,
-		const char* const, const char* const, char*);
 
 int tree_walk_start(struct tree_walk* const, const char* const);
 void tree_walk_end(struct tree_walk* const);
