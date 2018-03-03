@@ -117,6 +117,9 @@ void pretty_size(off_t, char* buf);
 
 #define MKDIR_DEFAULT_PERM (S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
 
+int pushd(char* const, size_t* const, const char* const, size_t);
+void popd(char* const, size_t* const);
+
 int append_dir(char* const, const char* const);
 int cd(char* const, const char* const);
 int up_dir(char* const);
@@ -139,12 +142,12 @@ struct string_list {
 };
 
 fnum_t list_push(struct string_list* const, const char* const, size_t);
+void list_copy(struct string_list* const, const struct string_list* const);
+void list_free(struct string_list* const);
+
 int file_to_list(const int, struct string_list* const);
 int list_to_file(const struct string_list* const, int);
-void list_copy(struct string_list* const, const struct string_list* const);
-void free_list(struct string_list* const);
 fnum_t string_on_list(const struct string_list* const, const char* const, size_t);
-
 fnum_t blank_lines(const struct string_list* const);
 bool duplicates_on_list(const struct string_list* const);
 

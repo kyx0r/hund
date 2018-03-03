@@ -245,6 +245,35 @@ void pretty_size(off_t s, char* const buf) {
 }
 
 /*
+ * Push Directory
+ */
+int pushd(char* const P, size_t* const Pl, const char* const D, size_t Dl) {
+	if (memcmp(P, "/", 2)) {
+		if (*Pl+1+Dl > PATH_MAX_LEN) return ENAMETOOLONG;
+		P[*Pl] = '/';
+		*Pl += 1;
+	}
+	else if (*Pl+Dl > PATH_MAX_LEN) return ENAMETOOLONG;
+	memcpy(P+*Pl, D, Dl+1);
+	*Pl += Dl;
+	return 0;
+}
+
+/*
+ * Pop directory
+ */
+void popd(char* const P, size_t* const Pl) {
+	while (*Pl > 1 && P[*Pl-1] != '/') {
+		P[*Pl-1] = 0;
+		*Pl -= 1;
+	}
+	if (*Pl > 1) {
+		P[*Pl-1] = 0;
+		*Pl -= 1;
+	}
+}
+
+/*
  * Appends dir to path.
  * Expects path to be PATH_MAX+1 long
  * and dir to be NAME_MAX long.
@@ -446,14 +475,37 @@ fnum_t list_push(struct string_list* const L, const char* const s, size_t sl) {
 	void* tmp = realloc(L->arr, (L->len+1) * sizeof(struct string*));
 	if (!tmp) return (fnum_t)-1;
 	L->arr = tmp;
-	if (sl == (size_t)-1) {
+	if (s && sl == (size_t)-1) {
 		sl = strnlen(s, NAME_MAX_LEN);
+		L->arr[L->len] = malloc(sizeof(struct string)+sl+1);
+		L->arr[L->len]->len = sl;
+		memcpy(L->arr[L->len]->str, s, sl+1);
 	}
-	L->arr[L->len] = malloc(sizeof(struct string)+sl+1);
-	L->arr[L->len]->len = sl;
-	memcpy(L->arr[L->len]->str, s, sl+1);
+	else {
+		L->arr[L->len] = NULL;
+	}
 	L->len += 1;
 	return L->len - 1;
+}
+
+void list_copy(struct string_list* const D, const struct string_list* const S) {
+	D->len = S->len;
+	D->arr = malloc(D->len*sizeof(struct string*));
+	for (fnum_t i = 0; i < D->len; ++i) {
+		D->arr[i] = malloc(sizeof(struct string) +S->arr[i]->len);
+		memcpy(D->arr[i]->str, S->arr[i]->str, S->arr[i]->len+1);
+		D->arr[i]->len = S->arr[i]->len;
+	}
+}
+
+void list_free(struct string_list* const list) {
+	if (!list->arr) return;
+	for (fnum_t i = 0; i < list->len; ++i) {
+		if (list->arr[i]) free(list->arr[i]);
+	}
+	free(list->arr);
+	list->arr = NULL;
+	list->len = 0;
 }
 
 /*
@@ -464,7 +516,7 @@ fnum_t list_push(struct string_list* const L, const char* const s, size_t sl) {
  * TODO support for other line endings
  */
 int file_to_list(const int fd, struct string_list* const list) {
-	free_list(list);
+	list_free(list);
 	char name[NAME_BUF_SIZE];
 	size_t nlen = 0, top = 0;
 	ssize_t rd = 0;
@@ -475,13 +527,13 @@ int file_to_list(const int fd, struct string_list* const list) {
 		rd = read(fd, name+top, NAME_BUF_SIZE-top);
 		if (rd == -1) {
 			int e = errno;
-			free_list(list);
+			list_free(list);
 			return e;
 		}
 		if (!rd && !*name) break;
 		nl = memchr(name, '\n', sizeof(name));
 		if (!nl && !(nl = memchr(name, 0, sizeof(name)))) {
-			free_list(list);
+			list_free(list);
 			return ENAMETOOLONG;
 		}
 		*nl = 0;
@@ -490,7 +542,7 @@ int file_to_list(const int fd, struct string_list* const list) {
 				(list->len+1)*sizeof(struct string*));
 		if (!tmp_str) {
 			int e = errno;
-			free_list(list);
+			list_free(list);
 			return e;
 		}
 		list->arr = tmp_str;
@@ -519,26 +571,6 @@ int list_to_file(const struct string_list* const list, int fd) {
 		if (write(fd, name, list->arr[i]->len+1) <= 0) return errno;
 	}
 	return 0;
-}
-
-void list_copy(struct string_list* const D, const struct string_list* const S) {
-	D->len = S->len;
-	D->arr = malloc(D->len*sizeof(struct string*));
-	for (fnum_t i = 0; i < D->len; ++i) {
-		D->arr[i] = malloc(sizeof(struct string) +S->arr[i]->len);
-		memcpy(D->arr[i]->str, S->arr[i]->str, S->arr[i]->len+1);
-		D->arr[i]->len = S->arr[i]->len;
-	}
-}
-
-void free_list(struct string_list* const list) {
-	if (!list->arr) return;
-	for (fnum_t i = 0; i < list->len; ++i) {
-		if (list->arr[i]) free(list->arr[i]);
-	}
-	free(list->arr);
-	list->arr = NULL;
-	list->len = 0;
 }
 
 fnum_t string_on_list(const struct string_list* const L,
