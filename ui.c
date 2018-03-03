@@ -25,19 +25,17 @@
  */
 
 static enum theme_element mode2theme(const mode_t m) {
-	// TODO find a better way
-	switch (m & S_IFMT) {
-	case S_IFBLK: return THEME_ENTRY_BLK_UNS;
-	case S_IFCHR: return THEME_ENTRY_CHR_UNS;
-	case S_IFIFO: return THEME_ENTRY_FIFO_UNS;
-	case S_IFREG:
-		if (EXECUTABLE(m)) return THEME_ENTRY_REG_EXE_UNS;
-		return THEME_ENTRY_REG_UNS;
-	case S_IFDIR: return THEME_ENTRY_DIR_UNS;
-	case S_IFSOCK: return THEME_ENTRY_SOCK_UNS;
-	case S_IFLNK: return THEME_ENTRY_LNK_UNS;
-	default: return THEME_ENTRY_REG_UNS;
-	}
+	if (EXECUTABLE(m)) return THEME_ENTRY_REG_EXE_UNS;
+	static const enum theme_element tm[] = {
+		[S_IFBLK>>S_IFMT_TZERO] = THEME_ENTRY_BLK_UNS,
+		[S_IFCHR>>S_IFMT_TZERO] = THEME_ENTRY_CHR_UNS,
+		[S_IFIFO>>S_IFMT_TZERO] = THEME_ENTRY_FIFO_UNS,
+		[S_IFREG>>S_IFMT_TZERO] = THEME_ENTRY_REG_UNS,
+		[S_IFDIR>>S_IFMT_TZERO] = THEME_ENTRY_DIR_UNS,
+		[S_IFSOCK>>S_IFMT_TZERO] = THEME_ENTRY_SOCK_UNS,
+		[S_IFLNK>>S_IFMT_TZERO] = THEME_ENTRY_LNK_UNS,
+	};
+	return tm[(m & S_IFMT) >> S_IFMT_TZERO];
 }
 
 struct ui* global_i;
@@ -116,6 +114,7 @@ void ui_end(struct ui* const i) {
 
 static void _pathbars(struct ui* const i) {
 	// TODO
+	// TODO wdlen
 	//const struct passwd* const pwd = getpwuid(geteuid());
 	const char* wd[2] = {
 		i->fvs[0]->wd,
