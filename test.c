@@ -4,7 +4,7 @@
 
 #include "test.h"
 #include "fs.h"
-#include "file_view.h"
+#include "panel.h"
 #include "task.h"
 #include "utf8.h"
 #include "terminal.h"
@@ -17,10 +17,10 @@ int main() {
 
 	int r;
 
-	char home[PATH_MAX];
+	char home[PATH_BUF_SIZE];
 	strcpy(home, getenv("HOME"));
 
-	char path[PATH_MAX] = "/";
+	char path[PATH_BUF_SIZE] = "/";
 	r = cd(path, "~");
 	TESTVAL(r, 0, "");
 	TESTSTR(path, home, "");
@@ -131,18 +131,18 @@ int main() {
 
 	memset(path, 0, sizeof(path));
 	path[0] = '/';
-	memset(path+1, 'a', PATH_MAX-3); // 1 to leave null-terminator, 1 for /, 1 for b
+	memset(path+1, 'a', PATH_BUF_SIZE-2); // 1 for /, 1 for b
 	r = cd(path, "b");
 	TESTVAL(r, ENAMETOOLONG, "");
-	TESTVAL(strlen(path), PATH_MAX-2, "path filled");
+	TESTVAL(strlen(path), PATH_MAX_LEN, "path filled");
 
 	r = cd(path, "end");
 	TESTVAL(r, ENAMETOOLONG, "");
-	TESTVAL(strlen(path), PATH_MAX-2, "respect PATH_MAX; leave path unchanged");
+	TESTVAL(strlen(path), PATH_MAX_LEN, "respect PATH_MAX; leave path unchanged");
 
 	r = append_dir(path, "end");
 	TESTVAL(r, ENAMETOOLONG, "");
-	TESTVAL(strlen(path), PATH_MAX-2, "respect PATH_MAX; leave path unchanged");
+	TESTVAL(strlen(path), PATH_MAX_LEN, "respect PATH_MAX; leave path unchanged");
 
 	TEST(!path_is_relative("/"), "absolute");
 	TEST(!path_is_relative("/etc/netctl"), "absolute");
@@ -163,10 +163,38 @@ int main() {
 	cd(path, "/home/user");
 	TESTSTR(path, "/home/user", "");
 
-	char path7[PATH_MAX+1] = "/home/user/images/memes";
+	char path7[PATH_BUF_SIZE] = "/home/user/images/memes";
 	int e = append_dir(path7, "lol");
 	TESTVAL(e, 0, "");
 	TESTSTR(path7, "/home/user/images/memes/lol", "");
+
+	memset(path, 0, sizeof(path));
+	size_t path_len = 0;
+	r = pushd(path, &path_len, "a", 1);
+	TESTVAL(r, 0, "no error");
+	TESTSTR(path, "/a", "");
+	r = pushd(path, &path_len, "b", 1);
+	TESTVAL(r, 0, "no error");
+	TESTSTR(path, "/a/b", "");
+	r = pushd(path, &path_len, "c", 1);
+	TESTVAL(r, 0, "no error");
+	TESTSTR(path, "/a/b/c", "");
+	popd(path, &path_len);
+	TESTSTR(path, "/a/b", "");
+	popd(path, &path_len);
+	TESTSTR(path, "/a", "");
+	popd(path, &path_len);
+	TESTSTR(path, "/", "");
+	popd(path, &path_len);
+	TESTSTR(path, "/", "");
+	for (size_t i = 0; i < PATH_MAX_LEN/2; ++i) {
+		r = pushd(path, &path_len, "a", 1);
+	}
+	TESTVAL(r, 0, "no error");
+	r = pushd(path, &path_len, "a", 1);
+	TESTVAL(r, ENAMETOOLONG, "ENAMETOOLONG");
+	TESTVAL(path_len, PATH_MAX_LEN-1, "ENAMETOOLONG");
+
 
 	TESTVAL(imb("1234567", "123"), 3, "");
 	TESTVAL(imb("1234567", "023"), 0, "");
@@ -367,8 +395,10 @@ int main() {
 	SECTION("task");
 
 
+	struct task t;
+	memset(&t, 0, sizeof(struct task));
 	char result[PATH_BUF_SIZE];
-	static const char* bnp[][6] = {
+	static char* bnp[][6] = {
 		{ "/home/user/doc/dir/file.txt",
 			"/home/user/doc", "/home/user/.trash",
 			"dir", "repl",
@@ -451,9 +481,14 @@ int main() {
 		},
 	};
 	for (size_t i = 0; i < sizeof(bnp)/sizeof(bnp[0]); ++i) {
-		build_new_path(bnp[i][0], bnp[i][1],
-				bnp[i][2], bnp[i][3],
-				bnp[i][4], result);
+		t.tw.cpath = bnp[i][0];
+		t.src = bnp[i][1];
+		t.dst = bnp[i][2];
+		list_push(&t.sources, bnp[i][3], -1);
+		list_push(&t.renamed, bnp[i][4], -1);
+		task_build_path(&t, result);
+		list_free(&t.sources);
+		list_free(&t.renamed);
 		TESTSTR(result, bnp[i][5], "");
 	}
 
