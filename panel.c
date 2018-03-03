@@ -66,6 +66,9 @@ inline void last_entry(struct panel* const fv) {
 	jump_n_entries(fv, fv->num_files);
 }
 
+/*
+ * returns number of entries jumped over
+ */
 void jump_n_entries(struct panel* const fv, const int n) {
 	if (!fv->num_files) {
 		fv->selection = 0;
@@ -363,7 +366,7 @@ void panel_selected_to_list(struct panel* const fv,
 void select_from_list(struct panel* const fv,
 		const struct string_list* const L) {
 	for (fnum_t i = 0; i < L->len; ++i) {
-		if (!L->arr[i]->len) continue;
+		if (!L->arr[i]) continue;
 		for (fnum_t s = 0; s < fv->num_files; ++s) {
 			if (!strcmp(L->arr[i]->str, fv->file_list[s]->name)) {
 				fv->file_list[s]->selected = true;
@@ -492,6 +495,6 @@ void remove_conflicting(struct panel* const fv,
 			list_push(&repl, list->arr[f]->str, list->arr[f]->len);
 		}
 	}
-	free_list(list);
+	list_free(list);
 	*list = repl;
 }

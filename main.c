@@ -34,8 +34,6 @@
 /*
  * GENERAL TODO
  * - Dir scanning via task?
- * - After renaming, highlight one of the renamed files (?)
- *   - Or add command jumping to next/prev selected file
  * - Rename/copy/move: display conflicts in list and allow user to browse the list
  * - Creating links: offer relative or absolute link path
  * - Optimize string operations. (include info about it's length)
@@ -285,7 +283,7 @@ inline static bool _solve_name_conflicts_if_any(struct ui* const i,
 		case 2:
 			// merge policy is chosen after estimating
 			// (if there are any conflicts in the tree)
-			free_list(r);
+			list_free(r);
 			return true;
 		case 3:
 		default:
@@ -293,7 +291,7 @@ inline static bool _solve_name_conflicts_if_any(struct ui* const i,
 		}
 	}
 	if (!was_conflict) {
-		free_list(r);
+		list_free(r);
 	}
 	return true;
 }
@@ -310,8 +308,8 @@ static void prepare_task(struct ui* const i, struct task* const t,
 	if (!S.len) return;
 	if (tt & (TASK_MOVE | TASK_COPY)) {
 		if (!_solve_name_conflicts_if_any(i, &S, &R)) {
-			free_list(&S);
-			free_list(&R);
+			list_free(&S);
+			list_free(&R);
 			return;
 		}
 	}
@@ -372,7 +370,7 @@ static int rename_trivial(const char* const wd,
 	memcpy(op, wd, wdl+1);
 	memcpy(np, wd, wdl+1);
 	for (fnum_t f = 0; f < S->len; ++f) {
-		if (!S->arr[f]->len) {
+		if (!S->arr[f]) {
 			continue;
 		}
 		if ((err = _rename(op, np, S->arr[f]->str, R->arr[f]->str))) {
@@ -455,8 +453,8 @@ static void cmd_rename(struct ui* const i) {
 	do {
 		if ((err = edit_list(&S, &R))) {
 			failed(i, "edit", strerror(err));
-			free_list(&S);
-			free_list(&R);
+			list_free(&S);
+			list_free(&R);
 			return;
 		}
 		const char* msg = "There are conflicts. Retry?";
@@ -475,23 +473,23 @@ static void cmd_rename(struct ui* const i) {
 		}
 		if ((!ok || !(ok = rename_prepare(i->pv, &S, &R, &N, &a, &al)))
 		&& !ui_select(i, msg, o, 2)) {
-			free_list(&S);
-			free_list(&R);
+			list_free(&S);
+			list_free(&R);
 			return;
 		}
 	} while (!ok);
 	if ((err = rename_trivial(i->pv->wd, &S, &R))
-	&& (err = rename_interdependent(i->pv->wd, &N, a, al))) {
+	|| (err = rename_interdependent(i->pv->wd, &N, a, al))) {
 		failed(i, "rename", strerror(err));
 	}
-	free_list(&S);
-	free_list(&N);
+	list_free(&S);
 	free(a);
-
 	if (ui_rescan(i, i->pv, NULL)) {
 		select_from_list(i->pv, &R);
+		select_from_list(i->pv, &N);
 	}
-	free_list(&R);
+	list_free(&N);
+	list_free(&R);
 }
 
 inline static void cmd_cd(struct ui* const i) {
@@ -503,7 +501,7 @@ inline static void cmd_cd(struct ui* const i) {
 	char* cdp = calloc(PATH_BUF_SIZE, sizeof(char));
 	if (prompt(i, cdp, cdp, PATH_MAX_LEN)
 	|| (err = cd(path, cdp))
-	|| (err = ENOENT, access(path, F_OK))
+	|| (access(path, F_OK) ? (err = errno) : 0)
 	|| (stat(path, &s) ? (err = errno) : 0)
 	|| (err = ENOTDIR, !S_ISDIR(s.st_mode))) {
 		if (err) failed(i, "cd", strerror(err));
@@ -525,7 +523,7 @@ inline static void cmd_mkdir(struct ui* const i) {
 	memcpy(path, i->pv->wd, wdl+1);
 	edit_list(&F, &F);
 	for (fnum_t f = 0; f < F.len; ++f) {
-		if (!F.arr[f]->len) continue;
+		if (!F.arr[f]) continue;
 		if (memchr(F.arr[f]->str, '/', F.arr[f]->len+1)) {
 			failed(i, "mkdir", "name contains '/'");
 		}
@@ -536,7 +534,7 @@ inline static void cmd_mkdir(struct ui* const i) {
 		up_dir(path);
 	}
 	free(path);
-	free_list(&F);
+	list_free(&F);
 	ui_rescan(i, i->pv, NULL);
 }
 
@@ -610,17 +608,20 @@ static void cmd_quick_chmod_plus_x(struct ui* const i) {
 	if (!(path = panel_path_to_selected(i->pv))) return;
 	if (stat(path, &s) || !S_ISREG(s.st_mode)) return;
 	const mode_t nm = s.st_mode | (S_IXUSR | S_IXGRP | S_IXOTH);
-	chmod(path, nm);
+	if (chmod(path, nm)) {
+		int e = errno;
+		failed(i, "chmod", strerror(e));
+	}
 	ui_rescan(i, i->pv, NULL);
 }
 
 static void process_input(struct ui* const i, struct task* const t,
 		struct marks* const m) {
-	char *path = NULL, *name = NULL;
+	char *s = NULL;
 	struct panel* tmp = NULL;
 	int err = 0;
-	const enum command cmd = get_cmd(i);
-	switch (cmd) {
+	fnum_t f;
+	switch (get_cmd(i)) {
 	/* HELP */
 	case CMD_HELP_QUIT:
 		i->m = MODE_MANAGER;
@@ -642,10 +643,10 @@ static void process_input(struct ui* const i, struct task* const t,
 		break;
 	case CMD_CHOWN:
 		/* TODO in $VISUAL */
-		name = calloc(LOGIN_BUF_SIZE, sizeof(char));
-		if (!prompt(i, name, name, LOGIN_MAX_LEN)) {
+		s = calloc(LOGIN_BUF_SIZE, sizeof(char));
+		if (!prompt(i, s, s, LOGIN_MAX_LEN)) {
 			errno = 0;
-			struct passwd* pwd = getpwnam(name);
+			struct passwd* pwd = getpwnam(s);
 			if (!pwd) {
 				err = errno;
 				failed(i, "chown", strerror(err));
@@ -655,14 +656,14 @@ static void process_input(struct ui* const i, struct task* const t,
 				strncpy(i->user, pwd->pw_name, LOGIN_BUF_SIZE);
 			}
 		}
-		free(name);
+		free(s);
 		break;
 	case CMD_CHGRP:
 		/* TODO in $VISUAL */
-		name = calloc(LOGIN_BUF_SIZE, sizeof(char));
-		if (!prompt(i, name, name, LOGIN_BUF_SIZE)) {
+		s = calloc(LOGIN_BUF_SIZE, sizeof(char));
+		if (!prompt(i, s, s, LOGIN_BUF_SIZE)) {
 			errno = 0;
-			struct group* grp = getgrnam(name);
+			struct group* grp = getgrnam(s);
 			if (!grp) {
 				err = errno;
 				failed(i, "chgrp", strerror(err));
@@ -672,7 +673,7 @@ static void process_input(struct ui* const i, struct task* const t,
 				strncpy(i->group, grp->gr_name, LOGIN_BUF_SIZE);
 			}
 		}
-		free(name);
+		free(s);
 		break;
 
 	#define PLUS(m) i->plus |= (m); i->minus &= ~(m);
@@ -808,8 +809,8 @@ static void process_input(struct ui* const i, struct task* const t,
 		prepare_task(i, t, TASK_REMOVE);
 		break;
 	case CMD_PAGER:
-		name = getenv("PAGER");
-		open_selected_with(i, (name ? name : "less"));
+		s = getenv("PAGER");
+		open_selected_with(i, (s ? s : "less"));
 		break;
 	case CMD_EDIT_FILE:
 		open_selected_with(i, get_editor());
@@ -855,6 +856,29 @@ static void process_input(struct ui* const i, struct task* const t,
 			i->pv->file_list[f]->selected = false;
 		}
 		break;
+	case CMD_SELECTED_NEXT:
+		if (!i->pv->num_selected
+		|| i->pv->selection == i->pv->num_files-1) break;
+		f = i->pv->selection+1;
+		while (f < i->pv->num_files) {
+			if (i->pv->file_list[f]->selected) {
+				i->pv->selection = f;
+				break;
+			}
+			f += 1;
+		}
+		break;
+	case CMD_SELECTED_PREV:
+		if (!i->pv->num_selected || !i->pv->selection) break;
+		f = i->pv->selection-1;
+		while (f+1 >= 1) { // TODO
+			if (i->pv->file_list[f]->selected) {
+				i->pv->selection = f;
+				break;
+			}
+			f -= 1;
+		}
+		break;
 	case CMD_MARK_NEW:
 		marks_input(i, m);
 		break;
@@ -871,8 +895,8 @@ static void process_input(struct ui* const i, struct task* const t,
 		last_entry(i->pv);
 		break;
 	case CMD_CHMOD:
-		if ((path = panel_path_to_selected(i->pv))) {
-			chmod_open(i, path);
+		if ((s = panel_path_to_selected(i->pv))) {
+			chmod_open(i, s);
 		}
 		else {
 			failed(i, "chmod", strerror(ENAMETOOLONG));
@@ -971,13 +995,13 @@ inline static bool _symlink_policy(struct ui* const i, struct task* const t) {
 }
 
 static void task_execute(struct ui* const i, struct task* const t) {
-	// TODO error handling is chaotic
 	task_action ta = NULL;
 	char msg[512]; // TODO
 	static const struct select_option remove_o[] = {
 		{ KUTF8("n"), "no" },
 		{ KUTF8("y"), "yes" }
 	};
+	// TODO skip all errors, skip same errno
 	static const struct select_option error_o[] = {
 		{ KUTF8("t"), "try again" },
 		{ KUTF8("s"), "skip" },
@@ -987,6 +1011,7 @@ static void task_execute(struct ui* const i, struct task* const t) {
 	case TS_CLEAN:
 		break;
 	case TS_ESTIMATE:
+		// TODO info that i's doing something
 		i->timeout = 500;
 		i->m = MODE_WAIT;
 		task_do(t, 1024*10, task_action_estimate, TS_CONFIRM);
@@ -1037,9 +1062,14 @@ static void task_execute(struct ui* const i, struct task* const t) {
 			t->tw.cpath, t->err, strerror(t->err));
 		t->err = 0;
 		switch (ui_select(i, msg, error_o, 3)) {
-		case 0: t->ts = TS_RUNNING; break;
-		case 1: t->ts = TS_RUNNING; break; // TODO
-		case 2: t->ts = TS_FINISHED; break;
+		case 1:
+			t->err = tree_walk_step(&t->tw);
+		case 0:
+			t->ts = TS_RUNNING;
+			break;
+		case 2:
+			t->ts = TS_FINISHED;
+			break;
 		}
 		break;
 	case TS_FINISHED:

@@ -137,6 +137,8 @@ void task_new(struct task* const, const enum task_type,
 		const struct string_list* const,
 		const struct string_list* const);
 
+int task_build_path(const struct task* const, char*);
+
 typedef void (*task_action)(struct task* const, int* const);
 void task_action_chmod(struct task* const, int* const);
 void task_action_estimate(struct task* const, int* const);

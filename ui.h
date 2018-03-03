@@ -94,6 +94,9 @@ enum command {
 	CMD_SELECT_ALL,
 	CMD_SELECT_NONE,
 
+	CMD_SELECTED_NEXT,
+	CMD_SELECTED_PREV,
+
 	CMD_MARK_NEW,
 	CMD_MARK_JUMP,
 
@@ -315,9 +318,13 @@ static struct input2cmd default_mapping[] = {
 
 	{ { KUTF8("+"), KUTF8("x") }, MODE_MANAGER, CMD_QUICK_PLUS_X },
 
+	/* TODO */
 	{ { KUTF8("v") }, MODE_MANAGER, CMD_SELECT_FILE },
-	{ { KUTF8("V"), KUTF8("a") }, MODE_MANAGER, CMD_SELECT_ALL },
-	{ { KUTF8("V"), KUTF8("0") }, MODE_MANAGER, CMD_SELECT_NONE },
+	{ { KUTF8("V") }, MODE_MANAGER, CMD_SELECT_ALL },
+	{ { KUTF8("0") }, MODE_MANAGER, CMD_SELECT_NONE },
+
+	{ { KUTF8(".") }, MODE_MANAGER, CMD_SELECTED_NEXT },
+	{ { KUTF8(",") }, MODE_MANAGER, CMD_SELECTED_PREV },
 
 	{ { KUTF8("m") }, MODE_MANAGER, CMD_MARK_NEW },
 	{ { KUTF8("'") }, MODE_MANAGER, CMD_MARK_JUMP },
@@ -461,6 +468,9 @@ static const char* const cmd_help[] = {
 	[CMD_SELECT_FILE] = "Select/unselect file.",
 	[CMD_SELECT_ALL] = "Select all visible files.",
 	[CMD_SELECT_NONE] = "Unselect all files.",
+
+	[CMD_SELECTED_NEXT] = "Jump to the next selected file.",
+	[CMD_SELECTED_PREV] = "Jump to the previous selected file.",
 
 	[CMD_MARK_NEW] = "Set mark at highlighted file.",
 	[CMD_MARK_JUMP] = "Jump to a mark.",

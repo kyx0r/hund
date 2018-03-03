@@ -19,21 +19,39 @@
 
 #include "task.h"
 
+void task_new(struct task* const t, const enum task_type tp,
+		const enum task_flags tf,
+		char* const src, char* const dst,
+		const struct string_list* const sources,
+		const struct string_list* const renamed) {
+	t->t = tp;
+	t->ts = TS_ESTIMATE;
+	t->tf = tf;
+	t->src = src;
+	t->dst = dst;
+	t->sources = *sources;
+	t->renamed = *renamed;
+	t->in = t->out = -1;
+	t->current_source = 0;
+	t->err = 0;
+	t->conflicts = t->symlinks = t->specials = 0;
+	t->size_total = t->size_done = 0;
+	t->files_total = t->files_done = t->dirs_total = t->dirs_done = 0;
+	t->chp = t->chm = 0;
+	t->cho = -1;
+	t->chg = -1;
+	memset(&t->tw, 0, sizeof(struct tree_walk));
+}
+
 /*
- * P = Full path of the source
- * swd = Source Working Directory
- * dwd = Destination Working Directory
- * S = Source Directory
- * D = Destination Directory
- * R = Result
- *
  * TODO errors
  * TODO clean
  */
-static int build_new_path(const struct task* const t, char* R) {
-	const char* const S = t->sources.arr[t->current_source]->str;
+int task_build_path(const struct task* const t, char* R) {
+	const char* S = NULL;
 	const char* D = NULL;
-	if (t->renamed.len) {
+	if (t->renamed.len && t->renamed.arr[t->current_source]) {
+		S = t->sources.arr[t->current_source]->str;
 		D = t->renamed.arr[t->current_source]->str;
 	}
 	size_t D_len;
@@ -68,30 +86,6 @@ static int build_new_path(const struct task* const t, char* R) {
 	}
 	memcpy(R, P, P_len-old_len+1);
 	return 0;
-}
-
-void task_new(struct task* const t, const enum task_type tp,
-		const enum task_flags tf,
-		char* const src, char* const dst,
-		const struct string_list* const sources,
-		const struct string_list* const renamed) {
-	t->t = tp;
-	t->ts = TS_ESTIMATE;
-	t->tf = tf;
-	t->src = src;
-	t->dst = dst;
-	t->sources = *sources;
-	t->renamed = *renamed;
-	t->in = t->out = -1;
-	t->current_source = 0;
-	t->err = 0;
-	t->conflicts = t->symlinks = t->specials = 0;
-	t->size_total = t->size_done = 0;
-	t->files_total = t->files_done = t->dirs_total = t->dirs_done = 0;
-	t->chp = t->chm = 0;
-	t->cho = -1;
-	t->chg = -1;
-	memset(&t->tw, 0, sizeof(struct tree_walk));
 }
 
 void task_action_chmod(struct task* const t, int* const c) {
@@ -142,7 +136,7 @@ void task_action_estimate(struct task* const t, int* const c) {
 	const bool Q = t->tw.tws & (AT_DIR | AT_LINK | AT_FILE);
 	if ((t->t == TASK_COPY || t->t == TASK_MOVE) && Q) {
 		char new_path[PATH_BUF_SIZE];
-		build_new_path(t, new_path);
+		task_build_path(t, new_path);
 		if (!access(new_path, F_OK)) {
 			t->conflicts += 1;
 		}
@@ -202,8 +196,8 @@ static int _close_files(struct task* const t) {
 }
 
 void task_clean(struct task* const t) {
-	free_list(&t->sources);
-	free_list(&t->renamed);
+	list_free(&t->sources);
+	list_free(&t->renamed);
 	t->src = t->dst = NULL;
 	t->t = TASK_NONE;
 	t->tf = TF_NONE;
@@ -240,9 +234,9 @@ static int _open_files(struct task* const t,
 	return 0;
 }
 
-static int _copy_some(struct task* const t,
-		const char* const src, const char* const dst,
-		void* const buf, const size_t bufsize, int* const c) {
+static int _copy(struct task* const t,
+		const char* const src, const char* const dst, int* const c) {
+	char buf[BUFSIZ];
 	// TODO if it fails at any point it should seek back
 	// to enable retrying
 	int e = 0;
@@ -251,7 +245,7 @@ static int _copy_some(struct task* const t,
 	}
 	ssize_t wb = -1, rb = -1;
 	while (*c > 0 && _files_opened(t)) {
-		rb = read(t->out, buf, bufsize);
+		rb = read(t->out, buf, sizeof(buf));
 		if (!rb) { // done copying
 			t->files_done += 1;
 			return _close_files(t);
@@ -397,20 +391,14 @@ int tree_walk_step(struct tree_walk* const tw) {
 	return _stat_file(tw);
 }
 
-/*
- * np is a buffer to be used by build_new_path()
- * buf is a buffer to be used by _copy_some()
- * TODO simplify
- * TODO repeating code
- */
-static int _at_step(struct task* const t, int* const c,
-		char* const np, char* const buf, const size_t bufsize) {
+inline static int _copyremove_step(struct task* const t, int* const c) {
+	char np[PATH_BUF_SIZE];
 	const bool cp = t->t & (TASK_COPY | TASK_MOVE);
 	const bool rm = t->t & (TASK_MOVE | TASK_REMOVE);
 	const bool sc = t->tf & TF_SKIP_CONFLICTS;
 	const bool ov = t->tf & TF_OVERWRITE_CONFLICTS;
-	if (cp && rm && same_fs(t->src, t->dst)) {
-		build_new_path(t, np);
+	if ((t->t & TASK_MOVE) && same_fs(t->src, t->dst)) {
+		task_build_path(t, np);
 		if (rename(t->tw.cpath, np)) {
 			return errno;
 		}
@@ -420,75 +408,68 @@ static int _at_step(struct task* const t, int* const c,
 		t->dirs_done = t->dirs_total;
 		return 0;
 	}
-	int err;
-	if (t->tw.tws == AT_LINK && (t->tf & TF_SKIP_LINKS)) {
+	int err = 0;
+	if ((t->tw.tws & AT_LINK) && (t->tf & TF_SKIP_LINKS)) {
 		return 0;
 	}
 	if (cp) {
-		build_new_path(t, np);
+		task_build_path(t, np);
+		if (!access(np, F_OK)) {
+			switch (t->tw.tws) {
+			case AT_FILE:
+			case AT_LINK:
+				if (ov && unlink(np)) {
+					return errno;
+				}
+			case AT_DIR:
+				if (sc) {
+					return 0;
+				}
+				break;
+			default:
+				break;
+			}
+		}
 		switch (t->tw.tws) {
-		case AT_LINK:
-			if (!access(np, F_OK)) {
-				if (ov && unlink(np)) {
-					return errno;
-				}
-				else if (sc) {
-					return 0;
-				}
-			}
-			if (t->tf & TF_RAW_LINKS) {
-				err = link_copy_raw(t->tw.cpath, np);
-			}
-			else {
-				err = link_copy(t->src, t->tw.cpath, np);
-			}
-			if (!err || (sc && err == EEXIST)) {
-				t->size_done += t->tw.cs.st_size;
-				t->files_done += 1;
-			}
-			else {
-				return err;
-			}
-			break;
 		case AT_FILE:
-			if (!access(np, F_OK)) { // TODO
-				if (ov && unlink(np)) {
-					return errno;
-				}
-				else if (sc) {
-					return 0;
-				}
-			}
-			err = _copy_some(t, t->tw.cpath, np, buf, bufsize, c);
-			if (!(!err || ((sc || ov) && err == EEXIST))) { // TODO
+			if ((err = _copy(t, t->tw.cpath, np, c))) {
 				return err;
 			}
 			if (_files_opened(t)) {
 				return 0;
 			}
 			break;
-		case AT_DIR:
-			if (sc && !access(np, F_OK)) {
-				return 0;
-			}
-			err = (mkdir(np, t->tw.cs.st_mode) ? errno : 0);
-			if (!err || ((sc || ov) && err == EEXIST)) {
-				t->size_done += t->tw.cs.st_size;
-				t->dirs_done += 1;
-				*c -= 1;
+		case AT_LINK:
+			if (t->tf & TF_RAW_LINKS) {
+				err = link_copy_raw(t->tw.cpath, np);
 			}
 			else {
-				return err;
+				err = link_copy(t->src, t->tw.cpath, np);
+			}
+			break;
+		case AT_DIR:
+			if (mkdir(np, t->tw.cs.st_mode)) {
+				err = errno;
 			}
 			break;
 		default:
 			break;
 		}
+		if (err && !((sc || ov) && err == EEXIST)) {
+			return err;
+		}
+		if (t->tw.tws & AT_LINK) {
+			t->size_done += t->tw.cs.st_size;
+			t->files_done += 1;
+		}
+		else if (t->tw.tws & AT_DIR) {
+			t->size_done += t->tw.cs.st_size;
+			t->dirs_done += 1;
+			*c -= 1;
+		}
 	}
 	if (rm) {
-		switch (t->tw.tws) {
-		case AT_LINK:
-		case AT_FILE:
+		if (t->tw.tws & (AT_FILE | AT_LINK)) {
 			if (unlink(t->tw.cpath)) {
 				return errno;
 			}
@@ -497,28 +478,23 @@ static int _at_step(struct task* const t, int* const c,
 				t->files_done += 1;
 				*c -= 1;
 			}
-			break;
-		case AT_DIR_END:
+		}
+		else if (t->tw.tws & AT_DIR_END) {
 			if (rmdir(t->tw.cpath)) {
 				return errno;
 			}
+			t->size_done += t->tw.cs.st_size;
 			t->dirs_done += 1;
 			*c -= 1;
-			break;
-		default:
-			break;
 		}
 	}
 	return 0;
 }
 
 void task_action_copyremove(struct task* const t, int* const c) {
-	char new_path[PATH_BUF_SIZE];
-	char buf[BUFSIZ];
-	if ((t->err = _at_step(t, c, new_path, buf, sizeof(buf)))
+	if ((t->err = _copyremove_step(t, c))
 	|| (t->in != -1 || t->out != -1)
 	|| (t->err = tree_walk_step(&t->tw))) {
-		//if (t->err == EACCES) t->err = 0;
 		return;
 	}
 }
