@@ -21,126 +21,134 @@ int main() {
 	strcpy(home, getenv("HOME"));
 
 	char path[PATH_BUF_SIZE] = "/";
-	r = cd(path, "~");
+	size_t pl = 1;
+	r = cd(path, &pl, "~", 1);
 	TESTVAL(r, 0, "");
 	TESTSTR(path, home, "");
 
-	r = cd(path, "~/");
+	r = cd(path, &pl, "~/", 2);
 	TESTVAL(r, 0, "");
 	TESTSTR(path, home, "");
 
 	strcat(home, "/file");
-	r = cd(path, "~/file");
+	r = cd(path, &pl, "~/file", 6);
 	TESTVAL(r, 0, "");
 	TESTSTR(path, home, "");
 
 	strcpy(home, "/~file");
 	memset(path, 0, sizeof(path));
+	pl = 0;
 
-	r = cd(path, "~file");
+	r = cd(path, &pl, "~file", 5);
 	TESTVAL(r, 0, "");
 	TESTSTR(path, home, "");
 
 	memset(path, 0, sizeof(path));
+	pl = 0;
 
-	r = cd(path, "");
+	r = cd(path, &pl, "", 0);
 	TESTVAL(r, 0, "");
 	TESTSTR(path, "/", "");
 
-	r = cd(path, "");
+	r = cd(path, &pl, "", 0);
 	TESTVAL(r, 0, "");
 	TESTSTR(path, "/", "");
 
 	path[0] = 0;
-	r = cd(path, "");
+	pl = 0;
+	r = cd(path, &pl, "", 0);
 	TESTVAL(r, 0, "");
 	TESTSTR(path, "/", "");
 
-	r = cd(path, "/a/b/");
+	r = cd(path, &pl, "/a/b/", 5);
 	TESTVAL(r, 0, "");
 	TESTSTR(path, "/a/b", "");
 
-	r = cd(path, "c/");
+	r = cd(path, &pl, "c/", 2);
 	TESTVAL(r, 0, "");
 	TESTSTR(path, "/a/b/c", "");
 
-	r = cd(path, "d/////////////////////////////////e");
+	r = cd(path, &pl, "d/////////////////////////////////e", 35);
 	TESTVAL(r, 0, "");
 	TESTSTR(path, "/a/b/c/d/e", "");
 
-	r = cd(path, "/d/////e/////////////////////////////////////////////////////f");
+	r = cd(path, &pl, "/d/////e/////////////////////////////////////////////////////f", 62);
 	TESTVAL(r, 0, "");
 	TESTSTR(path, "/d/e/f", "");
 
-	r = cd(path, "//d//e//f");
+	r = cd(path, &pl, "//d//e//f", 9);
 	TESTVAL(r, 0, "");
 	TESTSTR(path, "/d/e/f", "");
 
-	r = cd(path, "/////////");
+	r = cd(path, &pl, "/////////", 9);
 	TESTVAL(r, 0, "");
 	TESTSTR(path, "/", "");
 
-	r = cd(path, "home");
+	r = cd(path, &pl, "home", 4);
 	TESTVAL(r, 0, "");
 	TESTSTR(path, "/home", "");
 
-	r = cd(path, "user");
+	r = cd(path, &pl, "user", 4);
 	TESTVAL(r, 0, "");
 	TESTSTR(path, "/home/user", "");
 
 	memset(path, '/', 5);
 	path[6] = 0;
-	r = cd(path, "/////////");
+	pl = 5;
+	r = cd(path, &pl, "/////////", 9);
 	TESTVAL(r, 0, "");
 	TESTSTR(path, "/", "");
 
 	memset(path, 0, sizeof(path));
-	r = cd(path, "dir");
+	pl = 0;
+	r = cd(path, &pl, "dir", 3);
 	TESTVAL(r, 0, "");
 	TESTSTR(path, "/dir", "");
 
 	memset(path, 0, sizeof(path));
 	path[0] = '/';
-	r = cd(path, "usr");
+	pl = 1;
+	r = cd(path, &pl, "usr", 3);
 	TESTVAL(r, 0, "");
 	TESTSTR(path, "/usr", "entered directory in root (respect /)");
 
-	r = cd(path, "bin");
+	r = cd(path, &pl, "bin", 3);
 	TESTVAL(r, 0, "");
 	TESTSTR(path, "/usr/bin", "correct path");
 
-	r = cd(path, ".");
+	r = cd(path, &pl, ".", 1);
 	TESTVAL(r, 0, "");
 	TESTSTR(path, "/usr/bin", "path unchanged");
 
-	r = cd(path, "..");
+	r = cd(path, &pl, "..", 2);
 	TESTVAL(r, 0, "");
 	TESTSTR(path, "/usr", "");
 
-	r = cd(path, "..");
+	r = cd(path, &pl, "..", 2);
 	TESTVAL(r, 0, "");
 	TESTSTR(path, "/", "");
 
-	r = cd(path, "..");
+	r = cd(path, &pl, "..", 2);
 	TESTVAL(r, 0, "");
 	TESTSTR(path, "/", "");
 
-	r = cd(path, "lol/../wat");
+	r = cd(path, &pl, "lol/../wat", 10);
 	TESTVAL(r, 0, "");
 	TESTSTR(path, "/wat", "");
 
 	memset(path, 0, sizeof(path));
 	path[0] = '/';
 	memset(path+1, 'a', PATH_BUF_SIZE-2); // 1 for /, 1 for b
-	r = cd(path, "b");
+	pl = strlen(path);
+	r = cd(path, &pl, "b", 1);
 	TESTVAL(r, ENAMETOOLONG, "");
 	TESTVAL(strlen(path), PATH_MAX_LEN, "path filled");
 
-	r = cd(path, "end");
+	r = cd(path, &pl, "end", 3);
 	TESTVAL(r, ENAMETOOLONG, "");
 	TESTVAL(strlen(path), PATH_MAX_LEN, "respect PATH_MAX; leave path unchanged");
 
-	r = append_dir(path, "end");
+	r = pushd(path, &pl, "end", 3);
 	TESTVAL(r, ENAMETOOLONG, "");
 	TESTVAL(strlen(path), PATH_MAX_LEN, "respect PATH_MAX; leave path unchanged");
 
@@ -156,15 +164,17 @@ int main() {
 	TEST(path_is_relative("./"), "relative");
 
 	strcpy(path, "/dope/");
+	pl = 6;
 	char dir5[] = "./wat/lol/../wut";
-	cd(path, dir5);
+	cd(path, &pl, dir5, strlen(dir5));
 	TESTSTR(path, "/dope/wat/wut", "");
 
-	cd(path, "/home/user");
+	cd(path, &pl, "/home/user", 10);
 	TESTSTR(path, "/home/user", "");
 
 	char path7[PATH_BUF_SIZE] = "/home/user/images/memes";
-	int e = append_dir(path7, "lol");
+	size_t p7l = strlen(path7);
+	int e = pushd(path7, &p7l, "lol", 3);
 	TESTVAL(e, 0, "");
 	TESTSTR(path7, "/home/user/images/memes/lol", "");
 
@@ -481,7 +491,8 @@ int main() {
 		},
 	};
 	for (size_t i = 0; i < sizeof(bnp)/sizeof(bnp[0]); ++i) {
-		t.tw.cpath = bnp[i][0];
+		t.tw.path = bnp[i][0];
+		t.tw.pathlen = strlen(bnp[i][0]);
 		t.src = bnp[i][1];
 		t.dst = bnp[i][2];
 		list_push(&t.sources, bnp[i][3], -1);
