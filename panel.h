@@ -41,6 +41,7 @@ static const char default_order[FV_ORDER_SIZE] = {
 
 struct panel {
 	char wd[PATH_BUF_SIZE];
+	size_t wdlen;
 	struct file** file_list;
 	fnum_t num_files;
 	fnum_t num_hidden;

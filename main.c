@@ -36,8 +36,9 @@
  * - Dir scanning via task?
  * - Rename/copy/move: display conflicts in list and allow user to browse the list
  * - Creating links: offer relative or absolute link path
- * - Optimize string operations. (include info about it's length)
  * - Keybindings must make more sense
+ * - Pipe data to pager for showing data
+ * - Jump to file pointed by symlink (and return)
  */
 
 struct mark_path {
@@ -139,8 +140,8 @@ static char* get_editor(void) {
 
 static int open_file_with(char* const p, char* const f) {
 	char exeimg[PATH_BUF_SIZE];
-	memcpy(exeimg, "/usr/bin", 9);
-	append_dir(exeimg, p);
+	memcpy(exeimg, "/usr/bin/", 10);
+	memcpy(exeimg+9, p, strlen(p)+1);
 	char* const arg[] = { exeimg, f, NULL };
 	return spawn(arg);
 }
@@ -334,35 +335,38 @@ static void prepare_task(struct ui* const i, struct task* const t,
  * on = Old Name
  * nn = New Name
  */
-static int _rename(char* const op, char* const np,
-		const char* const on, const char* const nn) {
+static int _rename(char* const op, size_t* const opl,
+		char* const np, size_t* const npl,
+		const struct string* const on,
+		const struct string* const nn) {
 	int err = 0;
-	if ((err = append_dir(op, on))) {
+	if ((err = pushd(op, opl, on->str, on->len))) {
 		return err;
 	}
-	if ((err = append_dir(np, nn))) {
-		up_dir(op);
+	if ((err = pushd(np, npl, nn->str, nn->len))) {
+		popd(np, npl);
 		return err;
 	}
 	if (rename(op, np)) {
 		err = errno;
 	}
-	up_dir(op);
-	up_dir(np);
+	popd(np, npl);
+	popd(op, opl);
 	return err;
 }
 
 /*
  */
-static int rename_trivial(const char* const wd,
+static int rename_trivial(const char* const wd, const size_t wdl,
 		struct string_list* const S, struct string_list* const R) {
 	int err = 0;
-	const size_t wdl = strnlen(wd, PATH_MAX_LEN);
 	char* op = malloc(wdl+1+NAME_BUF_SIZE);
+	size_t opl = wdl;
 	if (!op) {
 		return ENOMEM;
 	}
 	char* np = malloc(wdl+1+NAME_BUF_SIZE);
+	size_t npl = wdl;
 	if (!np) {
 		free(op);
 		return ENOMEM;
@@ -373,7 +377,7 @@ static int rename_trivial(const char* const wd,
 		if (!S->arr[f]) {
 			continue;
 		}
-		if ((err = _rename(op, np, S->arr[f]->str, R->arr[f]->str))) {
+		if ((err = _rename(op, &opl, np, &npl, S->arr[f], R->arr[f]))) {
 			break;
 		}
 	}
@@ -382,18 +386,25 @@ static int rename_trivial(const char* const wd,
 	return err;
 }
 
-static int rename_interdependent(const char* const wd,
+static int rename_interdependent(const char* const wd, const size_t wdl,
 		struct string_list* const N,
 		struct assign* const A, const fnum_t Al) {
 	int err = 0;
-	const size_t wdl = strnlen(wd, PATH_MAX_LEN);
+
 	char* op = malloc(wdl+1+NAME_BUF_SIZE);
+	size_t opl = wdl;
 	memcpy(op, wd, wdl+1);
+
 	char* np = malloc(wdl+1+NAME_BUF_SIZE);
+	size_t npl = wdl;
 	memcpy(np, wd, wdl+1);
-	static const char* const tmpdirn = ".hund.rename.tmpdir.";
-	char tn[sizeof(tmpdirn)+8];
-	snprintf(tn, sizeof(tn), "%s%08x", tmpdirn, getpid());
+
+	static const char* const tmpn = ".hund.rename.tmpdir.";
+	size_t tmpnl = strlen(tmpn);
+	struct string* tn = malloc(sizeof(struct string)+tmpnl+8+1);
+	tn->len = tmpnl+8;
+	snprintf(tn->str, tmpnl+8+1, "%s%08x", tmpn, getpid());
+
 	fnum_t tc; // Temponary file Content
 	for (;;) {
 		fnum_t i = 0;
@@ -404,7 +415,7 @@ static int rename_interdependent(const char* const wd,
 
 		tc = A[i].to;
 		const fnum_t tv = A[i].to;
-		if ((err = _rename(op, np, N->arr[A[i].from]->str, tn))) {
+		if ((err = _rename(op, &opl, np, &npl, N->arr[A[i].from], tn))) {
 			break;
 		}
 		fnum_t from = A[i].from;
@@ -417,22 +428,24 @@ static int rename_interdependent(const char* const wd,
 				}
 			}
 			if (j == (fnum_t)-1) break;
-			if ((err = _rename(op, np,
-				N->arr[A[j].from]->str, N->arr[A[j].to]->str))) {
+			if ((err = _rename(op, &opl, np, &npl,
+				N->arr[A[j].from], N->arr[A[j].to]))) {
 				free(op);
 				free(np);
+				free(tn);
 				return err;
 			}
 			from = A[j].from;
 			A[j].from = A[j].to = (fnum_t)-1;
 		} while (from != tv);
-		if ((err = _rename(op, np, tn, N->arr[tc]->str))) {
+		if ((err = _rename(op, &opl, np, &npl, tn, N->arr[tc]))) {
 			break;
 		}
 		A[i].from = A[i].to = (fnum_t)-1;
 	}
 	free(op);
 	free(np);
+	free(tn);
 	return err;
 }
 
@@ -478,8 +491,8 @@ static void cmd_rename(struct ui* const i) {
 			return;
 		}
 	} while (!ok);
-	if ((err = rename_trivial(i->pv->wd, &S, &R))
-	|| (err = rename_interdependent(i->pv->wd, &N, a, al))) {
+	if ((err = rename_trivial(i->pv->wd, i->pv->wdlen, &S, &R))
+	|| (err = rename_interdependent(i->pv->wd, i->pv->wdlen, &N, a, al))) {
 		failed(i, "rename", strerror(err));
 	}
 	list_free(&S);
@@ -497,10 +510,12 @@ inline static void cmd_cd(struct ui* const i) {
 	// TODO buffers
 	int err = 0;
 	struct stat s;
-	char* path = strncpy(malloc(PATH_BUF_SIZE), i->pv->wd, PATH_BUF_SIZE);
+	char* path = malloc(PATH_BUF_SIZE);
+	size_t pathlen = strnlen(i->pv->wd, PATH_MAX_LEN);
+	memcpy(path, i->pv->wd, pathlen+1);
 	char* cdp = calloc(PATH_BUF_SIZE, sizeof(char));
 	if (prompt(i, cdp, cdp, PATH_MAX_LEN)
-	|| (err = cd(path, cdp))
+	|| (err = cd(path, &pathlen, cdp, strnlen(cdp, PATH_MAX_LEN)))
 	|| (access(path, F_OK) ? (err = errno) : 0)
 	|| (stat(path, &s) ? (err = errno) : 0)
 	|| (err = ENOTDIR, !S_ISDIR(s.st_mode))) {
@@ -521,17 +536,19 @@ inline static void cmd_mkdir(struct ui* const i) {
 	const size_t wdl = strnlen(i->pv->wd, PATH_MAX_LEN);
 	char* const path = malloc(wdl+1+NAME_BUF_SIZE);
 	memcpy(path, i->pv->wd, wdl+1);
+	size_t pathl = wdl;
 	edit_list(&F, &F);
 	for (fnum_t f = 0; f < F.len; ++f) {
 		if (!F.arr[f]) continue;
 		if (memchr(F.arr[f]->str, '/', F.arr[f]->len+1)) {
 			failed(i, "mkdir", "name contains '/'");
 		}
-		else if ((err = append_dir(path, F.arr[f]->str))
+		else if ((err = pushd(path, &pathl,
+			F.arr[f]->str, F.arr[f]->len))
 		|| (mkdir(path, MKDIR_DEFAULT_PERM) ? (err = errno) : 0)) {
 			failed(i, "mkdir", strerror(err));
 		}
-		up_dir(path);
+		popd(path, &pathl);
 	}
 	free(path);
 	list_free(&F);
@@ -581,18 +598,18 @@ static void cmd_mklnk(struct ui* const i) {
 	//int tmpfd = mkstemp(tmpn);
 	struct string_list sf = { NULL, 0 };
 	panel_selected_to_list(i->pv, &sf);
-	const size_t target_l = strnlen(i->pv->wd, PATH_MAX_LEN);
-	const size_t slpath_l = strnlen(i->sv->wd, PATH_MAX_LEN);
+	size_t target_l = strnlen(i->pv->wd, PATH_MAX_LEN);
+	size_t slpath_l = strnlen(i->sv->wd, PATH_MAX_LEN);
 	char* target = malloc(target_l+1+NAME_BUF_SIZE);
 	char* slpath = malloc(slpath_l+1+NAME_BUF_SIZE);
 	memcpy(target, i->pv->wd, target_l+1);
 	memcpy(slpath, i->sv->wd, slpath_l+1);
 	for (fnum_t f = 0; f < sf.len; ++f) {
-		append_dir(target, sf.arr[f]->str);
-		append_dir(slpath, sf.arr[f]->str);
+		pushd(target, &target_l, sf.arr[f]->str, sf.arr[f]->len);
+		pushd(slpath, &slpath_l, sf.arr[f]->str, sf.arr[f]->len);
 		symlink(target, slpath); // TODO err
-		up_dir(slpath);
-		up_dir(target);
+		popd(target, &target_l);
+		popd(slpath, &slpath_l);
 	}
 	free(target);
 	free(slpath);
@@ -613,6 +630,44 @@ static void cmd_quick_chmod_plus_x(struct ui* const i) {
 		failed(i, "chmod", strerror(e));
 	}
 	ui_rescan(i, i->pv, NULL);
+}
+
+static void cmd_command(struct ui* const i, struct task* const t,
+		struct marks* const m) {
+	char cmd[80]; // TODO
+	memset(cmd, 0, sizeof(cmd));
+	char* t_top = cmd;
+	i->prompt = cmd;
+
+	memcpy(i->prch, ":", 2);
+	int r = 1;
+	struct input o;
+	for (;;) {
+		ui_draw(i);
+		r = fill_textbox(i, cmd, &t_top, sizeof(cmd)-1, &o);
+		if (!r) {
+			break;
+		}
+		if (r == -1) {
+			i->prompt = NULL;
+			return;
+		}
+	}
+	i->prompt = NULL;
+	if (!strcmp(cmd, "q")) {
+		i->run = false;
+	}
+	else if (!strcmp(cmd, "h")) {
+		i->m = MODE_HELP;
+	}
+	else if (!strcmp(cmd, "+x")) {
+		cmd_quick_chmod_plus_x(i);
+	}
+	// lm = list marks (in pager)
+	// exec
+	// open
+	// nos = no selection (like noh)
+	// ...and other commands that clutter ui.h
 }
 
 static void process_input(struct ui* const i, struct task* const t,
@@ -815,11 +870,14 @@ static void process_input(struct ui* const i, struct task* const t,
 	case CMD_EDIT_FILE:
 		open_selected_with(i, get_editor());
 		break;
-	case CMD_QUICK_PLUS_X:
+	case CMD_QUICK_PLUS_X: // TODO
 		cmd_quick_chmod_plus_x(i);
 		break;
 	case CMD_OPEN_FILE:
 		open_selected_with(i, "xdg-open"); // TODO
+		break;
+	case CMD_COMMAND:
+		cmd_command(i, t, m);
 		break;
 	case CMD_CD:
 		cmd_cd(i);
@@ -1059,7 +1117,7 @@ static void task_execute(struct ui* const i, struct task* const t) {
 		break;
 	case TS_FAILED:
 		snprintf(msg, sizeof(msg), "@ %s\r\n(%d) %s.",
-			t->tw.cpath, t->err, strerror(t->err));
+			t->tw.path, t->err, strerror(t->err));
 		t->err = 0;
 		switch (ui_select(i, msg, error_o, 3)) {
 		case 1:
@@ -1095,13 +1153,18 @@ inline static int _init_wd(struct panel fvs[2], char* const init_wd[2]) {
 	int e;
 	for (int v = 0; v < 2; ++v) {
 		const char* const d = (init_wd[v] ? init_wd[v] : "");
-		if (!getcwd(fvs[v].wd, PATH_BUF_SIZE)) {
-			memcpy(fvs[v].wd, "/", 2);
-			// TODO display error?
+		fvs[v].wdlen = 0;
+		if (getcwd(fvs[v].wd, PATH_BUF_SIZE)) {
+			fvs[v].wdlen = strnlen(fvs[v].wd, PATH_MAX_LEN);
+			size_t dlen = strnlen(d, PATH_MAX_LEN);
+			if ((e = cd(fvs[v].wd, &fvs[v].wdlen, d, dlen))
+			|| (e = panel_scan_dir(&fvs[v]))) {
+				return e;
+			}
 		}
-		else if ((e = cd(fvs[v].wd, d))
-		|| (e = panel_scan_dir(&fvs[v]))) {
-			return e;
+		else {
+			memcpy(fvs[v].wd, "/", 2);
+			fvs[v].wdlen = 1;
 		}
 		first_entry(&fvs[v]);
 	}

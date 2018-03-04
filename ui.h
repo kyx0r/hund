@@ -73,6 +73,7 @@ enum command {
 	CMD_ENTRY_FIRST,
 	CMD_ENTRY_LAST,
 
+	CMD_COMMAND,
 	CMD_CD,
 	CMD_PAGER,
 	CMD_OPEN_FILE,
@@ -318,13 +319,14 @@ static struct input2cmd default_mapping[] = {
 
 	{ { KUTF8("+"), KUTF8("x") }, MODE_MANAGER, CMD_QUICK_PLUS_X },
 
-	/* TODO */
+	/* <TODO> */
 	{ { KUTF8("v") }, MODE_MANAGER, CMD_SELECT_FILE },
 	{ { KUTF8("V") }, MODE_MANAGER, CMD_SELECT_ALL },
 	{ { KUTF8("0") }, MODE_MANAGER, CMD_SELECT_NONE },
 
 	{ { KUTF8(".") }, MODE_MANAGER, CMD_SELECTED_NEXT },
 	{ { KUTF8(",") }, MODE_MANAGER, CMD_SELECTED_PREV },
+	/* </TODO> */
 
 	{ { KUTF8("m") }, MODE_MANAGER, CMD_MARK_NEW },
 	{ { KUTF8("'") }, MODE_MANAGER, CMD_MARK_JUMP },
@@ -337,6 +339,7 @@ static struct input2cmd default_mapping[] = {
 
 	{ { KUTF8("?") }, MODE_MANAGER, CMD_HELP },
 
+	{ { KUTF8(":") }, MODE_MANAGER, CMD_COMMAND },
 	{ { KUTF8("c"), KUTF8("d") }, MODE_MANAGER, CMD_CD },
 
 	{ { KUTF8("c"), KUTF8("c") }, MODE_MANAGER, CMD_CHMOD },
@@ -448,6 +451,8 @@ static const char* const cmd_help[] = {
 
 	[CMD_ENTRY_FIRST] = "Go to the top file in directory.",
 	[CMD_ENTRY_LAST] = "Go to the bottom file in directory.",
+
+	[CMD_COMMAND] = "",
 
 	[CMD_CD] = "Jump to some directory.",
 	[CMD_PAGER] = "Open selected file in pager.",

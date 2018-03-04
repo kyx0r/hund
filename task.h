@@ -75,7 +75,8 @@ struct tree_walk {
 	struct dirtree* dt;
 
 	struct stat cs; // Current Stat
-	char* cpath;
+	char* path;
+	size_t pathlen;
 };
 
 enum task_flags {

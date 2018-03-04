@@ -164,7 +164,7 @@ int panel_enter_selected_dir(struct panel* const fv) {
 	const struct file* H;
 	if (!(H = hfr(fv))) return 0;
 	int err;
-	if ((err = append_dir(fv->wd, H->name))
+	if ((err = pushd(fv->wd, &fv->wdlen, H->name, H->nl))
 	|| (err = panel_scan_dir(fv))) {
 		panel_up_dir(fv);
 		return err;
@@ -177,7 +177,7 @@ int panel_up_dir(struct panel* const fv) {
 	int err;
 	char prevdir[NAME_BUF_SIZE];
 	strncpy(prevdir, fv->wd+current_dir_i(fv->wd), NAME_BUF_SIZE);
-	up_dir(fv->wd);
+	popd(fv->wd, &fv->wdlen);
 	if ((err = panel_scan_dir(fv))) {
 		return err;
 	}
@@ -314,7 +314,8 @@ char* panel_path_to_selected(struct panel* const fv) {
 	const size_t wdl = strnlen(fv->wd, PATH_MAX_LEN);
 	char* p = malloc(wdl+1+NAME_BUF_SIZE);
 	memcpy(p, fv->wd, wdl+1);
-	if (append_dir(p, H->name)) {
+	size_t plen = wdl;
+	if (pushd(p, &plen, H->name, H->nl)) {
 		free(p);
 		return NULL;
 	}

@@ -77,14 +77,13 @@ int task_build_path(const struct task* const t, char* R) {
 		*R = '/';
 		R += 1;
 	}
-	const char* P = t->tw.cpath;
-	const size_t P_len = strnlen(P, PATH_MAX_LEN);
+	const char* P = t->tw.path;
 	P += old_len;
 	if (*P == '/') {
 		P += 1;
 		old_len -= 1;
 	}
-	memcpy(R, P, P_len-old_len+1);
+	memcpy(R, P, t->tw.pathlen-old_len+1);
 	return 0;
 }
 
@@ -101,10 +100,10 @@ void task_action_chmod(struct task* const t, int* const c) {
 		break;
 	}
 	if ((t->chp != 0 || t->chm != 0)
-	    && (t->err = relative_chmod(t->tw.cpath, t->chp, t->chm))) {
+	    && (t->err = relative_chmod(t->tw.path, t->chp, t->chm))) {
 		return;
 	}
-	if (chown(t->tw.cpath, t->cho, t->chg) ? (t->err = errno) : 0) return;
+	if (chown(t->tw.path, t->cho, t->chg) ? (t->err = errno) : 0) return;
 	if ((t->err = tree_walk_step(&t->tw))) return;
 
 	if (!(t->tf & TF_RECURSIVE_CHMOD)) { // TODO find a better way to chmod once
@@ -276,7 +275,7 @@ static int _stat_file(struct tree_walk* const tw) {
 	struct stat old_cs;
 	memcpy(&old_cs, &tw->cs, sizeof(struct stat));
 	const enum tree_walk_state old_tws = tw->tws;
-	if (lstat(tw->cpath, &tw->cs)) {
+	if (lstat(tw->path, &tw->cs)) {
 		memcpy(&tw->cs, &old_cs, sizeof(struct stat));
 		return errno;
 	}
@@ -290,7 +289,7 @@ static int _stat_file(struct tree_walk* const tw) {
 		if (!tw->tl) {
 			tw->tws = AT_LINK;
 		}
-		else if (stat(tw->cpath, &tw->cs)) {
+		else if (stat(tw->path, &tw->cs)) {
 			int err = errno;
 			if (err == ENOENT) {
 				tw->tws = AT_LINK;
@@ -313,9 +312,10 @@ static int _stat_file(struct tree_walk* const tw) {
 }
 
 int tree_walk_start(struct tree_walk* const tw, const char* const path) {
-	if (tw->cpath) free(tw->cpath);
-	tw->cpath = malloc(PATH_BUF_SIZE);
-	strncpy(tw->cpath, path, PATH_BUF_SIZE);
+	if (tw->path) free(tw->path);
+	tw->pathlen = strnlen(path, PATH_MAX_LEN);
+	tw->path = malloc(PATH_BUF_SIZE);
+	memcpy(tw->path, path, tw->pathlen+1);
 	tw->tl = false;
 	if (tw->dt) free(tw->dt);
 	tw->dt = calloc(1, sizeof(struct dirtree));
@@ -329,7 +329,7 @@ void tree_walk_end(struct tree_walk* const tw) {
 		free(DT);
 		DT = UP;
 	}
-	free(tw->cpath);
+	free(tw->path);
 	memset(tw, 0, sizeof(struct tree_walk));
 }
 
@@ -344,7 +344,7 @@ int tree_walk_step(struct tree_walk* const tw) {
 			tw->tws = AT_EXIT;
 			return 0;
 		}
-		up_dir(tw->cpath);
+		popd(tw->path, &tw->pathlen);
 		break;
 	case AT_DIR:
 		/* Go deeper */
@@ -352,7 +352,7 @@ int tree_walk_step(struct tree_walk* const tw) {
 		new_dt->up = tw->dt;
 		tw->dt = new_dt;
 		errno = 0;
-		if (!(new_dt->cd = opendir(tw->cpath))) {
+		if (!(new_dt->cd = opendir(tw->path))) {
 			tw->dt = new_dt->up;
 			free(new_dt);
 			return errno;
@@ -364,7 +364,7 @@ int tree_walk_step(struct tree_walk* const tw) {
 		up = tw->dt->up;
 		free(tw->dt);
 		tw->dt = up;
-		up_dir(tw->cpath);
+		popd(tw->path, &tw->pathlen);
 		break;
 	default:
 		break;
@@ -387,7 +387,8 @@ int tree_walk_step(struct tree_walk* const tw) {
 		tw->tws = AT_DIR_END;
 		return errno;
 	}
-	append_dir(tw->cpath, ce->d_name);
+	const size_t nl = strnlen(ce->d_name, NAME_MAX_LEN);
+	pushd(tw->path, &tw->pathlen, ce->d_name, nl);
 	return _stat_file(tw);
 }
 
@@ -399,7 +400,7 @@ inline static int _copyremove_step(struct task* const t, int* const c) {
 	const bool ov = t->tf & TF_OVERWRITE_CONFLICTS;
 	if ((t->t & TASK_MOVE) && same_fs(t->src, t->dst)) {
 		task_build_path(t, np);
-		if (rename(t->tw.cpath, np)) {
+		if (rename(t->tw.path, np)) {
 			return errno;
 		}
 		t->tw.tws = AT_EXIT;
@@ -432,7 +433,7 @@ inline static int _copyremove_step(struct task* const t, int* const c) {
 		}
 		switch (t->tw.tws) {
 		case AT_FILE:
-			if ((err = _copy(t, t->tw.cpath, np, c))) {
+			if ((err = _copy(t, t->tw.path, np, c))) {
 				return err;
 			}
 			if (_files_opened(t)) {
@@ -441,10 +442,11 @@ inline static int _copyremove_step(struct task* const t, int* const c) {
 			break;
 		case AT_LINK:
 			if (t->tf & TF_RAW_LINKS) {
-				err = link_copy_raw(t->tw.cpath, np);
+				err = link_copy_raw(t->tw.path, np);
 			}
 			else {
-				err = link_copy(t->src, t->tw.cpath, np);
+				err = link_copy_recalculate(t->src,
+						t->tw.path, np);
 			}
 			break;
 		case AT_DIR:
@@ -470,7 +472,7 @@ inline static int _copyremove_step(struct task* const t, int* const c) {
 	}
 	if (rm) {
 		if (t->tw.tws & (AT_FILE | AT_LINK)) {
-			if (unlink(t->tw.cpath)) {
+			if (unlink(t->tw.path)) {
 				return errno;
 			}
 			if (!cp) {
@@ -480,7 +482,7 @@ inline static int _copyremove_step(struct task* const t, int* const c) {
 			}
 		}
 		else if (t->tw.tws & AT_DIR_END) {
-			if (rmdir(t->tw.cpath)) {
+			if (rmdir(t->tw.path)) {
 				return errno;
 			}
 			t->size_done += t->tw.cs.st_size;
