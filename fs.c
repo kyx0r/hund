@@ -126,21 +126,7 @@ int scan_dir(const char* const wd, struct file*** const fl,
 	return err;
 }
 
-/*
- * Copies link from src to dst, relative to wd
- * all paths must be absolute.
- * There are two instances, when symlink path is copied raw:
- * - when it is absolute
- * - when target is within copy operation // TODO don't do that
- *
- * TODO detect loops/recursion
- * TODO lots of testing
- * FIXME 2*PATH_MAX
- *
- * Working Directory - root of the operation
- * Source, Destination
- */
-int link_copy(const char* const wd,
+int link_copy_recalculate(const char* const wd,
 		const char* const src, const char* const dst) {
 	struct stat src_s;
 	if (!wd || !src || !dst) return EINVAL;
@@ -148,49 +134,18 @@ int link_copy(const char* const wd,
 	if (!S_ISLNK(src_s.st_mode)) return EINVAL;
 
 	char lpath[PATH_BUF_SIZE];
-	const ssize_t lpath_len = readlink(src, lpath, sizeof(lpath));
-	if (lpath_len == -1) return errno;
-	lpath[lpath_len] = 0;
-	if (access(lpath, F_OK)) return errno;
+	const ssize_t lpathlen = readlink(src, lpath, sizeof(lpath));
+	if (lpathlen == -1) return errno;
+	lpath[lpathlen] = 0;
 	if (!path_is_relative(lpath)) {
 		return (symlink(lpath, dst) ? errno : 0);
 	}
-	else {
-		const size_t src_dir_off = current_dir_i(src)-1;
-		const size_t src_dir_len = strnlen(src+src_dir_off, PATH_MAX_LEN);
-		char* target = malloc(src_dir_len+lpath_len+1);
-		strncpy(target, src, src_dir_len);
-		target[src_dir_off] = 0;
-
-		int err;
-		if ((err = cd(target, lpath))) {
-			free(target);
-			return err;
-		}
-
-		if (contains(target, wd)) {
-			free(target);
-			return (symlink(lpath, dst) ? errno : 0);
-		}
-
-		const size_t dst_dir_off = current_dir_i(dst)-1;
-		const size_t dst_dir_len = strnlen(dst+dst_dir_off, PATH_MAX_LEN);
-		char* _dst = malloc(dst_dir_len+1);
-		strncpy(_dst, dst, dst_dir_off);
-		_dst[dst_dir_off] = 0;
-
-		char newlpath[PATH_BUF_SIZE];
-		memset(newlpath, 0, sizeof(newlpath));
-
-		while (!contains(target, _dst)) {
-			up_dir(_dst);
-			strncat(newlpath, "../", 4);
-		}
-		strcat(newlpath, target+strnlen(_dst, PATH_MAX_LEN)+1); // TODO
-		free(_dst);
-		free(target);
-		return (symlink(newlpath, dst) ? errno : 0);
-	}
+	const size_t wdlen = strnlen(wd, PATH_MAX_LEN);
+	char tpath[PATH_BUF_SIZE];
+	memcpy(tpath, wd, wdlen);
+	memcpy(tpath+wdlen, "/", 1);
+	memcpy(tpath+wdlen+1, lpath, lpathlen+1);
+	return (symlink(tpath, dst) ? errno : 0);
 }
 
 /*
@@ -325,12 +280,11 @@ int append_dir(char* const path, const char* const dir) {
  * Multiple consecutive '/' will be shortened to only one '/'
  * e.g. cd("/", "a///b////c") -> "/a/b/c"
  */
-int cd(char* const current, const char* const dest) {
-	size_t cl = strnlen(current, PATH_MAX_LEN);
+int cd(char* const current, size_t* const cl,
+		const char* const dest, size_t rem) {
 	char B[PATH_BUF_SIZE];
 	size_t Bl;
 	const char* a = dest;
-	size_t rem = strnlen(dest, PATH_MAX_LEN);
 	if (dest[0] == '/') {
 		memset(B, 0, sizeof(B));
 		Bl = 0;
@@ -343,9 +297,9 @@ int cd(char* const current, const char* const dest) {
 			Bl = 0;
 		}
 		else {
-			memcpy(B, current, cl);
-			memset(B+cl, 0, PATH_BUF_SIZE-cl);
-			Bl = cl;
+			memcpy(B, current, *cl);
+			memset(B+*cl, 0, PATH_BUF_SIZE-*cl);
+			Bl = *cl;
 			if (B[Bl-1] == '/') {
 				B[--Bl] = 0;
 			}
@@ -395,6 +349,7 @@ int cd(char* const current, const char* const dest) {
 		Bl = 1;
 	}
 	memcpy(current, B, Bl+1);
+	*cl = Bl;
 	return 0;
 }
 
@@ -475,8 +430,10 @@ fnum_t list_push(struct string_list* const L, const char* const s, size_t sl) {
 	void* tmp = realloc(L->arr, (L->len+1) * sizeof(struct string*));
 	if (!tmp) return (fnum_t)-1;
 	L->arr = tmp;
-	if (s && sl == (size_t)-1) {
-		sl = strnlen(s, NAME_MAX_LEN);
+	if (s) {
+		if (sl == (size_t)-1) {
+			sl = strnlen(s, NAME_MAX_LEN);
+		}
 		L->arr[L->len] = malloc(sizeof(struct string)+sl+1);
 		L->arr[L->len]->len = sl;
 		memcpy(L->arr[L->len]->str, s, sl+1);
@@ -492,7 +449,7 @@ void list_copy(struct string_list* const D, const struct string_list* const S) {
 	D->len = S->len;
 	D->arr = malloc(D->len*sizeof(struct string*));
 	for (fnum_t i = 0; i < D->len; ++i) {
-		D->arr[i] = malloc(sizeof(struct string) +S->arr[i]->len);
+		D->arr[i] = malloc(sizeof(struct string)+S->arr[i]->len+1);
 		memcpy(D->arr[i]->str, S->arr[i]->str, S->arr[i]->len+1);
 		D->arr[i]->len = S->arr[i]->len;
 	}

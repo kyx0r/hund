@@ -109,7 +109,8 @@ void file_list_clean(struct file*** const, fnum_t* const);
 int scan_dir(const char* const, struct file*** const,
 		fnum_t* const, fnum_t* const);
 
-int link_copy(const char* const, const char* const, const char* const);
+int link_copy_recalculate(const char* const,
+		const char* const, const char* const);
 int link_copy_raw(const char* const, const char* const);
 
 #define SIZE_BUF_SIZE (3+1+2+1+1)
@@ -121,7 +122,7 @@ int pushd(char* const, size_t* const, const char* const, size_t);
 void popd(char* const, size_t* const);
 
 int append_dir(char* const, const char* const);
-int cd(char* const, const char* const);
+int cd(char* const, size_t* const, const char* const, size_t);
 int up_dir(char* const);
 bool path_is_relative(const char* const);
 
