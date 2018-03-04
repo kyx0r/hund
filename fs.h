@@ -121,9 +121,7 @@ void pretty_size(off_t, char* buf);
 int pushd(char* const, size_t* const, const char* const, size_t);
 void popd(char* const, size_t* const);
 
-int append_dir(char* const, const char* const);
 int cd(char* const, size_t* const, const char* const, size_t);
-int up_dir(char* const);
 bool path_is_relative(const char* const);
 
 int prettify_path_i(const char* const, const char* const);

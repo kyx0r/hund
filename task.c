@@ -153,12 +153,13 @@ void task_do(struct task* const t, int c, task_action ta,
 		const char* const source = t->sources.arr[t->current_source]->str;
 		const size_t src_len = strnlen(t->src, PATH_MAX_LEN);
 		const size_t source_len = strnlen(source, NAME_MAX_LEN);
-		const size_t path_len = src_len+1+source_len;
-		char* path = malloc(path_len+1);
-		memcpy(path, t->src, path_len+1);
-		append_dir(path, source);
+		char* path = malloc(src_len+1+source_len+1);
+		memcpy(path, t->src, src_len+1);
+		size_t path_len = src_len;
+		pushd(path, &path_len, source, source_len);
 
 		t->err = tree_walk_start(&t->tw, path);
+		// TODO could just pass it       ^^^^
 		free(path);
 		if (t->err) {
 			t->tw.tws = AT_NOWHERE;

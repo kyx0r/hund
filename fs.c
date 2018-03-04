@@ -71,6 +71,7 @@ void file_list_clean(struct file*** const fl, fnum_t* const nf) {
  */
 int scan_dir(const char* const wd, struct file*** const fl,
 		fnum_t* const nf, fnum_t* const nhf) {
+	size_t wdlen = strnlen(wd, PATH_MAX_LEN);
 	file_list_clean(fl, nf);
 	*nhf = 0;
 	int err = 0;
@@ -114,9 +115,10 @@ int scan_dir(const char* const wd, struct file*** const fl,
 		nfr->nl = (unsigned char)nl;
 		nfr->dir_volume = -1;
 		nfr->selected = false;
-		strncpy(nfr->name, de->d_name, nl+1);
-		strncpy(fpath, wd, PATH_BUF_SIZE);
-		if ((err = append_dir(fpath, nfr->name))
+		memcpy(nfr->name, de->d_name, nl+1);
+		memcpy(fpath, wd, wdlen+1);
+		size_t fpathlen = wdlen;
+		if ((err = pushd(fpath, &fpathlen, nfr->name, nl))
 		   || lstat(fpath, &nfr->s)) {
 			err = errno; // TODO
 			memset(&nfr->s, 0, sizeof(struct stat));
@@ -229,27 +231,6 @@ void popd(char* const P, size_t* const Pl) {
 }
 
 /*
- * Appends dir to path.
- * Expects path to be PATH_MAX+1 long
- * and dir to be NAME_MAX long.
- *
- * returns ENAMETOOLONG if buffer would overflow and leaves path unchanged
- * returns 0 if succesful or dir is empty string
- */
-int append_dir(char* const path, const char* const dir) {
-	const size_t dl = strnlen(dir, NAME_MAX_LEN);
-	if (!dl) return 0;
-	size_t pl = strnlen(path, PATH_MAX_LEN);
-	if (pl+2+dl > PATH_MAX_LEN) return ENAMETOOLONG;
-	if (memcmp(path, "/", 2)) {
-		memcpy(path+pl, "/", 2);
-		pl += 1;
-	}
-	memcpy(path+pl, dir, dl+1);
-	return 0;
-}
-
-/*
  * cd - Change Directory
  * Does not change current working directory,
  * but modifies path passed in arguments.
@@ -350,24 +331,6 @@ int cd(char* const current, size_t* const cl,
 	}
 	memcpy(current, B, Bl+1);
 	*cl = Bl;
-	return 0;
-}
-
-/*
- * Basically removes everything after last '/', including that '/'
- * Return values:
- * 0 if operation succesful
- * -1 if path == '/'
- */
-int up_dir(char* const path) {
-	if (!memcmp(path, "/", 2)) return -1;
-	int i = strnlen(path, PATH_MAX_LEN);
-	for (; i > 0 && path[i] != '/'; --i) {
-		path[i] = 0;
-	}
-	// At this point i points that last '/'
-	// But if it's root, don't delete it
-	if (i) path[i] = 0;
 	return 0;
 }
 
