@@ -113,32 +113,27 @@ void ui_end(struct ui* const i) {
 }
 
 static void _pathbars(struct ui* const i) {
-	// TODO
-	// TODO wdlen
-	//const struct passwd* const pwd = getpwuid(geteuid());
-	const char* wd[2] = {
-		i->fvs[0]->wd,
-		i->fvs[1]->wd
-	};
-	const int wdw[2] = {
-		utf8_width(wd[0]),
-		utf8_width(wd[1])
-	};
 	append(&i->B, CSI_CLEAR_LINE);
 	append_theme(&i->B, THEME_PATHBAR);
-	for (size_t p = 0; p < 2; ++p) {
+	for (size_t j = 0; j < 2; ++j) {
+		const int p = prettify_path_i(i->fvs[j]->wd);
+		const int t = p ? 1 : 0;
+		const char* wd = i->fvs[j]->wd + p;
+		const size_t wdw = utf8_width(wd) + t;
+		const size_t rem = i->pw[j]-2;
 		size_t padding, wdl;
-		if (wdw[p] > i->pw[p]-2) {
+		fill(&i->B, ' ', 1);
+		if (wdw > rem) {
 			padding = 0;
-			wd[p] += utf8_w2nb(wd[p], wdw[p] - (i->pw[p]-2));
-			wdl = utf8_w2nb(wd[p], i->pw[p]-2);
+			wd += utf8_w2nb(wd, wdw - rem) - t;
+			wdl = utf8_w2nb(wd, rem);
 		}
 		else {
-			padding = (i->pw[p]-2) - wdw[p];
-			wdl = strnlen(wd[p], PATH_MAX_LEN);
+			if (t) fill(&i->B, '~', 1);
+			padding = rem - wdw;
+			wdl = i->fvs[j]->wdlen - p + t;
 		}
-		fill(&i->B, ' ', 1);
-		append(&i->B, wd[p], wdl);
+		append(&i->B, wd, wdl);
 		fill(&i->B, ' ', 1+padding);
 	}
 	append_attr(&i->B, ATTR_NORMAL, NULL);
@@ -267,7 +262,6 @@ static void stringify_pug(const mode_t m, const uid_t u, const gid_t g,
 }
 
 static void _statusbar(struct ui* const i) {
-	// TODO It's very wide.
 	const struct file* const _hfr = hfr(i->pv);
 	struct tm T;
 	if (!_hfr || !localtime_r(&(_hfr->s.st_mtim.tv_sec), &T)) {
@@ -275,31 +269,35 @@ static void _statusbar(struct ui* const i) {
 	}
 	strftime(i->time, TIME_SIZE, timefmt, &T);
 
-	char status[10+2+10+2+10+1+1];
+	char S[10 +1+10 +2 +1+10+2 +1+FV_ORDER_SIZE +1];
 	const fnum_t nhf = (i->pv->show_hidden ? 0 : i->pv->num_hidden);
-	int status_len = snprintf(status, sizeof(status),
-			"%uf %u%c %us, %c%.*s",
-			i->pv->num_files-nhf,
-			i->pv->num_hidden,
-			(i->pv->show_hidden ? 'H' : 'h'),
-			i->pv->num_selected,
+	int sl = 0;
+	sl += snprintf(S, sizeof(S), "%u", i->pv->num_files-nhf);
+	if (!i->pv->show_hidden) {
+		sl += snprintf(S+sl, sizeof(S)-sl, "+%u", i->pv->num_hidden);
+	}
+	sl += snprintf(S+sl, sizeof(S)-sl, "f ");
+	if (i->pv->num_selected) {
+		sl += snprintf(S+sl, sizeof(S)-sl,
+				"[%u] ", i->pv->num_selected);
+	}
+	sl += snprintf(S+sl, sizeof(S)-sl, "%c%.*s",
 			(i->pv->scending > 0 ? '+' : '-'),
 			(int)FV_ORDER_SIZE, i->pv->order);
 
-	const size_t cw = utf8_width(status);
+	const size_t cw = utf8_width(S);
 	const size_t uw = utf8_width(i->user);
 	const size_t gw = utf8_width(i->group);
 	const size_t sw = uw+1+gw+1+10+1+TIME_SIZE+1;
+	append_theme(&i->B, THEME_STATUSBAR);
+	fill(&i->B, ' ', 1);
 	if ((size_t)i->scrw < cw+sw) {
-		append_theme(&i->B, THEME_STATUSBAR);
-		fill(&i->B, ' ', i->scrw);
+		fill(&i->B, ' ', i->scrw-1);
 		append_attr(&i->B, ATTR_NORMAL, NULL);
 		append(&i->B, "\r\n", 2);
 		return;
 	}
-	append_theme(&i->B, THEME_STATUSBAR);
-	fill(&i->B, ' ', 1);
-	append(&i->B, status, status_len);
+	append(&i->B, S, sl);
 	fill(&i->B, ' ', i->scrw-cw-sw); // Padding
 	append(&i->B, i->user, strnlen(i->user, LOGIN_MAX_LEN));
 	fill(&i->B, ' ', 1);
