@@ -82,13 +82,14 @@ static const char* const perm2rwx[] = {
 	[07] = "rwx",
 };
 
+char* get_home(void);
+
 int relative_chmod(const char* const, const mode_t, const mode_t);
 
 typedef unsigned int fnum_t; // Number of Files
 
 struct file {
 	struct stat s;
-	ssize_t dir_volume;
 	bool selected;
 	unsigned char nl;
 	char name[];
@@ -101,6 +102,7 @@ struct file {
 
 #define DOTDOT(N) (!strncmp((N), ".", 2) || !strncmp((N), "..", 3))
 #define EXECUTABLE(M) ((M & 0111) && S_ISREG(M))
+#define PATH_IS_RELATIVE(P) ((P)[0] != '/' && (P)[0] != '~')
 
 bool same_fs(const char* const, const char* const);
 
@@ -122,9 +124,8 @@ int pushd(char* const, size_t* const, const char* const, size_t);
 void popd(char* const, size_t* const);
 
 int cd(char* const, size_t* const, const char* const, size_t);
-bool path_is_relative(const char* const);
 
-int prettify_path_i(const char* const, const char* const);
+int prettify_path_i(const char* const);
 int current_dir_i(const char* const);
 
 size_t imb(const char*, const char*);

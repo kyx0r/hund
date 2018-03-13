@@ -19,6 +19,16 @@
 
 #include "fs.h"
 
+char* get_home(void) {
+	char* home;
+	if ((home = getenv("HOME"))) {
+		return home;
+	}
+	errno = 0;
+	struct passwd* pwd = getpwuid(geteuid());
+	return (pwd ? pwd->pw_dir : NULL);
+}
+
 /*
  * Chmods given file using plus and minus masks
  * The following should be true: (plus & minus) == 0
@@ -113,7 +123,6 @@ int scan_dir(const char* const wd, struct file*** const fl,
 		(*fl)[gf] = nfr;
 		gf += 1;
 		nfr->nl = (unsigned char)nl;
-		nfr->dir_volume = -1;
 		nfr->selected = false;
 		memcpy(nfr->name, de->d_name, nl+1);
 		memcpy(fpath, wd, wdlen+1);
@@ -139,7 +148,7 @@ int link_copy_recalculate(const char* const wd,
 	const ssize_t lpathlen = readlink(src, lpath, sizeof(lpath));
 	if (lpathlen == -1) return errno;
 	lpath[lpathlen] = 0;
-	if (!path_is_relative(lpath)) {
+	if (!PATH_IS_RELATIVE(lpath)) {
 		return (symlink(lpath, dst) ? errno : 0);
 	}
 	const size_t wdlen = strnlen(wd, PATH_MAX_LEN);
@@ -301,13 +310,7 @@ int cd(char* const current, size_t* const cl,
 			B[--Bl] = 0;
 		}
 		else if (b-a == 1 && a == dest && !memcmp(a, "~", 1)) {
-			const char* home;
-			if (!(home = getenv("HOME"))) {
-				errno = 0;
-				struct passwd* pwd = getpwuid(geteuid());
-				if (!pwd) return errno;
-				home = pwd->pw_dir;
-			}
+			const char* const home = get_home();
 			const size_t hl = strnlen(home, PATH_MAX_LEN);
 			memcpy(B, home, hl);
 			memset(B+hl, 0, PATH_BUF_SIZE-hl);
@@ -334,17 +337,14 @@ int cd(char* const current, size_t* const cl,
 	return 0;
 }
 
-bool path_is_relative(const char* const path) {
-	return path[0] != '/' && path[0] != '~';
-}
-
 /*
  * Returns place in buffer, where path after ~ starts
  * So that pretty path is just
  * printf("~%s", path+prettify_path_i(path));
  * If cannot be prettified, returns 0
  */
-int prettify_path_i(const char* const path, const char* const home) {
+int prettify_path_i(const char* const path) {
+	const char* const home = get_home();
 	const size_t hlen = strnlen(home, PATH_MAX_LEN);
 	if (!memcmp(path, home, hlen)) {
 		return hlen;
