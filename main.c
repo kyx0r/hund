@@ -634,6 +634,8 @@ static void cmd_quick_chmod_plus_x(struct ui* const i) {
 
 static void cmd_command(struct ui* const i, struct task* const t,
 		struct marks* const m) {
+	(void)(t);
+	(void)(m);
 	char cmd[80]; // TODO
 	memset(cmd, 0, sizeof(cmd));
 	char* t_top = cmd;
@@ -818,7 +820,8 @@ static void process_input(struct ui* const i, struct task* const t,
 		}
 		break;
 	case CMD_DUP_PANEL:
-		strncpy(i->sv->wd, i->pv->wd, PATH_BUF_SIZE);
+		memcpy(i->sv->wd, i->pv->wd, PATH_BUF_SIZE);
+		i->sv->wdlen = i->pv->wdlen;
 		if (ui_rescan(i, i->sv, NULL)) {
 			i->sv->selection = i->pv->selection;
 			i->sv->show_hidden = i->pv->show_hidden;
