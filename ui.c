@@ -320,39 +320,72 @@ static void _statusbar(struct ui* const i) {
 	append(&i->B, "\r\n", 2);
 }
 
+void _keyname(const struct input* const in, char* const buf) {
+	// TODO
+	static const char* const N[] = {
+		[I_ARROW_UP] = "up",
+		[I_ARROW_DOWN] = "down",
+		[I_ARROW_RIGHT] = "right",
+		[I_ARROW_LEFT] = "left",
+		[I_HOME] = "home",
+		[I_END] = "end",
+		[I_PAGE_UP] = "pgup",
+		[I_PAGE_DOWN] = "pgdn",
+		[I_INSERT] = "ins",
+		[I_BACKSPACE] = "bsp",
+		[I_DELETE] = "del",
+		[I_ESCAPE] = "esc"
+	};
+	switch (in->t) {
+	case I_NONE:
+		strcpy(buf, "??");
+		break;
+	case I_UTF8:
+		if (in->utf[0] == ' ') {
+			strcpy(buf, "space");
+		}
+		else {
+			strcpy(buf, in->utf);
+		}
+		break;
+	case I_CTRL:
+		switch (in->utf[0]) {
+		case 'I':
+			strcpy(buf, "tab");
+			break;
+		case 'J':
+			strcpy(buf, "enter");
+			break;
+		case 'H':
+			strcpy(buf, N[I_BACKSPACE]);
+			break;
+		default:
+			buf[0] = '^';
+			strcpy(buf+1, in->utf);
+			break;
+		}
+		break;
+	default:
+		strcpy(buf, N[in->t]);
+	}
+}
+
 void _cmd_and_keyseqs(struct ui* const i, const enum command c,
-		const struct input2cmd* const k[], const size_t ki) {
-	// TODO some valid inputs such as SPACE are invisible
+		const struct input2cmd* const k[], const size_t ks) {
 	const size_t maxsequences = 4;
 	const size_t seqwid = 8; // TODO may not be enough
 	size_t W = 0;
+	char key[KEYNAME_BUF_SIZE];
 	append(&i->B, CSI_CLEAR_LINE);
-	for (size_t s = 0; s < ki; ++s) {
-		const struct input2cmd* const seq = k[s];
+	for (size_t s = 0; s < ks; ++s) {
 		size_t j = 0;
 		size_t w = 0;
-		while (seq->i[j].t != I_NONE) {
-			const struct input* const v = &seq->i[j];
+		while (k[s]->i[j].t != I_NONE) {
+			_keyname(&k[s]->i[j], key);
 			append_attr(&i->B, ATTR_BOLD, NULL);
-			switch (v->t) {
-			case I_UTF8:
-				//append_attr(B, ATTR_UNDERLINE, NULL);
-				append(&i->B, v->utf, strlen(v->utf));
-				//append_attr(B, ATTR_NOT_UNDERLINE, NULL);
-				w += utf8_width(v->utf);
-				break;
-			case I_CTRL:
-				fill(&i->B, '^', 1);
-				fill(&i->B, v->utf[0], 1);
-				w += 2;
-				break;
-			default:
-				append(&i->B, keynames[v->t],
-						strlen(keynames[v->t]));
-				w += utf8_width(keynames[v->t]);
-				break;
-			}
+			append(&i->B, key, strlen(key));
 			append_attr(&i->B, ATTR_NOT_BOLD_OR_FAINT, NULL);
+			w += utf8_width(key);
 			j += 1;
 		}
 		W += 1;
@@ -374,7 +407,22 @@ void _find_all_keyseqs4cmd(const struct ui* const i, const enum command c,
 }
 
 static void _help(struct ui* const i) {
-	// TODO detect when to stop
+	size_t H = 0;
+	int j = 0;
+	while (copyright_notice[j]) {
+		H += 1;
+		j += 1;
+	}
+	j = 1;
+	while (cmd_help[j]) {
+		H += 1;
+		j += 1;
+	}
+	H += MODE_NUM*2;
+	if (i->helpy+i->scrh > H) {
+		i->helpy = H - i->scrh; // TODO
+		return;
+	}
 	int dr = -i->helpy;
 	for (size_t m = 0; m < MODE_NUM; ++m) {
 		/* MODE TITLE */
@@ -393,13 +441,12 @@ static void _help(struct ui* const i) {
 		size_t ki = 0;
 		for (size_t c = CMD_NONE+1; c < CMD_NUM; ++c) {
 			_find_all_keyseqs4cmd(i, c, m, k, &ki);
-			if (ki) { // ^^^ may output empty array
-				if (dr < i->scrh) {
-					_cmd_and_keyseqs(i, c, k, ki);
-					append(&i->B, "\r\n", 2);
-				}
-				dr += 1;
+			if (!ki) continue; // ^^^ may output empty array
+			if (dr < i->scrh) {
+				_cmd_and_keyseqs(i, c, k, ki);
+				append(&i->B, "\r\n", 2);
 			}
+			dr += 1;
 		}
 		/* EMPTY LINE PADDING */
 		if (dr < i->scrh) {
@@ -467,7 +514,6 @@ static void _bottombar(struct ui* const i) {
 		i->mt = MSG_NONE;
 	}
 	else if (i->prompt) {
-		// TODO allow very long prompts
 		const size_t aw = utf8_width(i->prch);
 		const size_t pw = utf8_width(i->prompt);
 		size_t padding;
@@ -512,8 +558,7 @@ void ui_draw(struct ui* const i) {
 		}
 		else {
 			memset(i->perms, '-', 10);
-			memcpy(i->user, "-", 2);
-			memcpy(i->group, "-", 2);
+			i->user[0] = i->group[0] = 0;
 		}
 		_pathbars(i);
 		_panels(i);
@@ -531,14 +576,10 @@ void ui_draw(struct ui* const i) {
 		_statusbar(i);
 		_bottombar(i);
 	}
-	const bool pa = i->prompt
-		&& i->prompt_cursor_pos >= 0
-		&& i->prompt_cursor_pos < i->scrw;
-	if (!pa) append(&i->B, CSI_CURSOR_HIDE);
 	write(STDOUT_FILENO, i->B.buf, i->B.top);
-	if (pa) {
+	if (i->prompt && i->prompt_cursor_pos >= 0) {
 		write(STDOUT_FILENO, CSI_CURSOR_SHOW);
-		move_cursor(i->scrh, i->prompt_cursor_pos+1);
+		move_cursor(i->scrh, i->prompt_cursor_pos%i->scrw+1);
 	}
 }
 
@@ -563,6 +604,7 @@ int chmod_open(struct ui* const i, char* const path) {
 
 	i->o[0] = i->o[1] = s.st_uid;
 	i->g[0] = i->g[1] = s.st_gid;
+	i->plus = i->minus = 0;
 	i->perm[0] = i->perm[1] = s.st_mode;
 	i->path = path;
 	i->m = MODE_CHMOD;
@@ -575,10 +617,7 @@ void chmod_close(struct ui* const i) {
 	i->m = MODE_MANAGER;
 	free(i->path);
 	i->path = NULL;
-	i->plus = i->minus = 0;
 	memset(i->perm, 0, sizeof(i->perm));
-	memset(i->o, 0, sizeof(i->o));
-	memset(i->g, 0, sizeof(i->g));
 }
 
 int ui_select(struct ui* const i, const char* const q,
@@ -593,18 +632,9 @@ int ui_select(struct ui* const i, const char* const q,
 	T += snprintf(P+T, sizeof(P)-T, "%s ", q);
 	for (size_t j = 0; j < oc; ++j) {
 		if (j) T += snprintf(P+T, sizeof(P)-T, ", ");
-		switch (o[j].i.t) {
-		case I_UTF8:
-			T += snprintf(P+T, sizeof(P)-T, "%s", o[j].i.utf);
-			break;
-		case I_CTRL:
-			T += snprintf(P+T, sizeof(P)-T, "^%c", o[j].i.utf[0]);
-			break;
-		default:
-			T += snprintf(P+T, sizeof(P)-T,
-					"%s", keynames[o[j].i.t]);
-			break;
-		}
+		char b[KEYNAME_BUF_SIZE];
+		_keyname(&o[j].i, b);
+		T += snprintf(P+T, sizeof(P)-T, "%s", b);
 		T += snprintf(P+T, sizeof(P)-T, "=%s", o[j].h);
 	}
 	ui_draw(i);
@@ -754,7 +784,7 @@ int prompt(struct ui* const i, char* const t,
 		char* t_top, const size_t t_size) {
 	strcpy(i->prch, ">");
 	i->prompt = t;
-	i->prompt_cursor_pos = 0;
+	i->prompt_cursor_pos = 1;
 	ui_draw(i);
 	int r;
 	do {

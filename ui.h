@@ -37,6 +37,8 @@
 extern char** environ;
 
 #define MSG_BUFFER_SIZE 128
+#define KEYNAME_BUF_SIZE 16
+// TODO adjust KEYNAME_BUF_SIZE
 
 enum mode {
 	MODE_HELP = 0,
@@ -311,7 +313,6 @@ static struct input2cmd default_mapping[] = {
 	{ { KUTF8("i") }, MODE_MANAGER, CMD_ENTER_DIR },
 	{ { KCTRL('J') }, MODE_MANAGER, CMD_ENTER_DIR },
 	{ { KUTF8("l") }, MODE_MANAGER, CMD_ENTER_DIR },
-	{ { KCTRL('M') }, MODE_MANAGER, CMD_ENTER_DIR },
 
 	{ { KUTF8("p") }, MODE_MANAGER, CMD_PAGER },
 	{ { KUTF8("o") }, MODE_MANAGER, CMD_OPEN_FILE },
@@ -462,7 +463,7 @@ static const char* const cmd_help[] = {
 	[CMD_REFRESH] = "Rescan directories and redraw UI.",
 	[CMD_SWITCH_PANEL] = "Switch active panel.",
 	[CMD_DUP_PANEL] = "Open current directory in the other panel.",
-	[CMD_SWAP_PANELS] = "",
+	[CMD_SWAP_PANELS] = "Swap panels.",
 
 	[CMD_DIR_VOLUME] = "Calcualte volume of selected directory.",
 	[CMD_TOGGLE_HIDDEN] = "Toggle between hiding/showing hidden files.",
@@ -547,6 +548,8 @@ static const char* const cmd_help[] = {
 	[CMD_HELP_UP] = "Scroll up.",
 	[CMD_HELP_DOWN] = "Scroll down.",
 	[CMD_HELP_QUIT] = "Quit help screen.",
+
+	[CMD_NUM] = NULL,
 };
 
 static const char* const mode_strings[] = {
