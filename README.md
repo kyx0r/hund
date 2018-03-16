@@ -9,6 +9,7 @@ A minimalistic terminal file manager.
 - Find file in current directory (find as you type)
 - Multiple key sorting
 - Can be statically linked
+- Marks
 - Licensed under GPL-3.0
 #### Environment Variables (which Hund uses)
 | Variable | Usage              | Default |
@@ -23,22 +24,21 @@ A minimalistic terminal file manager.
 - ACLs (at least detection)
 - Configuration in a file
 - Color schemes
-- Marks (vim-like)
-- Bookmarks
 - man page
 - Packaging for some popular distros + installation scripts
 - Columns (size, date, permissions, owner, group, date) (???)
 - Integrated terminal (???)
 #### Architecture/OS Support
 - x86-64
-	- Arch Linux - Developed on. Can be expected to work *best*
+	- Arch Linux - works
 	- Alpine Linux - works
 	- FreeBSD - works
 	- OpenBSD - works
 - aarch64 (Raspberry PI 3)
-	- Arch Linux ARM 64-bit - works just fine
+	- Arch Linux ARM 64-bit - works
 #### Dependencies & Requirements
-- c99-compatible C compiler (`gcc` and `clang` were tested)
+- c99-compatible C compiler (`gcc`, `clang`, `tcc` were tested)
+	- For `tcc` you need to overwrite CFLAGS. "tcc: error: invalid option -- '--std=c99'"
 - libc of choice (`glibc` and `musl` were tested)
 - `make`
 - A pager (`less` by default)
