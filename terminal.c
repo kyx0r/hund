@@ -59,7 +59,7 @@ struct input get_input(int timeout_us) {
 	char seq[7];
 	memset(seq, 0, sizeof(seq));
 	if (xread(fd, seq, 1, timeout_us) == 1 && seq[0] == '\x1b') {
-		if (xread(fd, seq+1, 1, 500000) == 1
+		if (xread(fd, seq+1, 1, ESC_TIMEOUT_MS*1000) == 1
 				&& (seq[1] == '[' || seq[1] == 'O')) {
 			if (xread(fd, seq+2, 1, 0) == 1 && isdigit(seq[2])) {
 				xread(fd, seq+3, 1, 0);

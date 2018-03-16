@@ -36,6 +36,8 @@
 
 #include "utf8.h"
 
+#define ESC_TIMEOUT_MS 125
+
 #define CTRL_KEY(K) ((K) & 0x1f)
 
 enum input_type {
@@ -97,24 +99,6 @@ static const struct s2i SKM[] = {
 	{ "\x1b[4h", I_INSERT },
 	{ "\x1b", I_ESCAPE },
 	{ NULL, I_NONE },
-};
-
-static const char* const keynames[] = {
-	[I_NONE] = NULL,
-	[I_UTF8] = NULL,
-	[I_CTRL] = NULL,
-	[I_ARROW_UP] = "up",
-	[I_ARROW_DOWN] = "down",
-	[I_ARROW_RIGHT] = "right",
-	[I_ARROW_LEFT] = "left",
-	[I_HOME] = "home",
-	[I_END] = "end",
-	[I_PAGE_UP] = "pgup",
-	[I_PAGE_DOWN] = "pgdn",
-	[I_INSERT] = "ins",
-	[I_BACKSPACE] = "bsp",
-	[I_DELETE] = "del",
-	[I_ESCAPE] = "esc"
 };
 
 ssize_t xread(int, void*, ssize_t, int);
