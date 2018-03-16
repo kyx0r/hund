@@ -430,6 +430,7 @@ void list_free(struct string_list* const list) {
 
 /*
  * Reads file from fd and forms a list of lines
+ * Blank line encountered: string_list is not allocated. Pointer is set to NULL.
  *
  * TODO flexible buffer length
  * TODO more testing
@@ -444,7 +445,7 @@ int file_to_list(const int fd, struct string_list* const list) {
 	if (lseek(fd, 0, SEEK_SET) == -1) return errno;
 	memset(name, 0, sizeof(name));
 	for (;;) {
-		rd = read(fd, name+top, NAME_BUF_SIZE-top);
+		rd = read(fd, name+top, sizeof(name)-top);
 		if (rd == -1) {
 			int e = errno;
 			list_free(list);
@@ -506,7 +507,7 @@ fnum_t string_on_list(const struct string_list* const L,
 fnum_t blank_lines(const struct string_list* const list) {
 	fnum_t n = 0;
 	for (fnum_t i = 0; i < list->len; ++i) {
-		if (!list->arr[i]->str) n += 1;
+		if (!list->arr[i]) n += 1;
 	}
 	return n;
 }
