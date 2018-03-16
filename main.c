@@ -1125,6 +1125,8 @@ static void task_execute(struct ui* const i, struct task* const t) {
 		switch (ui_select(i, msg, error_o, 3)) {
 		case 1:
 			t->err = tree_walk_step(&t->tw);
+			t->ts = TS_RUNNING;
+			break;
 		case 0:
 			t->ts = TS_RUNNING;
 			break;
@@ -1255,9 +1257,11 @@ int main(int argc, char* argv[]) {
 
 	i.mt = MSG_INFO;
 	strncpy(i.msg, "Type ? for help and license notice.", MSG_BUFFER_SIZE);
-	while (i.run) { // TODO but task may be still running
+	while (i.run || t.ts != TS_CLEAN) {
 		ui_draw(&i);
-		process_input(&i, &t, &m);
+		if (i.run) { // TODO
+			process_input(&i, &t, &m);
+		}
 		task_execute(&i, &t);
 	}
 	for (int v = 0; v < 2; ++v) {

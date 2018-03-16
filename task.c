@@ -124,6 +124,8 @@ void task_action_estimate(struct task* const t, int* const c) {
 			return;
 		}
 		t->symlinks += 1;
+		t->files_total += 1;
+		break;
 	case AT_FILE:
 		t->files_total += 1;
 		break;
@@ -420,19 +422,11 @@ inline static int _copyremove_step(struct task* const t, int* const c) {
 	if (cp) {
 		task_build_path(t, np);
 		if (!access(np, F_OK)) {
-			switch (t->tw.tws) {
-			case AT_FILE:
-			case AT_LINK:
+			if (sc) return 0;
+			if (t->tw.tws & (AT_FILE | AT_LINK)) {
 				if (ov && unlink(np)) {
 					return errno;
 				}
-			case AT_DIR:
-				if (sc) {
-					return 0;
-				}
-				break;
-			default:
-				break;
 			}
 		}
 		switch (t->tw.tws) {

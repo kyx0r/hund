@@ -1,6 +1,6 @@
 .POSIX:
 CC = cc
-CFLAGS = --std=c99 -Wall -Wextra -pedantic -Wimplicit-fallthrough=0
+CFLAGS = --std=c99 -Wall -Wextra -pedantic
 LDFLAGS =
 EXENAME = hund
 TESTEXENAME = testme
