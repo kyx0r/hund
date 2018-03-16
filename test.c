@@ -152,16 +152,16 @@ int main() {
 	TESTVAL(r, ENAMETOOLONG, "");
 	TESTVAL(strlen(path), PATH_MAX_LEN, "respect PATH_MAX; leave path unchanged");
 
-	TEST(!path_is_relative("/"), "absolute");
-	TEST(!path_is_relative("/etc/netctl"), "absolute");
-	TEST(!path_is_relative("~/.config"), "absolute");
-	TEST(path_is_relative("./netctl"), "relative");
-	TEST(path_is_relative("etc/netctl"), "relative");
-	TEST(path_is_relative("../netctl"), "relative");
-	TEST(path_is_relative("../"), "relative");
-	TEST(path_is_relative(".."), "relative");
-	TEST(path_is_relative("."), "relative");
-	TEST(path_is_relative("./"), "relative");
+	TEST(!PATH_IS_RELATIVE("/"), "absolute");
+	TEST(!PATH_IS_RELATIVE("/etc/netctl"), "absolute");
+	TEST(!PATH_IS_RELATIVE("~/.config"), "absolute");
+	TEST(PATH_IS_RELATIVE("./netctl"), "relative");
+	TEST(PATH_IS_RELATIVE("etc/netctl"), "relative");
+	TEST(PATH_IS_RELATIVE("../netctl"), "relative");
+	TEST(PATH_IS_RELATIVE("../"), "relative");
+	TEST(PATH_IS_RELATIVE(".."), "relative");
+	TEST(PATH_IS_RELATIVE("."), "relative");
+	TEST(PATH_IS_RELATIVE("./"), "relative");
 
 	strcpy(path, "/dope/");
 	pl = 6;
@@ -497,11 +497,26 @@ int main() {
 		t.dst = bnp[i][2];
 		list_push(&t.sources, bnp[i][3], -1);
 		list_push(&t.renamed, bnp[i][4], -1);
-		task_build_path(&t, result);
+		r = task_build_path(&t, result);
 		list_free(&t.sources);
 		list_free(&t.renamed);
 		TESTSTR(result, bnp[i][5], "");
+		TESTVAL(r, 0, "");
 	}
+	t.tw.path = calloc(PATH_BUF_SIZE, 1);
+	memcpy(t.tw.path, "/", 1);
+	memset(t.tw.path+1, 'a', PATH_MAX_LEN-1);
+	t.tw.pathlen = strlen(t.tw.path);
+	t.src = "/";
+	t.dst = "/r";
+	list_push(&t.sources, NULL, -1);
+	list_push(&t.renamed, NULL, -1);
+	r = task_build_path(&t, result);
+	TESTSTR(result, "", "");
+	TESTVAL(r, ENAMETOOLONG, "");
+	list_free(&t.sources);
+	list_free(&t.renamed);
+	free(t.tw.path);
 
 	END_SECTION("task");
 
@@ -540,8 +555,6 @@ int main() {
 	append(&ab, "?", 1);
 	TESTVAL(ab.capacity, APPEND_BUFFER_INC*2, "");
 
-
 	END_SECTION("terminal");
-
 	END_TESTS;
 }
