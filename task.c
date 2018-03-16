@@ -43,33 +43,29 @@ void task_new(struct task* const t, const enum task_type tp,
 	memset(&t->tw, 0, sizeof(struct tree_walk));
 }
 
-/*
- * TODO errors
- * TODO clean
- */
 int task_build_path(const struct task* const t, char* R) {
+	// TODO be smarter about checking the length
 	const char* S = NULL;
 	const char* D = NULL;
+	size_t D_len = 0;
+	size_t old_len = strnlen(t->src, PATH_MAX_LEN);
 	if (t->renamed.len && t->renamed.arr[t->current_source]) {
 		S = t->sources.arr[t->current_source]->str;
 		D = t->renamed.arr[t->current_source]->str;
-	}
-	size_t D_len;
-	size_t old_len = strnlen(t->src, PATH_MAX_LEN);
-	if (S && D) {
-		D_len = strnlen(D, NAME_MAX_LEN);
+		D_len += strnlen(D, NAME_MAX_LEN);
 		old_len += 1+strnlen(S, NAME_MAX_LEN);
 	}
-	else {
-		D_len = 0;
-	}
+	char* const _R = R;
 	const size_t dst_len = strnlen(t->dst, PATH_MAX_LEN);
-	//if (dst_len+D_len > PATH_MAX_LEN) return ENAMETOOLONG;
 	memcpy(R, t->dst, dst_len);
 	R += dst_len;
 	if (*(R-1) != '/') {
 		*R = '/';
 		R += 1;
+	}
+	if (R - _R > PATH_MAX_LEN) {
+		memset(_R, 0, PATH_BUF_SIZE);
+		return ENAMETOOLONG;
 	}
 	memcpy(R, D, D_len);
 	R += D_len;
@@ -77,13 +73,22 @@ int task_build_path(const struct task* const t, char* R) {
 		*R = '/';
 		R += 1;
 	}
+	if (R - _R > PATH_MAX_LEN) {
+		memset(_R, 0, PATH_BUF_SIZE);
+		return ENAMETOOLONG;
+	}
 	const char* P = t->tw.path;
 	P += old_len;
 	if (*P == '/') {
 		P += 1;
 		old_len -= 1;
 	}
-	memcpy(R, P, t->tw.pathlen-old_len+1);
+	const size_t ppart = t->tw.pathlen-old_len+1;
+	if ((R - _R)+ppart > PATH_MAX_LEN) {
+		memset(_R, 0, PATH_BUF_SIZE);
+		return ENAMETOOLONG;
+	}
+	memcpy(R, P, ppart);
 	return 0;
 }
 
@@ -100,12 +105,11 @@ void task_action_chmod(struct task* const t, int* const c) {
 		break;
 	}
 	if ((t->chp != 0 || t->chm != 0)
-	    && (t->err = relative_chmod(t->tw.path, t->chp, t->chm))) {
+	&& (t->err = relative_chmod(t->tw.path, t->chp, t->chm))) {
 		return;
 	}
 	if (chown(t->tw.path, t->cho, t->chg) ? (t->err = errno) : 0) return;
 	if ((t->err = tree_walk_step(&t->tw))) return;
-
 	if (!(t->tf & TF_RECURSIVE_CHMOD)) { // TODO find a better way to chmod once
 		t->tw.tws = AT_EXIT;
 	}
@@ -119,9 +123,7 @@ void task_action_estimate(struct task* const t, int* const c) {
 			*c = 0;
 			return;
 		}
-		t->files_total += 1;
 		t->symlinks += 1;
-		break;
 	case AT_FILE:
 		t->files_total += 1;
 		break;
@@ -280,35 +282,36 @@ static int _stat_file(struct tree_walk* const tw) {
 		memcpy(&tw->cs, &old_cs, sizeof(struct stat));
 		return errno;
 	}
-	if (S_ISDIR(tw->cs.st_mode)) {
-		tw->tws = AT_DIR;
-	}
-	else if (S_ISREG(tw->cs.st_mode)) {
-		tw->tws = AT_FILE;
-	}
-	else if (S_ISLNK(tw->cs.st_mode)) {
-		if (!tw->tl) {
-			tw->tws = AT_LINK;
-		}
-		else if (stat(tw->path, &tw->cs)) {
-			int err = errno;
-			if (err == ENOENT) {
+	tw->tws = AT_NOWHERE;
+	do {
+		switch (tw->cs.st_mode & S_IFMT) {
+		case S_IFDIR:
+			tw->tws = AT_DIR;
+			break;
+		case S_IFREG:
+			tw->tws = AT_FILE;
+			break;
+		case S_IFLNK:
+			if (!tw->tl) {
 				tw->tws = AT_LINK;
 			}
-			else {
-				memcpy(&tw->cs, &old_cs, sizeof(struct stat));
-				tw->tws = old_tws;
-				return err;
+			else if (stat(tw->path, &tw->cs)) {
+				int err = errno;
+				if (err == ENOENT || err == ELOOP) {
+					tw->tws = AT_LINK;
+				}
+				else {
+					tw->cs = old_cs;
+					tw->tws = old_tws;
+					return err;
+				}
 			}
+			break;
+		default:
+			tw->tws = AT_SPECIAL;
+			break;
 		}
-		else {
-			if (S_ISDIR(tw->cs.st_mode)) {
-				tw->tws = AT_DIR;
-			}
-			else tw->tws = AT_FILE;
-		}
-	}
-	else tw->tws = AT_SPECIAL;
+	} while (tw->tws == AT_NOWHERE);
 	return 0;
 }
 
@@ -384,7 +387,7 @@ int tree_walk_step(struct tree_walk* const tw) {
 	} while (ce && DOTDOT(ce->d_name));
 
 	// TODO errno
-	if (!ce) { // directory is empty or reached end of directory
+	if (!ce) {
 		tw->tws = AT_DIR_END;
 		return errno;
 	}
