@@ -67,8 +67,6 @@ void ui_init(struct ui* const i, struct panel* const pv,
 	i->fvs[0] = i->pv = pv;
 	i->fvs[1] = i->sv = sv;
 
-	i->helpy = 0;
-
 	memset(i->il, 0, INPUT_LIST_LENGTH*sizeof(struct input));
 	i->ili = 0;
 
@@ -320,7 +318,7 @@ static void _statusbar(struct ui* const i) {
 	append(&i->B, "\r\n", 2);
 }
 
-void _keyname(const struct input* const in, char* const buf) {
+static void _keyname(const struct input* const in, char* const buf) {
 	// TODO
 	static const char* const N[] = {
 		[I_ARROW_UP] = "up",
@@ -342,7 +340,7 @@ void _keyname(const struct input* const in, char* const buf) {
 		break;
 	case I_UTF8:
 		if (in->utf[0] == ' ') {
-			strcpy(buf, "space");
+			strcpy(buf, "spc");
 		}
 		else {
 			strcpy(buf, in->utf);
@@ -370,32 +368,7 @@ void _keyname(const struct input* const in, char* const buf) {
 	}
 }
 
-void _cmd_and_keyseqs(struct ui* const i, const enum command c,
-		const struct input2cmd* const k[], const size_t ks) {
-	const size_t maxsequences = 4;
-	const size_t seqwid = 8; // TODO may not be enough
-	size_t W = 0;
-	char key[KEYNAME_BUF_SIZE];
-	append(&i->B, CSI_CLEAR_LINE);
-	for (size_t s = 0; s < ks; ++s) {
-		size_t j = 0;
-		size_t w = 0;
-		while (k[s]->i[j].t != I_NONE) {
-			_keyname(&k[s]->i[j], key);
-			append_attr(&i->B, ATTR_BOLD, NULL);
-			append(&i->B, key, strlen(key));
-			append_attr(&i->B, ATTR_NOT_BOLD_OR_FAINT, NULL);
-			w += utf8_width(key);
-			j += 1;
-		}
-		W += 1;
-		if (seqwid > w) fill(&i->B, ' ', seqwid - w);
-	}
-	if (maxsequences > W) fill(&i->B, ' ', (maxsequences-W) * seqwid);
-	append(&i->B, cmd_help[c], strlen(cmd_help[c]));
-}
-
-void _find_all_keyseqs4cmd(const struct ui* const i, const enum command c,
+inline static void _find_all_keyseqs4cmd(const struct ui* const i, const enum command c,
 		const enum mode m, const struct input2cmd* ic[],
 		size_t* const ki) {
 	*ki = 0;
@@ -406,35 +379,20 @@ void _find_all_keyseqs4cmd(const struct ui* const i, const enum command c,
 	}
 }
 
-static void _help(struct ui* const i) {
-	size_t H = 0;
-	int j = 0;
-	while (copyright_notice[j]) {
-		H += 1;
-		j += 1;
-	}
-	j = 1;
-	while (cmd_help[j]) {
-		H += 1;
-		j += 1;
-	}
-	H += MODE_NUM*2;
-	if (i->helpy+i->scrh > H) {
-		i->helpy = H - i->scrh; // TODO
-		return;
-	}
-	int dr = -i->helpy;
+/*
+ * TODO reduce write() calls
+ * TODO errors
+ * TODO tab (8 spaces) may not be enough
+ * TODO ambiguity: there is no difference between tab (3 ascii keys)
+ *      and tab (1 special key) + others
+ */
+int help_to_file(struct ui* const i, char* const tmpn) {
+	int err = 0, tmpfd;
+	if ((tmpfd = mkstemp(tmpn)) == -1) return errno;
 	for (size_t m = 0; m < MODE_NUM; ++m) {
 		/* MODE TITLE */
-		if (dr < i->scrh) {
-			append_attr(&i->B, ATTR_BOLD, NULL);
-			const size_t ml = strlen(mode_strings[m]);
-			append(&i->B, mode_strings[m], ml);
-			append_attr(&i->B, ATTR_NOT_BOLD_OR_FAINT, NULL);
-			fill(&i->B, ' ', i->scrw-ml);
-			append(&i->B, "\r\n", 2);
-		}
-		dr += 1;
+		write(tmpfd, mode_strings[m], strlen(mode_strings[m]));
+		write(tmpfd, "\n", 1);
 
 		/* LIST OF AVAILABLE KEYS */
 		const struct input2cmd* k[4];
@@ -442,34 +400,36 @@ static void _help(struct ui* const i) {
 		for (size_t c = CMD_NONE+1; c < CMD_NUM; ++c) {
 			_find_all_keyseqs4cmd(i, c, m, k, &ki);
 			if (!ki) continue; // ^^^ may output empty array
-			if (dr < i->scrh) {
-				_cmd_and_keyseqs(i, c, k, ki);
-				append(&i->B, "\r\n", 2);
+			size_t maxsequences = 4;
+			char key[KEYNAME_BUF_SIZE];
+			for (size_t s = 0; s < ki; ++s) {
+				unsigned j = 0;
+				while (k[s]->i[j].t != I_NONE) {
+					_keyname(&k[s]->i[j], key);
+					write(tmpfd, key, strlen(key));
+					j += 1;
+				}
+				maxsequences -= 1;
+				write(tmpfd, "\t", 1);
 			}
-			dr += 1;
+			for (unsigned s = 0; s < maxsequences; ++s) {
+				write(tmpfd, "\t", 1);
+			}
+			write(tmpfd, cmd_help[c], strlen(cmd_help[c]));
+			write(tmpfd, "\n", 1);
 		}
-		/* EMPTY LINE PADDING */
-		if (dr < i->scrh) {
-			fill(&i->B, ' ', i->scrw);
-			append(&i->B, "\r\n", 2);
-		}
-		dr += 1;
+		write(tmpfd, "\n", 1);
 	}
-	i->B.top -= 2; // last line
-
 	/* COPYRIGHT NOTICE */
-	append_attr(&i->B, ATTR_BOLD, NULL);
 	int cnl = 0; // Copytight Notice Line
 	while (copyright_notice[cnl]) {
 		const char* const cr = copyright_notice[cnl];
-		if (dr < i->scrh) {
-			append(&i->B, cr, strlen(cr));
-			fill(&i->B, ' ', i->scrw-utf8_width(cr));
-		}
-		dr += 1;
+		write(tmpfd, cr, strlen(cr));
+		write(tmpfd, "\n", 1);
 		cnl += 1;
 	}
-	append_attr(&i->B, ATTR_NOT_BOLD_OR_FAINT, NULL);
+	close(tmpfd);
+	return err;
 }
 
 static void _panels(struct ui* const i) {
@@ -546,10 +506,7 @@ void ui_draw(struct ui* const i) {
 	memset(i->B.buf, 0, i->B.capacity);
 	append(&i->B, CSI_CURSOR_HIDE);
 	append(&i->B, CSI_CURSOR_TOP_LEFT);
-	if (i->m == MODE_HELP) {
-		_help(i);
-	}
-	else if (i->m == MODE_MANAGER || i->m == MODE_WAIT) { // TODO mode wait
+	if (i->m == MODE_MANAGER || i->m == MODE_WAIT) { // TODO mode wait
 		const struct file* const H = hfr(i->pv);
 		if (H) {
 			stringify_pug(H->s.st_mode, H->s.st_uid,
@@ -820,25 +777,29 @@ inline void failed(struct ui* const i, const char* const what,
 	snprintf(i->msg, MSG_BUFFER_SIZE, "%s failed: %s", what, why);
 }
 
-int spawn(char* const arg[]) {
+int spawn(char* const arg[], const enum spawn_flags f) {
 	// TODO errors
 	int ret = 0, status = 0, nullfd;
 	write(STDOUT_FILENO, CSI_CLEAR_ALL);
 	if ((ret = stop_raw_mode(&global_i->T))) return ret;
 	pid_t pid = fork();
 	if (pid == 0) {
-		nullfd = open("/dev/null", O_WRONLY, 0100);
-		if (dup2(nullfd, STDERR_FILENO) == -1) ret = errno;
-
-		//if (dup2(nullfd, STDOUT_FILENO) == -1) ret = errno;
-		close(nullfd);
-		if (execve(arg[0], arg, environ)) ret = errno;
-		return ret;
+		if (f & SF_SLIENT) {
+			nullfd = open("/dev/null", O_WRONLY, 0100);
+			if (dup2(nullfd, STDERR_FILENO) == -1) ret = errno;
+			if (dup2(nullfd, STDOUT_FILENO) == -1) ret = errno;
+			close(nullfd);
+		}
+		execve(arg[0], arg, environ);
+		return errno;
 	}
-	else {
+	else if (pid != -1) {
 		global_i->mt = MSG_INFO;
 		strcpy(global_i->msg, "external program is running...");
 		while (waitpid(pid, &status, 0) == -1);
+	}
+	else {
+		ret = errno;
 	}
 	global_i->msg[0] = 0;
 	ret = start_raw_mode(&global_i->T);

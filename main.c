@@ -39,6 +39,8 @@
  * - Keybindings must make more sense
  * - Pipe data to pager for showing data
  * - Jump to file pointed by symlink (and return)
+ * - Unify "-- *** --" indicators
+ * - Processed symlinks - count processed symlinks separately
  */
 
 struct mark_path {
@@ -143,7 +145,17 @@ static int open_file_with(char* const p, char* const f) {
 	memcpy(exeimg, "/usr/bin/", 10);
 	memcpy(exeimg+9, p, strlen(p)+1);
 	char* const arg[] = { exeimg, f, NULL };
-	return spawn(arg);
+	return spawn(arg, 0);
+}
+
+static void open_help(struct ui* const i) {
+	int e;
+	char tmpn[] = "/tmp/hund.help.XXXXXXXX";
+	help_to_file(i, tmpn);
+	if ((e = open_file_with("less", tmpn))) {
+		failed(i, "spawn", strerror(e));
+	}
+	unlink(tmpn);
 }
 
 static int edit_list(struct string_list* const in,
@@ -219,37 +231,6 @@ static void cmd_find(struct ui* const i) {
 	}
 	i->prompt = NULL;
 }
-
-#if 0
-inline static void estimate_volume_for_selected(struct panel* const fv) {
-	// TODO REDO
-	int sink_fc = 0, sink_dc = 0;
-	fnum_t f = 0, s = 0;
-	char* const opath = strncpy(malloc(PATH_MAX), fv->wd, PATH_MAX);
-	const bool sc = !fv->num_selected; // Single Selection
-	if (sc) {
-		fv->num_selected = 1;
-		fv->file_list[fv->selection]->selected = true;
-	}
-	for (; f < fv->num_files && s < fv->num_selected; ++f) {
-		const struct stat* const S = fv->file_list[f]->l;
-		if (!fv->file_list[f]->selected
-		    || (S && !S_ISDIR(S->st_mode))) continue;
-		append_dir(opath, fv->file_list[f]->file_name);
-		fv->file_list[f]->dir_volume = 0;
-		/*estimate_volume(opath, &fv->file_list[f]->dir_volume,
-				&sink_fc, &sink_dc); // TODO*/
-		up_dir(opath);
-		s += 1;
-	}
-	free(opath);
-	if (sc) {
-		fv->num_selected = 0;
-		fv->file_list[fv->selection]->selected = false;
-		next_entry(fv);
-	}
-}
-#endif
 
 /*
  * Returns:
@@ -557,14 +538,16 @@ inline static void cmd_mkdir(struct ui* const i) {
 
 inline static void cmd_change_sorting(struct ui* const i) {
 	// TODO visibility
-	// -- SORT -- (message?)
-	// ???
 	// TODO cursor
+	// TODO -- SORT --
+
 	char old[FV_ORDER_SIZE];
 	memcpy(old, i->pv->order, FV_ORDER_SIZE);
 	char* buf = i->pv->order;
 	char* top = i->pv->order + strlen(buf);
 	int r;
+	i->mt = MSG_INFO;
+	strcpy(i->msg, "-- SORT --");
 	ui_draw(i);
 	for (;;) {
 		r = fill_textbox(i, buf, &top, FV_ORDER_SIZE, NULL);
@@ -573,6 +556,8 @@ inline static void cmd_change_sorting(struct ui* const i) {
 			memcpy(i->pv->order, old, FV_ORDER_SIZE);
 			return;
 		}
+		i->mt = MSG_INFO;
+		strcpy(i->msg, "-- SORT --");
 		ui_draw(i);
 	}
 	for (size_t j = 0; j < FV_ORDER_SIZE; ++j) {
@@ -634,6 +619,7 @@ static void cmd_quick_chmod_plus_x(struct ui* const i) {
 
 static void cmd_command(struct ui* const i, struct task* const t,
 		struct marks* const m) {
+	// TODO TODO TODO
 	(void)(t);
 	(void)(m);
 	char cmd[80]; // TODO
@@ -660,16 +646,22 @@ static void cmd_command(struct ui* const i, struct task* const t,
 		i->run = false;
 	}
 	else if (!strcmp(cmd, "h")) {
-		i->m = MODE_HELP;
+		open_help(i);
 	}
 	else if (!strcmp(cmd, "+x")) {
 		cmd_quick_chmod_plus_x(i);
 	}
+#if 0
+	else if (!strcmp(cmd, "sh")) {
+		chdir(i->pv->wd);
+		char* const arg[] = { getenv("SHELL"), NULL };
+		spawn(arg);
+	}
+#endif
 	// lm = list marks (in pager)
-	// exec
 	// open
 	// nos = no selection (like noh)
-	// ...and other commands that clutter ui.h
+	// ...and commands that clutter ui.h
 }
 
 static void process_input(struct ui* const i, struct task* const t,
@@ -679,18 +671,6 @@ static void process_input(struct ui* const i, struct task* const t,
 	int err = 0;
 	fnum_t f;
 	switch (get_cmd(i)) {
-	/* HELP */
-	case CMD_HELP_QUIT:
-		i->m = MODE_MANAGER;
-		break;
-	case CMD_HELP_DOWN:
-		i->helpy += 1; // TODO
-		break;
-	case CMD_HELP_UP:
-		if (i->helpy > 0) {
-			i->helpy -= 1;
-		}
-		break;
 	/* CHMOD */
 	case CMD_RETURN:
 		chmod_close(i);
@@ -809,7 +789,7 @@ static void process_input(struct ui* const i, struct task* const t,
 		i->run = false;
 		break;
 	case CMD_HELP:
-		i->m = MODE_HELP;
+		open_help(i);
 		break;
 	case CMD_SWITCH_PANEL:
 		tmp = i->pv;

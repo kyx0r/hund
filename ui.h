@@ -41,8 +41,7 @@ extern char** environ;
 // TODO adjust KEYNAME_BUF_SIZE
 
 enum mode {
-	MODE_HELP = 0,
-	MODE_MANAGER,
+	MODE_MANAGER = 0,
 	MODE_CHMOD,
 	MODE_WAIT,
 
@@ -167,10 +166,6 @@ enum command {
 	CMD_TASK_QUIT,
 	CMD_TASK_PAUSE,
 	CMD_TASK_RESUME,
-
-	CMD_HELP_QUIT,
-	CMD_HELP_UP,
-	CMD_HELP_DOWN,
 
 	CMD_NUM,
 };
@@ -413,17 +408,6 @@ static struct input2cmd default_mapping[] = {
 	{ { KUTF8("p"), KUTF8("p") }, MODE_WAIT, CMD_TASK_PAUSE },
 	{ { KUTF8("r"), KUTF8("r") }, MODE_WAIT, CMD_TASK_RESUME },
 
-
-	/* MODE HELP */
-	{ { KUTF8("q") }, MODE_HELP, CMD_HELP_QUIT },
-
-	{ { KUTF8("j") }, MODE_HELP, CMD_HELP_DOWN },
-	{ { KCTRL('N') }, MODE_HELP, CMD_HELP_DOWN },
-	{ { KSPEC(I_ARROW_DOWN) }, MODE_HELP, CMD_HELP_DOWN },
-
-	{ { KUTF8("k") }, MODE_HELP, CMD_HELP_UP },
-	{ { KCTRL('P') }, MODE_HELP, CMD_HELP_UP },
-	{ { KSPEC(I_ARROW_UP) }, MODE_HELP, CMD_HELP_UP },
 };
 
 static const size_t default_mapping_length =
@@ -545,15 +529,10 @@ static const char* const cmd_help[] = {
 	[CMD_TASK_PAUSE] = "Pause task.",
 	[CMD_TASK_RESUME] = "Resume task.",
 
-	[CMD_HELP_UP] = "Scroll up.",
-	[CMD_HELP_DOWN] = "Scroll down.",
-	[CMD_HELP_QUIT] = "Quit help screen.",
-
 	[CMD_NUM] = NULL,
 };
 
 static const char* const mode_strings[] = {
-	[MODE_HELP] = "HELP",
 	[MODE_CHMOD] = "CHMOD",
 	[MODE_MANAGER] = "FILE VIEW",
 	[MODE_WAIT] = "WAIT",
@@ -603,8 +582,6 @@ struct ui {
 	struct panel* pv;
 	struct panel* sv;
 
-	size_t helpy;
-
 	struct input2cmd* kmap;
 	size_t kml; // Key Mapping Length
 	unsigned short* mks; // Matching Key Sequence
@@ -629,6 +606,7 @@ struct ui {
 void ui_init(struct ui* const, struct panel* const,
 		struct panel* const);
 void ui_end(struct ui* const);
+int help_to_file(struct ui* const, char* const tmpn);
 void ui_draw(struct ui* const);
 void ui_update_geometry(struct ui* const);
 
@@ -652,7 +630,12 @@ int prompt(struct ui* const, char* const, char*, const size_t);
 void failed(struct ui* const, const char* const, const char* const);
 bool ui_rescan(struct ui* const, struct panel* const,
 		struct panel* const);
-int spawn(char* const[]);
+
+enum spawn_flags {
+	SF_SLIENT = 1<<0,
+};
+
+int spawn(char* const[], const enum spawn_flags);
 
 size_t append_theme(struct append_buffer* const, const enum theme_element);
 
