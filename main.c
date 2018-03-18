@@ -128,6 +128,7 @@ void marks_jump(struct ui* const i, struct marks* const m) {
 	}
 	mp->data[mp->len[0]] = 0;
 	memcpy(i->pv->wd, mp->data, mp->len[0]+1);
+	i->pv->wdlen = mp->len[0];
 	if (ui_rescan(i, i->pv, NULL)) {
 		file_highlight(i->pv, mp->data+mp->len[0]+1);
 	}
@@ -1062,6 +1063,8 @@ static void task_execute(struct ui* const i, struct task* const t) {
 		{ KUTF8("y"), "yes" }
 	};
 	// TODO skip all errors, skip same errno
+	// TODO dynamically adjust task_do() iteration count
+	// to be more verbose on slow transfers
 	static const struct select_option error_o[] = {
 		{ KUTF8("t"), "try again" },
 		{ KUTF8("s"), "skip" },
