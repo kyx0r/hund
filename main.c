@@ -492,7 +492,7 @@ inline static void cmd_cd(struct ui* const i) {
 	int err = 0;
 	struct stat s;
 	char* path = malloc(PATH_BUF_SIZE);
-	size_t pathlen = strnlen(i->pv->wd, PATH_MAX_LEN);
+	size_t pathlen = i->pv->wdlen;
 	memcpy(path, i->pv->wd, pathlen+1);
 	char* cdp = calloc(PATH_BUF_SIZE, sizeof(char));
 	if (prompt(i, cdp, cdp, PATH_MAX_LEN)
@@ -504,6 +504,7 @@ inline static void cmd_cd(struct ui* const i) {
 	}
 	else {
 		strncpy(i->pv->wd, path, PATH_BUF_SIZE);
+		i->pv->wdlen = pathlen;
 		ui_rescan(i, i->pv, NULL);
 	}
 	free(path);
@@ -956,6 +957,24 @@ static void process_input(struct ui* const i, struct task* const t,
 	case CMD_SORT_CHANGE:
 		cmd_change_sorting(i);
 		break;
+	case CMD_COL_NONE: i->pv->column = COL_NONE; break;
+	case CMD_COL_INODE: i->pv->column = COL_INODE; break;
+	case CMD_COL_LONGSIZE: i->pv->column = COL_LONGSIZE; break;
+	case CMD_COL_SHORTSIZE: i->pv->column = COL_SHORTSIZE; break;
+	case CMD_COL_LONGPERM: i->pv->column = COL_LONGPERM; break;
+	case CMD_COL_SHORTPERM: i->pv->column = COL_SHORTPERM; break;
+
+	case CMD_COL_UID: i->pv->column = COL_UID; break;
+	case CMD_COL_USER: i->pv->column = COL_USER; break;
+	case CMD_COL_GID: i->pv->column = COL_GID; break;
+	case CMD_COL_GROUP: i->pv->column = COL_GROUP; break;
+
+	case CMD_COL_LONGATIME: i->pv->column = COL_LONGATIME; break;
+	case CMD_COL_SHORTATIME: i->pv->column = COL_SHORTATIME; break;
+	case CMD_COL_LONGCTIME: i->pv->column = COL_LONGCTIME; break;
+	case CMD_COL_SHORTCTIME: i->pv->column = COL_SHORTCTIME; break;
+	case CMD_COL_LONGMTIME: i->pv->column = COL_LONGMTIME; break;
+	case CMD_COL_SHORTMTIME: i->pv->column = COL_SHORTMTIME; break;
 	default:
 		break;
 	}
@@ -1052,10 +1071,10 @@ static void task_execute(struct ui* const i, struct task* const t) {
 	case TS_CLEAN:
 		break;
 	case TS_ESTIMATE:
-		// TODO info that i's doing something
 		i->timeout = 500;
 		i->m = MODE_WAIT;
-		task_do(t, 1024*10, task_action_estimate, TS_CONFIRM);
+		task_progress(i, t, "--");
+		task_do(t, 1024*2, task_action_estimate, TS_CONFIRM);
 		if (t->tw.tws == AT_LINK && !(t->tf & (TF_ANY_LINK_METHOD))) {
 			if (t->t & (TASK_COPY | TASK_MOVE)) {
 				if (!_symlink_policy(i, t)) {
@@ -1071,6 +1090,7 @@ static void task_execute(struct ui* const i, struct task* const t) {
 	case TS_CONFIRM:
 		t->ts = TS_RUNNING;
 		if (t->t == TASK_REMOVE) {
+			// TODO show size
 			snprintf(msg, sizeof(msg),
 				"Remove %u files?", t->files_total);
 			if (!ui_select(i, msg, remove_o, 2)) {
@@ -1082,6 +1102,7 @@ static void task_execute(struct ui* const i, struct task* const t) {
 				t->ts = TS_FINISHED;
 			}
 		}
+		task_progress(i, t, "==");
 		break;
 	case TS_RUNNING:
 		i->timeout = 500;
@@ -1091,8 +1112,8 @@ static void task_execute(struct ui* const i, struct task* const t) {
 		else if (t->t == TASK_CHMOD) {
 			ta = task_action_chmod;
 		}
-		task_do(t, 1024*10, ta, TS_FINISHED);
 		task_progress(i, t, ">>");
+		task_do(t, 1024*10, ta, TS_FINISHED);
 		break;
 	case TS_PAUSED:
 		i->timeout = -1;

@@ -225,28 +225,30 @@ int panel_scan_dir(struct panel* const fv) {
  *  1: a > b
  *  ...just like memcmp, strcmp
  */
-static int frcmp(const enum compare cmp,
+static int frcmp(const enum key cmp,
 		const struct file* const a,
 		const struct file* const b) {
 	switch (cmp) {
-	case CMP_NAME:
+	case KEY_NAME:
 		return strcmp(a->name, b->name);
-	case CMP_SIZE:
+	case KEY_SIZE:
 		return (a->s.st_size < b->s.st_size ? -1 : 1);
-	case CMP_DATE:
+	case KEY_DATE:
 		return (a->s.st_mtim.tv_sec < b->s.st_mtim.tv_sec ? -1 : 1);
-	case CMP_ISDIR:
+	case KEY_ISDIR:
 		if (S_ISDIR(a->s.st_mode) != S_ISDIR(b->s.st_mode)) {
 			return (S_ISDIR(b->s.st_mode) ? 1 : -1);
 		}
 		break;
-	case CMP_PERM:
+	case KEY_PERM:
 		return ((a->s.st_mode & 07777) - (b->s.st_mode & 07777));
-	case CMP_ISEXE:
+	case KEY_ISEXE:
 		if (EXECUTABLE(a->s.st_mode) != EXECUTABLE(b->s.st_mode)) {
 			return (EXECUTABLE(b->s.st_mode) ? 1 : -1);
 		}
 		break;
+	case KEY_INODE:
+		return (a->s.st_ino < b->s.st_ino ? -1 : 1);
 	default: break;
 	}
 	return 0;
@@ -256,7 +258,7 @@ static int frcmp(const enum compare cmp,
  * D = destination
  * S = source
  */
-inline static void merge(const enum compare cmp, const int scending,
+inline static void merge(const enum key cmp, const int scending,
 		struct file** D, struct file** S,
 		const fnum_t beg, const fnum_t mid, const fnum_t end) {
 	fnum_t sa = beg;
@@ -283,7 +285,7 @@ inline static void merge(const enum compare cmp, const int scending,
 	}
 }
 
-void merge_sort(struct panel* const fv, const enum compare cmp) {
+void merge_sort(struct panel* const fv, const enum key cmp) {
 	struct file** tmp;
 	struct file** A = fv->file_list;
 	struct file** B = calloc(fv->num_files,

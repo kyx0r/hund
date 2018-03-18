@@ -23,20 +23,45 @@
 #include "fs.h"
 #include "utf8.h"
 
-static const char compare_values[] = "nstdpx";
+static const char compare_values[] = "nstdpxi";
 #define FV_ORDER_SIZE (sizeof(compare_values)-1)
-enum compare {
-	CMP_NAME = 'n',
-	CMP_SIZE = 's',
-	CMP_DATE = 't',
-	CMP_ISDIR = 'd',
-	CMP_PERM = 'p',
-	CMP_ISEXE = 'x',
+enum key {
+	KEY_NAME = 'n',
+	KEY_SIZE = 's',
+	KEY_DATE = 't',
+	KEY_ISDIR = 'd',
+	KEY_PERM = 'p',
+	KEY_ISEXE = 'x',
+	KEY_INODE = 'i',
 };
+
 static const char default_order[FV_ORDER_SIZE] = {
-	CMP_NAME,
-	CMP_ISEXE,
-	CMP_ISDIR
+	KEY_NAME,
+	KEY_ISEXE,
+	KEY_ISDIR
+};
+
+enum column {
+	COL_NONE = 0,
+	COL_INODE,
+
+	COL_LONGSIZE,
+	COL_SHORTSIZE,
+
+	COL_LONGPERM,
+	COL_SHORTPERM,
+
+	COL_UID,
+	COL_USER,
+	COL_GID,
+	COL_GROUP,
+
+	COL_LONGATIME,
+	COL_SHORTATIME,
+	COL_LONGCTIME,
+	COL_SHORTCTIME,
+	COL_LONGMTIME,
+	COL_SHORTMTIME,
 };
 
 struct panel {
@@ -49,6 +74,7 @@ struct panel {
 	fnum_t num_selected;
 	int scending; // 1 = ascending, -1 = descending
 	char order[FV_ORDER_SIZE];
+	enum column column;
 	bool show_hidden;
 };
 

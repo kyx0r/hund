@@ -142,6 +142,7 @@ static void _entry(struct ui* const i, const struct panel* const fv,
 		const size_t width, const fnum_t e) {
 	// TODO scroll filenames that are too long to fit in the panel width
 	// TODO signal invalid filenames
+	// TODO inode, longsize, shortsize: length may be very different
 	const struct file* const cfr = fv->file_list[e];
 	const bool hl = e == fv->selection && fv == i->pv;
 
@@ -151,12 +152,107 @@ static void _entry(struct ui* const i, const struct panel* const fv,
 	char name[NAME_BUF_SIZE];
 	cut_unwanted(cfr->name, name, '.', NAME_BUF_SIZE);
 
-	char sbuf[SIZE_BUF_SIZE];
-	pretty_size(cfr->s.st_size, sbuf);
-	const size_t slen = strnlen(sbuf, SIZE_BUF_SIZE-1);
+	char column[48];
+	size_t cl;
+	struct tm T;
+	time_t t;
+	const char* tfmt;
+	time_t tspec;
+	const struct passwd* pwd;
+	const struct group* grp;
+	switch (fv->column) {
+		case COL_LONGATIME: tspec = cfr->s.st_atim.tv_sec; break;
+		case COL_LONGCTIME: tspec = cfr->s.st_ctim.tv_sec; break;
+		case COL_LONGMTIME: tspec = cfr->s.st_mtim.tv_sec; break;
+		default: tspec = 0; break;
+	}
+	switch (fv->column) {
+	case COL_INODE:
+		cl = snprintf(column, sizeof(column), "%6lu", cfr->s.st_ino);
+		break;
+	case COL_LONGSIZE:
+		cl = snprintf(column, sizeof(column), "%10lu", cfr->s.st_size);
+		break;
+	case COL_SHORTSIZE:
+		pretty_size(cfr->s.st_size, column);
+		cl = strlen(column);
+		memmove(column+(SIZE_BUF_SIZE-1-cl), column, cl);
+		memset(column, ' ', (SIZE_BUF_SIZE-1-cl));
+		cl = SIZE_BUF_SIZE-1;
+		break;
+	case COL_LONGPERM:
+		memcpy(column+0, perm2rwx[(cfr->s.st_mode & 0700) >> 6], 3);
+		memcpy(column+3, perm2rwx[(cfr->s.st_mode & 0070) >> 3], 3);
+		memcpy(column+6, perm2rwx[(cfr->s.st_mode & 0007) >> 0], 3);
+		column[9] = 0;
+		cl = 9;
+		break;
+	case COL_SHORTPERM:
+		cl = snprintf(column, sizeof(column),
+			"%04o", cfr->s.st_mode & 07777);
+		break;
+	case COL_UID:
+		cl = snprintf(column, sizeof(column), "%u", cfr->s.st_uid);
+		break;
+	case COL_USER:
+		if ((pwd = getpwuid(cfr->s.st_uid))) {
+			cl = snprintf(column, sizeof(column),
+				"%s", pwd->pw_name);
+		}
+		else {
+			cl = snprintf(column, sizeof(column),
+				"uid:%u", cfr->s.st_uid);
+		}
+		break;
+	case COL_GID:
+		cl = snprintf(column, sizeof(column), "%u", cfr->s.st_gid);
+		break;
+	case COL_GROUP:
+		if ((grp = getgrgid(cfr->s.st_gid))) {
+			cl = snprintf(column, sizeof(column),
+				"%s", grp->gr_name);
+		}
+		else {
+			cl = snprintf(column, sizeof(column),
+				"gid:%u", cfr->s.st_gid);
+		}
+		break;
+	case COL_LONGATIME:
+	case COL_LONGCTIME:
+	case COL_LONGMTIME:
+		if (!localtime_r(&tspec, &T)) {
+			memset(&T, 0, sizeof(struct tm));
+		}
+		strftime(column, TIME_SIZE, timefmt, &T);
+		cl = strlen(column);
+		break;
+	case COL_SHORTATIME:
+	case COL_SHORTCTIME:
+	case COL_SHORTMTIME:
+		t = time(NULL);
+		if (t - tspec > 60*60*24*365) {
+			tfmt = "%y'%b";
+		}
+		else if (t - tspec > 60*60*24) {
+			tfmt = "%b %d";
+		}
+		else {
+			tfmt = " %H:%M";
+		}
+		if (!localtime_r(&tspec, &T)) {
+			memset(&T, 0, sizeof(struct tm));
+		}
+		strftime(column, TIME_SIZE, tfmt, &T);
+		cl = strlen(column);
+		break;
+	default:
+		column[0] = 0;
+		cl = 0;
+		break;
+	}
 
-	if (1+SIZE_BUF_SIZE+1 > width) return;
-	const size_t name_allowed = width - (1+SIZE_BUF_SIZE+1);
+	if (1+(fv->column != COL_NONE)+cl+1 > width) return;
+	const size_t name_allowed = width - (1+(fv->column != COL_NONE)+cl+1);
 	const size_t name_width = utf8_width(name);
 	const size_t name_draw = (name_width < name_allowed
 			? name_width : name_allowed);
@@ -171,9 +267,8 @@ static void _entry(struct ui* const i, const struct panel* const fv,
 	append_theme(&i->B, fsym + (hl ? 1 : 0));
 	fill(&i->B, open, 1);
 	append(&i->B, name, utf8_w2nb(name, name_draw));
-	fill(&i->B, ' ', name_allowed - name_draw);
-	fill(&i->B, ' ', SIZE_BUF_SIZE-slen);
-	append(&i->B, sbuf, slen);
+	fill(&i->B, ' ', width - (1+name_draw+cl+1));
+	append(&i->B, column, cl);
 	fill(&i->B, close, 1);
 	append_attr(&i->B, ATTR_NORMAL, NULL);
 }
@@ -260,6 +355,7 @@ static void stringify_pug(const mode_t m, const uid_t u, const gid_t g,
 }
 
 static void _statusbar(struct ui* const i) {
+	// TODO now that there are columns...
 	const struct file* const _hfr = hfr(i->pv);
 	struct tm T;
 	if (!_hfr || !localtime_r(&(_hfr->s.st_mtim.tv_sec), &T)) {
@@ -420,13 +516,20 @@ int help_to_file(struct ui* const i, char* const tmpn) {
 		}
 		write(tmpfd, "\n", 1);
 	}
+
 	/* COPYRIGHT NOTICE */
-	int cnl = 0; // Copytight Notice Line
-	while (copyright_notice[cnl]) {
-		const char* const cr = copyright_notice[cnl];
-		write(tmpfd, cr, strlen(cr));
+	int L = 0;
+	while (more_help[L]) {
+		write(tmpfd, more_help[L], strlen(more_help[L]));
 		write(tmpfd, "\n", 1);
-		cnl += 1;
+		L += 1;
+	}
+	write(tmpfd, "\n", 1);
+	L = 0;
+	while (copyright_notice[L]) {
+		write(tmpfd, copyright_notice[L], strlen(copyright_notice[L]));
+		write(tmpfd, "\n", 1);
+		L += 1;
 	}
 	close(tmpfd);
 	return err;
@@ -460,20 +563,7 @@ static void _panels(struct ui* const i) {
 
 static void _bottombar(struct ui* const i) {
 	append(&i->B, CSI_CLEAR_LINE);
-	if (i->mt) {
-		int cp = 0;
-		switch (i->mt) {
-		case MSG_INFO: cp = THEME_INFO; break;
-		case MSG_ERROR: cp = THEME_ERROR; break;
-		default: break;
-		}
-		append_theme(&i->B, cp);
-		append(&i->B, i->msg, strlen(i->msg));
-		append_attr(&i->B, ATTR_NORMAL, NULL);
-		fill(&i->B, ' ', i->scrw-utf8_width(i->msg));
-		i->mt = MSG_NONE;
-	}
-	else if (i->prompt) {
+	if (i->prompt) {
 		const size_t aw = utf8_width(i->prch);
 		const size_t pw = utf8_width(i->prompt);
 		size_t padding;
@@ -488,6 +578,19 @@ static void _bottombar(struct ui* const i) {
 		if (padding) {
 			fill(&i->B, ' ', padding);
 		}
+	}
+	else if (i->mt) {
+		int cp = 0;
+		switch (i->mt) {
+		case MSG_INFO: cp = THEME_INFO; break;
+		case MSG_ERROR: cp = THEME_ERROR; break;
+		default: break;
+		}
+		append_theme(&i->B, cp);
+		append(&i->B, i->msg, strlen(i->msg));
+		append_attr(&i->B, ATTR_NORMAL, NULL);
+		fill(&i->B, ' ', i->scrw-utf8_width(i->msg));
+		i->mt = MSG_NONE;
 	}
 	else if (i->m == MODE_CHMOD) {
 		append(&i->B, "-- CHMOD --", 11);
@@ -680,13 +783,16 @@ enum command get_cmd(struct ui* const i) {
  * Unhandled inputs are put into 'o' (if not NULL) and 2 is returned
  */
 int fill_textbox(struct ui* const I, char* const buf, char** const buftop,
-		const size_t bsize, struct input* const o) {
+	const size_t bsize, struct input* const o) {
 	const struct input i = get_input(I->timeout);
 	if (i.t == I_NONE) return 1;
 	if (IS_CTRL(i, '[') || i.t == I_ESCAPE) return -1;
 	else if ((IS_CTRL(i, 'J') || IS_CTRL(i, 'M'))
 	|| (i.t == I_UTF8 && (i.utf[0] == '\n' || i.utf[0] == '\r'))) {
-		if (*buftop != buf) return 0;
+		/* If empty, abort.
+		 * Otherwise ready.
+		 */
+		return (*buftop == buf ? -1 : 0);
 	}
 	else if (i.t == I_UTF8 && strlen(buf)+utf8_g2nb(i.utf) <= bsize) {
 		utf8_insert(buf, i.utf, utf8_wtill(buf, *buftop));
