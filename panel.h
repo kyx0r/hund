@@ -23,16 +23,22 @@
 #include "fs.h"
 #include "utf8.h"
 
-static const char compare_values[] = "nstdpxi";
+static const char compare_values[] = "nsacmdpxiugUG";
 #define FV_ORDER_SIZE (sizeof(compare_values)-1)
 enum key {
 	KEY_NAME = 'n',
 	KEY_SIZE = 's',
-	KEY_DATE = 't',
+	KEY_ATIME = 'a',
+	KEY_CTIME = 'c',
+	KEY_MTIME = 'm',
 	KEY_ISDIR = 'd',
 	KEY_PERM = 'p',
 	KEY_ISEXE = 'x',
 	KEY_INODE = 'i',
+	KEY_UID = 'u',
+	KEY_GID = 'g',
+	KEY_USER = 'U',
+	KEY_GROUP = 'G',
 };
 
 static const char default_order[FV_ORDER_SIZE] = {

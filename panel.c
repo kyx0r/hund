@@ -228,12 +228,18 @@ int panel_scan_dir(struct panel* const fv) {
 static int frcmp(const enum key cmp,
 		const struct file* const a,
 		const struct file* const b) {
+	const struct passwd *pa, *pb;
+	const struct group *ga, *gb;
 	switch (cmp) {
 	case KEY_NAME:
 		return strcmp(a->name, b->name);
 	case KEY_SIZE:
 		return (a->s.st_size < b->s.st_size ? -1 : 1);
-	case KEY_DATE:
+	case KEY_ATIME:
+		return (a->s.st_atim.tv_sec < b->s.st_atim.tv_sec ? -1 : 1);
+	case KEY_CTIME:
+		return (a->s.st_ctim.tv_sec < b->s.st_ctim.tv_sec ? -1 : 1);
+	case KEY_MTIME:
 		return (a->s.st_mtim.tv_sec < b->s.st_mtim.tv_sec ? -1 : 1);
 	case KEY_ISDIR:
 		if (S_ISDIR(a->s.st_mode) != S_ISDIR(b->s.st_mode)) {
@@ -249,7 +255,24 @@ static int frcmp(const enum key cmp,
 		break;
 	case KEY_INODE:
 		return (a->s.st_ino < b->s.st_ino ? -1 : 1);
-	default: break;
+	case KEY_UID:
+		return (a->s.st_uid < b->s.st_uid ? -1 : 1);
+	case KEY_GID:
+		return (a->s.st_gid < b->s.st_gid ? -1 : 1);
+	case KEY_USER:
+		if ((pa = getpwuid(a->s.st_uid))
+		&& (pb = getpwuid(b->s.st_uid))) {
+			return strcmp(pa->pw_name, pb->pw_name);
+		}
+		break;
+	case KEY_GROUP:
+		if ((ga = getgrgid(a->s.st_gid))
+		&& (gb = getgrgid(b->s.st_gid))) {
+			return strcmp(ga->gr_name, gb->gr_name);
+		}
+		break;
+	default:
+		break;
 	}
 	return 0;
 }
