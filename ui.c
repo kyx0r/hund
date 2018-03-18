@@ -161,9 +161,12 @@ static void _entry(struct ui* const i, const struct panel* const fv,
 	const struct passwd* pwd;
 	const struct group* grp;
 	switch (fv->column) {
-		case COL_LONGATIME: tspec = cfr->s.st_atim.tv_sec; break;
-		case COL_LONGCTIME: tspec = cfr->s.st_ctim.tv_sec; break;
-		case COL_LONGMTIME: tspec = cfr->s.st_mtim.tv_sec; break;
+		case COL_LONGATIME:
+		case COL_SHORTATIME: tspec = cfr->s.st_atim.tv_sec; break;
+		case COL_LONGCTIME:
+		case COL_SHORTCTIME: tspec = cfr->s.st_ctim.tv_sec; break;
+		case COL_LONGMTIME:
+		case COL_SHORTMTIME: tspec = cfr->s.st_mtim.tv_sec; break;
 		default: tspec = 0; break;
 	}
 	switch (fv->column) {
