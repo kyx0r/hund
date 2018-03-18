@@ -138,11 +138,52 @@ static void _pathbars(struct ui* const i) {
 	append(&i->B, "\r\n", 2);
 }
 
+static size_t stringify_p(const mode_t m, char* const perms) {
+	perms[0] = mode_type_symbols[(m & S_IFMT) >> S_IFMT_TZERO];
+	memcpy(perms+1, perm2rwx[(m>>6) & 07], 3);
+	memcpy(perms+1+3, perm2rwx[(m>>3) & 07], 3);
+	memcpy(perms+1+3+3, perm2rwx[(m>>0) & 07], 3);
+	if (m & S_ISUID) {
+		perms[3] = 's';
+		if (!(m & S_IXUSR)) perms[3] ^= 0x20;
+	}
+	if (m & S_ISGID) {
+		perms[6] = 's';
+		if (!(m & S_IXGRP)) perms[6] ^= 0x20;
+	}
+	if (m & S_ISVTX) {
+		perms[9] = 't';
+		if (!(m & S_IXOTH)) perms[9] ^= 0x20;
+	}
+	return 10;
+}
+
+static size_t stringify_u(const uid_t u, char* const user) {
+	const struct passwd* const pwd = getpwuid(u);
+	if (pwd) {
+		return snprintf(user, LOGIN_BUF_SIZE, "%s", pwd->pw_name);
+	}
+	else {
+		return snprintf(user, LOGIN_BUF_SIZE, "uid:%u", u);
+	}
+}
+
+static size_t stringify_g(const gid_t g, char* const group) {
+	const struct group* const grp = getgrgid(g);
+	if (grp) {
+		return snprintf(group, LOGIN_BUF_SIZE, "%s", grp->gr_name);
+	}
+	else {
+		return snprintf(group, LOGIN_BUF_SIZE, "gid:%u", g);
+	}
+}
+
 static void _entry(struct ui* const i, const struct panel* const fv,
 		const size_t width, const fnum_t e) {
 	// TODO scroll filenames that are too long to fit in the panel width
 	// TODO signal invalid filenames
 	// TODO inode, longsize, shortsize: length may be very different
+	// TODO adjust width of columns
 	const struct file* const cfr = fv->file_list[e];
 	const bool hl = e == fv->selection && fv == i->pv;
 
@@ -158,16 +199,22 @@ static void _entry(struct ui* const i, const struct panel* const fv,
 	time_t t;
 	const char* tfmt;
 	time_t tspec;
-	const struct passwd* pwd;
-	const struct group* grp;
 	switch (fv->column) {
 		case COL_LONGATIME:
-		case COL_SHORTATIME: tspec = cfr->s.st_atim.tv_sec; break;
+		case COL_SHORTATIME:
+			tspec = cfr->s.st_atim.tv_sec;
+			break;
 		case COL_LONGCTIME:
-		case COL_SHORTCTIME: tspec = cfr->s.st_ctim.tv_sec; break;
+		case COL_SHORTCTIME:
+			tspec = cfr->s.st_ctim.tv_sec;
+			break;
 		case COL_LONGMTIME:
-		case COL_SHORTMTIME: tspec = cfr->s.st_mtim.tv_sec; break;
-		default: tspec = 0; break;
+		case COL_SHORTMTIME:
+			tspec = cfr->s.st_mtim.tv_sec;
+			break;
+		default:
+			tspec = 0;
+			break;
 	}
 	switch (fv->column) {
 	case COL_INODE:
@@ -184,11 +231,8 @@ static void _entry(struct ui* const i, const struct panel* const fv,
 		cl = SIZE_BUF_SIZE-1;
 		break;
 	case COL_LONGPERM:
-		memcpy(column+0, perm2rwx[(cfr->s.st_mode & 0700) >> 6], 3);
-		memcpy(column+3, perm2rwx[(cfr->s.st_mode & 0070) >> 3], 3);
-		memcpy(column+6, perm2rwx[(cfr->s.st_mode & 0007) >> 0], 3);
-		column[9] = 0;
-		cl = 9;
+		cl = stringify_p(cfr->s.st_mode, column);
+		column[cl] = 0;
 		break;
 	case COL_SHORTPERM:
 		cl = snprintf(column, sizeof(column),
@@ -198,27 +242,13 @@ static void _entry(struct ui* const i, const struct panel* const fv,
 		cl = snprintf(column, sizeof(column), "%u", cfr->s.st_uid);
 		break;
 	case COL_USER:
-		if ((pwd = getpwuid(cfr->s.st_uid))) {
-			cl = snprintf(column, sizeof(column),
-				"%s", pwd->pw_name);
-		}
-		else {
-			cl = snprintf(column, sizeof(column),
-				"uid:%u", cfr->s.st_uid);
-		}
+		cl = stringify_u(cfr->s.st_uid, column);
 		break;
 	case COL_GID:
 		cl = snprintf(column, sizeof(column), "%u", cfr->s.st_gid);
 		break;
 	case COL_GROUP:
-		if ((grp = getgrgid(cfr->s.st_gid))) {
-			cl = snprintf(column, sizeof(column),
-				"%s", grp->gr_name);
-		}
-		else {
-			cl = snprintf(column, sizeof(column),
-				"gid:%u", cfr->s.st_gid);
-		}
+		cl = stringify_g(cfr->s.st_gid, column);
 		break;
 	case COL_LONGATIME:
 	case COL_LONGCTIME:
@@ -320,41 +350,6 @@ static fnum_t _start_search_index(const struct panel* const s,
 		oi += 1;
 	}
 	return bi;
-}
-
-/* PUG = Permissions User Group */
-static void stringify_pug(const mode_t m, const uid_t u, const gid_t g,
-		char perms[10],
-		char user[LOGIN_BUF_SIZE],
-		char group[LOGIN_BUF_SIZE]) {
-	memset(perms, 0, 10);
-	memset(user, 0, LOGIN_BUF_SIZE);
-	memset(group, 0, LOGIN_BUF_SIZE);
-	const struct passwd* const pwd = getpwuid(u);
-	const struct group* const grp = getgrgid(g);
-
-	if (pwd) strncpy(user, pwd->pw_name, LOGIN_BUF_SIZE);
-	else snprintf(user, LOGIN_BUF_SIZE, "uid:%u", u);
-
-	if (grp) strncpy(group, grp->gr_name, LOGIN_BUF_SIZE);
-	else snprintf(group, LOGIN_BUF_SIZE, "gid:%u", g);
-
-	perms[0] = mode_type_symbols[(m & S_IFMT) >> S_IFMT_TZERO];
-	memcpy(perms+1, perm2rwx[(m>>6) & 07], 3);
-	memcpy(perms+1+3, perm2rwx[(m>>3) & 07], 3);
-	memcpy(perms+1+3+3, perm2rwx[(m>>0) & 07], 3);
-	if (m & S_ISUID) {
-		perms[3] = 's';
-		if (!(m & S_IXUSR)) perms[3] ^= 0x20;
-	}
-	if (m & S_ISGID) {
-		perms[6] = 's';
-		if (!(m & S_IXGRP)) perms[6] ^= 0x20;
-	}
-	if (m & S_ISVTX) {
-		perms[9] = 't';
-		if (!(m & S_IXOTH)) perms[9] ^= 0x20;
-	}
 }
 
 static void _statusbar(struct ui* const i) {
@@ -615,9 +610,9 @@ void ui_draw(struct ui* const i) {
 	if (i->m == MODE_MANAGER || i->m == MODE_WAIT) { // TODO mode wait
 		const struct file* const H = hfr(i->pv);
 		if (H) {
-			stringify_pug(H->s.st_mode, H->s.st_uid,
-					H->s.st_gid, i->perms,
-					i->user, i->group);
+			stringify_p(H->s.st_mode, i->perms);
+			stringify_u(H->s.st_uid, i->user);
+			stringify_g(H->s.st_gid, i->group);
 		}
 		else {
 			memset(i->perms, '-', 10);
@@ -632,8 +627,9 @@ void ui_draw(struct ui* const i) {
 		i->perm[1] = i->perm[0];
 		i->perm[1] |= i->plus;
 		i->perm[1] &= ~i->minus;
-		stringify_pug(i->perm[1], i->o[1], i->g[1],
-				i->perms, i->user, i->group);
+		stringify_p(i->perm[1], i->perms);
+		stringify_u(i->o[1], i->user);
+		stringify_g(i->g[1], i->group);
 		_pathbars(i);
 		_panels(i);
 		_statusbar(i);
