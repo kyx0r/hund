@@ -277,11 +277,10 @@ static int _copy(struct task* const t,
 static int _stat_file(struct tree_walk* const tw) {
 	// lstat/stat can errno:
 	// ENOENT, EACCES, ELOOP, ENAMETOOLONG, ENOMEM, ENOTDIR, EOVERFLOW
-	struct stat old_cs;
-	memcpy(&old_cs, &tw->cs, sizeof(struct stat));
+	const struct stat old_cs = tw->cs;
 	const enum tree_walk_state old_tws = tw->tws;
 	if (lstat(tw->path, &tw->cs)) {
-		memcpy(&tw->cs, &old_cs, sizeof(struct stat));
+		tw->cs = old_cs;
 		return errno;
 	}
 	tw->tws = AT_NOWHERE;
@@ -423,10 +422,8 @@ inline static int _copyremove_step(struct task* const t, int* const c) {
 		task_build_path(t, np);
 		if (!access(np, F_OK)) {
 			if (sc) return 0;
-			if (t->tw.tws & (AT_FILE | AT_LINK)) {
-				if (ov && unlink(np)) {
-					return errno;
-				}
+			if (ov && (t->tw.tws & (AT_FILE | AT_LINK))) {
+				if (unlink(np)) return errno;
 			}
 		}
 		switch (t->tw.tws) {
