@@ -8,32 +8,34 @@ A minimalistic terminal file manager.
 - Recursive chmod with set/unset masks
 - Find file in current directory (find as you type)
 - Multiple key sorting
-- Can be statically linked
+- One column at a time (none, size, perm, user, group, atime, ctime, mtime...)
 - Marks
+- Quick access to shell via `:sh`
+- Can be statically linked
 - Licensed under GPL-3.0
 #### Environment Variables (which Hund uses)
-| Variable | Usage              | Default |
-| -------- | ------------------ | ------- |
-| $VISUAL  | text editor        | $EDITOR |
-| $EDITOR  | backup for $VISUAL | vi      |
-| $PAGER   | pager              | less    |
+| Variable | Usage | Default/Fallback |
+|-|-|-|
+| $VISUAL | text editor | $EDITOR |
+| $EDITOR | text editor | vi |
+| $PAGER | pager | less |
+| $HOME | user's home directory | /etc/passwd |
+| $SHELL | shell to be spawned by `:sh` | /usr/bin/sh |
 #### Planned features
 - Calculate volume of directories
 - Filter files
-- atime, mtime, ctime
 - ACLs (at least detection)
 - Configuration in a file
 - Color schemes
 - man page
 - Packaging for some popular distros + installation scripts
-- Columns (size, date, permissions, owner, group, date) (???)
-- Integrated terminal (???)
 #### Architecture/OS Support
 - x86-64
 	- Arch Linux - works
 	- Alpine Linux - works
 	- FreeBSD - works
 	- OpenBSD - works
+	- NetBSD - works
 - aarch64 (Raspberry PI 3)
 	- Arch Linux ARM 64-bit - works
 #### Dependencies & Requirements
