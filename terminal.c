@@ -62,7 +62,7 @@ struct input get_input(int timeout_us) {
 		if (xread(fd, seq+1, 1, ESC_TIMEOUT_MS*1000) == 1
 		&& (seq[1] == '[' || seq[1] == 'O')) {
 			if (xread(fd, seq+2, 1, 0) == 1
-			&& isdigit((unsigned char)seq[2])) {
+			&& '0' <= seq[2] && seq[2] <= '9') {
 				xread(fd, seq+3, 1, 0);
 			}
 		}
@@ -81,8 +81,8 @@ struct input get_input(int timeout_us) {
 	}
 	else if ((utflen = utf8_g2nb(seq))) {
 		i.t = I_UTF8;
-		int b;
 		i.utf[0] = seq[0];
+		int b;
 		for (b = 1; b < utflen; ++b) {
 			if (xread(fd, i.utf+b, 1, 0) != 1) {
 				i.t = I_NONE;
@@ -97,24 +97,22 @@ struct input get_input(int timeout_us) {
 	return i;
 }
 
-/*
- * TODO maybe close stderr? redirect?
- */
 int start_raw_mode(struct termios* const before) {
 	const int fd = STDIN_FILENO;
-	memset(before, 0, sizeof(struct termios));
-	write(STDOUT_FILENO, CSI_SCREEN_ALTERNATIVE);
-	if (tcgetattr(fd, before) == -1) return errno;
-	struct termios raw;
-	memcpy(&raw, before, sizeof(struct termios));
+	if (write(STDOUT_FILENO, CSI_SCREEN_ALTERNATIVE) == -1
+	|| tcgetattr(fd, before)) {
+		return errno;
+	}
+	struct termios raw = *before;
 	cfmakeraw(&raw);
-	return (tcsetattr(fd, TCSAFLUSH, &raw) == -1 ? errno : 0);
+	return (tcsetattr(fd, TCSAFLUSH, &raw) ? errno : 0);
 }
 
 int stop_raw_mode(struct termios* const before) {
-	int r = (tcsetattr(STDIN_FILENO, TCSAFLUSH, before) == -1 ? errno : 0);
-	write(STDOUT_FILENO, CSI_SCREEN_NORMAL);
-	return r;
+	if (tcsetattr(STDIN_FILENO, TCSAFLUSH, before)) {
+		return errno;
+	}
+	return write(STDOUT_FILENO, CSI_SCREEN_NORMAL) == -1 ? errno : 0;
 }
 
 int char_attr(char* const B, const size_t S,
@@ -155,8 +153,9 @@ int window_size(int* const R, int* const C) {
 	return 0;
 }
 
-size_t append(struct append_buffer* const ab, const char* const b, const size_t s) {
-	if ((ab->capacity - ab->top) < s) {
+size_t append(struct append_buffer* const ab,
+		const char* const b, const size_t s) {
+	if (ab->capacity - ab->top < s) {
 		do {
 			ab->capacity += APPEND_BUFFER_INC;
 		} while (ab->capacity - ab->top < s);
@@ -165,7 +164,6 @@ size_t append(struct append_buffer* const ab, const char* const b, const size_t 
 		ab->buf = tmp;
 	}
 	memcpy(ab->buf+ab->top, b, s);
-	//memset(ab->buf+ab->top+s, 0, S-s);
 	ab->top += s;
 	return s;
 }
@@ -179,10 +177,12 @@ size_t append_attr(struct append_buffer* const ab,
 
 size_t fill(struct append_buffer* const ab, const char C, const size_t s) {
 	if (ab->capacity - ab->top < s) {
-		void* tmp = realloc(ab->buf, ab->top+s);
+		do {
+			ab->capacity += APPEND_BUFFER_INC;
+		} while (ab->capacity - ab->top < s);
+		void* tmp = realloc(ab->buf, ab->capacity);
 		if (!tmp) return 0;
 		ab->buf = tmp;
-		ab->capacity = ab->top+s;
 	}
 	memset(ab->buf+ab->top, C, s);
 	ab->top += s;

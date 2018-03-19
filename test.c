@@ -544,7 +544,7 @@ int main() {
 	TESTVAL(ab.capacity, 100, "");
 
 	fill(&ab, ' ', 1);
-	TESTVAL(ab.capacity, 101, "");
+	TESTVAL(ab.capacity, 100+APPEND_BUFFER_INC, "");
 
 	free(ab.buf);
 	memset(&ab, 0, sizeof(struct append_buffer));
