@@ -327,6 +327,7 @@ static struct input2cmd default_mapping[] = {
 	{ { KSPEC(I_BACKSPACE) }, MODE_MANAGER, CMD_UP_DIR },
 
 	{ { KUTF8("i") }, MODE_MANAGER, CMD_ENTER_DIR },
+	{ { KCTRL('M') }, MODE_MANAGER, CMD_ENTER_DIR },
 	{ { KCTRL('J') }, MODE_MANAGER, CMD_ENTER_DIR },
 	{ { KUTF8("l") }, MODE_MANAGER, CMD_ENTER_DIR },
 
@@ -352,7 +353,6 @@ static struct input2cmd default_mapping[] = {
 	{ { KCTRL('V') }, MODE_MANAGER, CMD_DIR_VOLUME },
 
 	{ { KUTF8("x") }, MODE_MANAGER, CMD_TOGGLE_HIDDEN },
-	{ { KCTRL('H') }, MODE_MANAGER, CMD_TOGGLE_HIDDEN },
 
 	{ { KUTF8("?") }, MODE_MANAGER, CMD_HELP },
 
@@ -476,7 +476,7 @@ static const char* const cmd_help[] = {
 	[CMD_ENTRY_FIRST] = "Go to the top file in directory.",
 	[CMD_ENTRY_LAST] = "Go to the bottom file in directory.",
 
-	[CMD_COMMAND] = "Open command promt.", // TODO
+	[CMD_COMMAND] = "Open command line.",
 
 	[CMD_CD] = "Jump to some directory.",
 	[CMD_PAGER] = "Open selected file in pager.",
@@ -599,6 +599,13 @@ static const char* const mode_strings[] = {
 };
 
 static const char* const more_help[] = {
+	"COMMAND LINE",
+	"Press `:` to enter command line",
+	"q\texit hund",
+	"h\topen help",
+	"+x\tquick chmod +x",
+	"sh\topen terminal",
+	"",
 	"SORTING",
 	"+\tascending",
 	"-\tdescending",
@@ -614,7 +621,7 @@ static const char* const more_help[] = {
 	"u\tsort by uid",
 	"U\tsort by user name",
 	"g\tsort by gid",
-	"G\tsort by grouo name",
+	"G\tsort by group name",
 	"*\treversing order of sorting makes them last",
 	"Most important sorting key is at the end",
 	"EXAPLES",
