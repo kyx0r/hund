@@ -41,6 +41,7 @@
  * - Jump to file pointed by symlink (and return)
  * - Unify "-- *** --" indicators
  * - Processed symlinks - count processed symlinks separately
+ * - Fill textbox has cursor problems
  */
 
 struct mark_path {
@@ -653,13 +654,12 @@ static void cmd_command(struct ui* const i, struct task* const t,
 	else if (!strcmp(cmd, "+x")) {
 		cmd_quick_chmod_plus_x(i);
 	}
-#if 0
 	else if (!strcmp(cmd, "sh")) {
 		chdir(i->pv->wd);
-		char* const arg[] = { getenv("SHELL"), NULL };
-		spawn(arg);
+		char* sh = getenv("SHELL");
+		char* const arg[] = { (sh ? sh : "/usr/bin/sh"), NULL };
+		spawn(arg, 0);
 	}
-#endif
 	// lm = list marks (in pager)
 	// open
 	// nos = no selection (like noh)
