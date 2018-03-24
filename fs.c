@@ -128,8 +128,7 @@ int scan_dir(const char* const wd, struct file*** const fl,
 		memcpy(fpath, wd, wdlen+1);
 		size_t fpathlen = wdlen;
 		if ((err = pushd(fpath, &fpathlen, nfr->name, nl))
-		   || lstat(fpath, &nfr->s)) {
-			err = errno; // TODO
+		|| (lstat(fpath, &nfr->s) ? (err = errno) : 0)) {
 			memset(&nfr->s, 0, sizeof(struct stat));
 		}
 	}
@@ -137,6 +136,9 @@ int scan_dir(const char* const wd, struct file*** const fl,
 	return err;
 }
 
+/*
+ * TODO
+ */
 int link_copy_recalculate(const char* const wd,
 		const char* const src, const char* const dst) {
 	struct stat src_s;
@@ -202,7 +204,7 @@ void pretty_size(off_t s, char* const buf) {
 			buf[top++] = '0'+d[i];
 		}
 	}
-	if (r[0] || r[1]) {
+	if (!d[0] && !d[1] && (r[0] || r[1])) {
 		buf[top++] = '.';
 		buf[top++] = '0'+r[0];
 		if (r[1]) buf[top++] = '0'+r[1];

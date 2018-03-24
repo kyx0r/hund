@@ -38,8 +38,6 @@
 #include <string.h>
 #include <errno.h>
 
-#include "fs.h"
-
 #ifndef LOGIN_NAME_MAX
 	#define LOGIN_NAME_MAX _SC_LOGIN_NAME_MAX
 #endif
@@ -54,6 +52,19 @@
 #define LOGIN_MAX_LEN (LOGIN_NAME_MAX)
 
 #define MIN(A,B) (((A) < (B)) ? (A) : (B))
+
+#define S_ISTOOSPECIAL(M) (((M & S_IFMT) == S_IFBLK) \
+		|| ((M & S_IFMT) == S_IFCHR) \
+		|| ((M & S_IFMT) == S_IFIFO) \
+		|| ((M & S_IFMT) == S_IFSOCK))
+
+#define DOTDOT(N) (!strncmp((N), ".", 2) || !strncmp((N), "..", 3))
+#define EXECUTABLE(M) ((M & 0111) && S_ISREG(M))
+#define PATH_IS_RELATIVE(P) ((P)[0] != '/' && (P)[0] != '~')
+
+#define MKDIR_DEFAULT_PERM (S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
+
+typedef unsigned int fnum_t; // Number of Files
 
 /* From LSB to MSB, by bit index */
 static const char* const mode_bit_meaning[] = {
@@ -86,7 +97,7 @@ char* get_home(void);
 
 int relative_chmod(const char* const, const mode_t, const mode_t);
 
-typedef unsigned int fnum_t; // Number of Files
+bool same_fs(const char* const, const char* const);
 
 struct file {
 	struct stat s;
@@ -95,30 +106,25 @@ struct file {
 	char name[];
 };
 
-#define S_ISTOOSPECIAL(M) (((M & S_IFMT) == S_IFBLK) \
-		|| ((M & S_IFMT) == S_IFCHR) \
-		|| ((M & S_IFMT) == S_IFIFO) \
-		|| ((M & S_IFMT) == S_IFSOCK))
-
-#define DOTDOT(N) (!strncmp((N), ".", 2) || !strncmp((N), "..", 3))
-#define EXECUTABLE(M) ((M & 0111) && S_ISREG(M))
-#define PATH_IS_RELATIVE(P) ((P)[0] != '/' && (P)[0] != '~')
-
-bool same_fs(const char* const, const char* const);
-
 void file_list_clean(struct file*** const, fnum_t* const);
-
 int scan_dir(const char* const, struct file*** const,
 		fnum_t* const, fnum_t* const);
+
 
 int link_copy_recalculate(const char* const,
 		const char* const, const char* const);
 int link_copy_raw(const char* const, const char* const);
 
-#define SIZE_BUF_SIZE (3+1+2+1+1)
+#define SIZE_BUF_SIZE (5+1)
+/*
+ * Possible formats:
+ * XU
+ * XXU
+ * XXXU
+ * X.XU
+ * X.XXU
+ */
 void pretty_size(off_t, char* buf);
-
-#define MKDIR_DEFAULT_PERM (S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
 
 int pushd(char* const, size_t* const, const char* const, size_t);
 void popd(char* const, size_t* const);
@@ -130,6 +136,7 @@ int current_dir_i(const char* const);
 
 size_t imb(const char*, const char*);
 bool contains(const char* const, const char* const);
+
 
 struct string {
 	unsigned char len;
