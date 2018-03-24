@@ -19,6 +19,12 @@
 
 #include "task.h"
 
+xtime_ms_t xtime(void) {
+	struct timespec t;
+	clock_gettime(CLOCK_REALTIME, &t);
+	return t.tv_sec * 1000 + t.tv_nsec / 1000000;
+}
+
 void task_new(struct task* const t, const enum task_type tp,
 		const enum task_flags tf,
 		char* const src, char* const dst,
@@ -41,6 +47,26 @@ void task_new(struct task* const t, const enum task_type tp,
 	t->cho = -1;
 	t->chg = -1;
 	memset(&t->tw, 0, sizeof(struct tree_walk));
+}
+
+static int _close_files(struct task* const t) {
+	// TODO maybe too much?
+	int e = 0;
+	if (t->in != -1 && close(t->in)) e = errno;
+	if (t->out != -1 && close(t->out)) e = errno;
+	t->in = t->out = -1;
+	return e;
+}
+
+void task_clean(struct task* const t) {
+	list_free(&t->sources);
+	list_free(&t->renamed);
+	t->src = t->dst = NULL;
+	t->t = TASK_NONE;
+	t->tf = TF_NONE;
+	t->ts = TS_CLEAN;
+	t->conflicts = t->specials = t->err = 0;
+	_close_files(t);
 }
 
 int task_build_path(const struct task* const t, char* R) {
@@ -113,14 +139,14 @@ void task_action_chmod(struct task* const t, int* const c) {
 	if (!(t->tf & TF_RECURSIVE_CHMOD)) { // TODO find a better way to chmod once
 		t->tw.tws = AT_EXIT;
 	}
-	*c -= 1;
+	*c -= 1; // TODO
 }
 
 void task_action_estimate(struct task* const t, int* const c) {
 	switch (t->tw.tws) {
 	case AT_LINK:
 		if (!(t->tf & (TF_ANY_LINK_METHOD))) {
-			*c = 0;
+			*c = 0; // TODO
 			return;
 		}
 		t->symlinks += 1;
@@ -145,26 +171,24 @@ void task_action_estimate(struct task* const t, int* const c) {
 		}
 	}
 	t->size_total += t->tw.cs.st_size; // TODO
+	*c -= 1;
 	if ((t->err = tree_walk_step(&t->tw))) {
 		t->ts = TS_FAILED;
 	}
-	*c -= 1;
 }
 
-void task_do(struct task* const t, int c, task_action ta,
+void task_do(struct task* const t, task_action ta,
 		const enum task_state onend) {
+	int c;
+	if (t->ts & TS_ESTIMATE) {
+		c = 1024*2;
+	}
+	else {
+		c = 1024 * 1024 * 16;
+	}
 	if (t->tw.tws == AT_NOWHERE) {
-		const char* const source = t->sources.arr[t->current_source]->str;
-		const size_t src_len = strnlen(t->src, PATH_MAX_LEN);
-		const size_t source_len = strnlen(source, NAME_MAX_LEN);
-		char* path = malloc(src_len+1+source_len+1);
-		memcpy(path, t->src, src_len+1);
-		size_t path_len = src_len;
-		pushd(path, &path_len, source, source_len);
-
-		t->err = tree_walk_start(&t->tw, path);
-		// TODO could just pass it       ^^^^
-		free(path);
+		t->err = tree_walk_start(&t->tw, t->src,
+			t->sources.arr[t->current_source]->str);
 		if (t->err) {
 			t->tw.tws = AT_NOWHERE;
 			return;
@@ -190,26 +214,6 @@ void task_do(struct task* const t, int c, task_action ta,
 	}
 }
 
-static int _close_files(struct task* const t) {
-	// TODO maybe too much?
-	int e = 0;
-	if (t->in != -1 && close(t->in)) e = errno;
-	if (t->out != -1 && close(t->out)) e = errno;
-	t->in = t->out = -1;
-	return e;
-}
-
-void task_clean(struct task* const t) {
-	list_free(&t->sources);
-	list_free(&t->renamed);
-	t->src = t->dst = NULL;
-	t->t = TASK_NONE;
-	t->tf = TF_NONE;
-	t->ts = TS_CLEAN;
-	t->conflicts = t->specials = t->err = 0;
-	_close_files(t);
-}
-
 static bool _files_opened(const struct task* const t) {
 	return t->out != -1 && t->in != -1;
 }
@@ -220,7 +224,7 @@ static int _open_files(struct task* const t,
 	if (t->out == -1) {
 		return errno; // TODO TODO IMPORTANT
 	}
-	t->in = creat(dst, t->tw.cs.st_mode);
+	t->in = open(dst, O_WRONLY | O_CREAT, t->tw.cs.st_mode);
 	if (t->in == -1) {
 		close(t->out);
 		t->out = -1;
@@ -266,7 +270,7 @@ static int _copy(struct task* const t,
 			return e;
 		}
 		t->size_done += wb;
-		*c -= 1;
+		*c -= wb;
 	}
 	return 0;
 }
@@ -316,11 +320,13 @@ static int _stat_file(struct tree_walk* const tw) {
 	return 0;
 }
 
-int tree_walk_start(struct tree_walk* const tw, const char* const path) {
+int tree_walk_start(struct tree_walk* const tw,
+		const char* const path, const char* const file) {
 	if (tw->path) free(tw->path);
 	tw->pathlen = strnlen(path, PATH_MAX_LEN);
 	tw->path = malloc(PATH_BUF_SIZE);
 	memcpy(tw->path, path, tw->pathlen+1);
+	pushd(tw->path, &tw->pathlen, file, strlen(file)); // TODO
 	tw->tl = false;
 	if (tw->dt) free(tw->dt);
 	tw->dt = calloc(1, sizeof(struct dirtree));
@@ -462,7 +468,7 @@ inline static int _copyremove_step(struct task* const t, int* const c) {
 		else if (t->tw.tws & AT_DIR) {
 			t->size_done += t->tw.cs.st_size;
 			t->dirs_done += 1;
-			*c -= 1;
+			*c -= t->tw.cs.st_size;
 		}
 	}
 	if (rm) {
@@ -473,7 +479,7 @@ inline static int _copyremove_step(struct task* const t, int* const c) {
 			if (!cp) {
 				t->size_done += t->tw.cs.st_size;
 				t->files_done += 1;
-				*c -= 1;
+				*c -= t->tw.cs.st_size;
 			}
 		}
 		else if (t->tw.tws & AT_DIR_END) {
@@ -482,7 +488,7 @@ inline static int _copyremove_step(struct task* const t, int* const c) {
 			}
 			t->size_done += t->tw.cs.st_size;
 			t->dirs_done += 1;
-			*c -= 1;
+			*c -= t->tw.cs.st_size;
 		}
 	}
 	return 0;

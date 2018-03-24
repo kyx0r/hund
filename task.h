@@ -31,9 +31,14 @@
 #endif
 
 #include <stdint.h>
+#include <time.h>
 
 #include "fs.h"
 #include "utf8.h"
+
+typedef unsigned long long xtime_ms_t;
+
+xtime_ms_t xtime(void);
 
 enum task_type {
 	TASK_NONE = 0,
@@ -120,9 +125,7 @@ struct task {
 	struct tree_walk tw;
 	int in, out;
 
-	fnum_t conflicts;
-	fnum_t symlinks;
-	fnum_t specials;
+	fnum_t conflicts, symlinks, specials;
 	ssize_t size_total, size_done;
 	fnum_t files_total, files_done;
 	fnum_t dirs_total, dirs_done;
@@ -137,18 +140,16 @@ void task_new(struct task* const, const enum task_type,
 		char* const, char* const,
 		const struct string_list* const,
 		const struct string_list* const);
-
+void task_clean(struct task* const);
 int task_build_path(const struct task* const, char*);
 
 typedef void (*task_action)(struct task* const, int* const);
 void task_action_chmod(struct task* const, int* const);
 void task_action_estimate(struct task* const, int* const);
 void task_action_copyremove(struct task* const, int* const);
-void task_do(struct task* const, int, task_action, const enum task_state);
+void task_do(struct task* const, task_action, const enum task_state);
 
-void task_clean(struct task* const);
-
-int tree_walk_start(struct tree_walk* const, const char* const);
+int tree_walk_start(struct tree_walk* const, const char* const, const char* const);
 void tree_walk_end(struct tree_walk* const);
 int tree_walk_step(struct tree_walk* const);
 
