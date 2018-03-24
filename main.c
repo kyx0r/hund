@@ -41,8 +41,25 @@
  * - Jump to file pointed by symlink (and return)
  * - Unify "-- *** --" indicators
  * - Processed symlinks - count processed symlinks separately
- * - Fill textbox has cursor problems
  */
+
+static char* ed[] = {"$VISUAL", "$EDITOR", "vi", NULL};
+static char* pager[] = {"$PAGER", "less", NULL};
+static char* sh[] = {"$SHELL", "sh", NULL};
+
+static char* xgetenv(char* q[]) {
+	char* r = NULL;
+	while (*q && !r) {
+		if (**q == '$') {
+			r = getenv(*q+1);
+		}
+		else {
+			return *q;
+		}
+		q += 1;
+	}
+	return r;
+}
 
 struct mark_path {
 	size_t len[2];
@@ -135,18 +152,8 @@ void marks_jump(struct ui* const i, struct marks* const m) {
 	}
 }
 
-static char* get_editor(void) {
-	char* ed = getenv("VISUAL");
-	if (!ed) ed = getenv("EDITOR");
-	if (!ed) ed = "vi";
-	return ed;
-}
-
 static int open_file_with(char* const p, char* const f) {
-	char exeimg[PATH_BUF_SIZE];
-	memcpy(exeimg, "/usr/bin/", 10);
-	memcpy(exeimg+9, p, strlen(p)+1);
-	char* const arg[] = { exeimg, f, NULL };
+	char* const arg[] = { p, f, NULL };
 	return spawn(arg, 0);
 }
 
@@ -154,7 +161,7 @@ static void open_help(struct ui* const i) {
 	int e;
 	char tmpn[] = "/tmp/hund.help.XXXXXXXX";
 	help_to_file(i, tmpn);
-	if ((e = open_file_with("less", tmpn))) {
+	if ((e = open_file_with(xgetenv(pager), tmpn))) {
 		failed(i, "spawn", strerror(e));
 	}
 	unlink(tmpn);
@@ -166,7 +173,7 @@ static int edit_list(struct string_list* const in,
 	char tmpn[] = "/tmp/hund.XXXXXXXX";
 	if ((tmpfd = mkstemp(tmpn)) == -1) return errno;
 	if ((err = list_to_file(in, tmpfd))
-	|| (err = open_file_with(get_editor(), tmpn))
+	|| (err = open_file_with(xgetenv(ed), tmpn))
 	|| (err = file_to_list(tmpfd, out))) {
 		// Failed; One operation failed, the rest was skipped.
 	}
@@ -243,9 +250,9 @@ inline static bool _solve_name_conflicts_if_any(struct ui* const i,
 		struct string_list* const s, struct string_list* const r) {
 	static const char* const question = "Conflicting names.";
 	static const struct select_option o[] = {
-		{ KUTF8("s"), "skip" },
 		{ KUTF8("r"), "rename" },
 		{ KUTF8("m"), "merge" },
+		{ KUTF8("s"), "skip" },
 		{ KUTF8("a"), "abort" }
 	};
 	int err;
@@ -254,22 +261,22 @@ inline static bool _solve_name_conflicts_if_any(struct ui* const i,
 	while (conflicts_with_existing(i->sv, r)) {
 		was_conflict = true;
 		switch (ui_select(i, question, o, 4)) {
-		case 0:
-			remove_conflicting(i->sv, s);
-			list_copy(r, s);
-			return s->len != 0;
-		case 1:
+		case 0: // rename
 			if ((err = edit_list(r, r))) {
 				failed(i, "editor", strerror(err));
 				return false;
 			}
 			break;
-		case 2:
+		case 1: // merge
 			// merge policy is chosen after estimating
 			// (if there are any conflicts in the tree)
 			list_free(r);
 			return true;
-		case 3:
+		case 2: // skip
+			remove_conflicting(i->sv, s);
+			list_copy(r, s);
+			return s->len != 0;
+		case 3: // abort
 		default:
 			return false;
 		}
@@ -283,8 +290,8 @@ inline static bool _solve_name_conflicts_if_any(struct ui* const i,
 static void prepare_task(struct ui* const i, struct task* const t,
 		const enum task_type tt) {
 	static const struct select_option o[] = {
-		{ KUTF8("n"), "no" },
 		{ KUTF8("y"), "yes" },
+		{ KUTF8("n"), "no" },
 	};
 	struct string_list S = { NULL, 0 }; // Selected
 	struct string_list R = { NULL, 0 }; // Renamed
@@ -299,7 +306,7 @@ static void prepare_task(struct ui* const i, struct task* const t,
 	}
 	enum task_flags tf = TF_NONE;
 	if (tt == TASK_CHMOD && S_ISDIR(i->perm[0])
-	&& ui_select(i, "Apply recursively?", o, 2)) {
+	&& !ui_select(i, "Apply recursively?", o, 2)) {
 		tf |= TF_RECURSIVE_CHMOD;
 	}
 	task_new(t, tt, tf, i->pv->wd, i->sv->wd, &S, &R);
@@ -440,8 +447,8 @@ static void cmd_rename(struct ui* const i) {
 	struct assign* a = NULL;
 	fnum_t al = 0;
 	static const struct select_option o[] = {
-		{ KUTF8("n"), "no" },
 		{ KUTF8("y"), "yes" },
+		{ KUTF8("n"), "no" },
 		{ KUTF8("a"), "abort" }
 	};
 	bool ok = true;
@@ -468,7 +475,7 @@ static void cmd_rename(struct ui* const i) {
 			ok = false;
 		}
 		if ((!ok || !(ok = rename_prepare(i->pv, &S, &R, &N, &a, &al)))
-		&& !ui_select(i, msg, o, 2)) {
+		&& ui_select(i, msg, o, 2) == 1) {
 			list_free(&S);
 			list_free(&R);
 			return;
@@ -514,27 +521,27 @@ inline static void cmd_cd(struct ui* const i) {
 }
 
 inline static void cmd_mkdir(struct ui* const i) {
-	// TODO errors
 	int err;
-	struct string_list F = { NULL, 0 }; // Files
+	struct string_list F = { NULL, 0 };
 	const size_t wdl = strnlen(i->pv->wd, PATH_MAX_LEN);
-	char* const path = malloc(wdl+1+NAME_BUF_SIZE);
-	memcpy(path, i->pv->wd, wdl+1);
-	size_t pathl = wdl;
-	edit_list(&F, &F);
+	char* const P = malloc(wdl+1+NAME_BUF_SIZE);
+	memcpy(P, i->pv->wd, wdl+1);
+	size_t Pl = wdl;
+	if ((err = edit_list(&F, &F))) {
+		failed(i, "mkdir", strerror(err));
+	}
 	for (fnum_t f = 0; f < F.len; ++f) {
 		if (!F.arr[f]) continue;
 		if (memchr(F.arr[f]->str, '/', F.arr[f]->len+1)) {
 			failed(i, "mkdir", "name contains '/'");
 		}
-		else if ((err = pushd(path, &pathl,
-			F.arr[f]->str, F.arr[f]->len))
-		|| (mkdir(path, MKDIR_DEFAULT_PERM) ? (err = errno) : 0)) {
+		else if ((err = pushd(P, &Pl, F.arr[f]->str, F.arr[f]->len))
+		|| (mkdir(P, MKDIR_DEFAULT_PERM) ? (err = errno) : 0)) {
 			failed(i, "mkdir", strerror(err));
 		}
-		popd(path, &pathl);
+		popd(P, &Pl);
 	}
-	free(path);
+	free(P);
 	list_free(&F);
 	ui_rescan(i, i->pv, NULL);
 }
@@ -584,6 +591,7 @@ static void cmd_mklnk(struct ui* const i) {
 	// TODO conflicts
 	//char tmpn[] = "/tmp/hund.XXXXXXXX";
 	//int tmpfd = mkstemp(tmpn);
+	int err;
 	struct string_list sf = { NULL, 0 };
 	panel_selected_to_list(i->pv, &sf);
 	size_t target_l = strnlen(i->pv->wd, PATH_MAX_LEN);
@@ -595,7 +603,10 @@ static void cmd_mklnk(struct ui* const i) {
 	for (fnum_t f = 0; f < sf.len; ++f) {
 		pushd(target, &target_l, sf.arr[f]->str, sf.arr[f]->len);
 		pushd(slpath, &slpath_l, sf.arr[f]->str, sf.arr[f]->len);
-		symlink(target, slpath); // TODO err
+		if (symlink(target, slpath)) {
+			err = errno;
+			failed(i, "mklnk", strerror(err));
+		}
 		popd(target, &target_l);
 		popd(slpath, &slpath_l);
 	}
@@ -612,8 +623,7 @@ static void cmd_quick_chmod_plus_x(struct ui* const i) {
 	struct stat s;
 	if (!(path = panel_path_to_selected(i->pv))) return;
 	if (stat(path, &s) || !S_ISREG(s.st_mode)) return;
-	const mode_t nm = s.st_mode | (S_IXUSR | S_IXGRP | S_IXOTH);
-	if (chmod(path, nm)) {
+	if (chmod(path, s.st_mode | (S_IXUSR | S_IXGRP | S_IXOTH))) {
 		int e = errno;
 		failed(i, "chmod", strerror(e));
 	}
@@ -631,6 +641,7 @@ static void cmd_command(struct ui* const i, struct task* const t,
 	i->prompt = cmd;
 
 	memcpy(i->prch, ":", 2);
+	i->prompt_cursor_pos = 1;
 	int r = 1;
 	struct input o;
 	for (;;) {
@@ -656,8 +667,7 @@ static void cmd_command(struct ui* const i, struct task* const t,
 	}
 	else if (!strcmp(cmd, "sh")) {
 		chdir(i->pv->wd);
-		char* sh = getenv("SHELL");
-		char* const arg[] = { (sh ? sh : "/usr/bin/sh"), NULL };
+		char* const arg[] = { xgetenv(sh), NULL };
 		spawn(arg, 0);
 	}
 	// lm = list marks (in pager)
@@ -849,11 +859,10 @@ static void process_input(struct ui* const i, struct task* const t,
 		prepare_task(i, t, TASK_REMOVE);
 		break;
 	case CMD_PAGER:
-		s = getenv("PAGER");
-		open_selected_with(i, (s ? s : "less"));
+		open_selected_with(i, xgetenv(pager));
 		break;
 	case CMD_EDIT_FILE:
-		open_selected_with(i, get_editor());
+		open_selected_with(i, xgetenv(ed));
 		break;
 	case CMD_QUICK_PLUS_X: // TODO
 		cmd_quick_chmod_plus_x(i);
@@ -985,7 +994,7 @@ static void task_progress(struct ui* const i,
 		struct task* const t,
 		const char* const S) {
 	i->mt = MSG_INFO;
-	int n = snprintf(i->msg, MSG_BUFFER_SIZE, // TODO
+	int n = snprintf(i->msg, MSG_BUFFER_SIZE,
 			"%s %d/%df, %d/%dd", S,
 			t->files_done, t->files_total,
 			t->dirs_done, t->dirs_total);
@@ -994,82 +1003,38 @@ static void task_progress(struct ui* const i,
 		char stota[SIZE_BUF_SIZE];
 		pretty_size(t->size_done, sdone);
 		pretty_size(t->size_total, stota);
-		snprintf(i->msg+n, MSG_BUFFER_SIZE-n,
+		n += snprintf(i->msg+n, MSG_BUFFER_SIZE-n,
 			", %s/%s", sdone, stota);
 	}
-}
-
-/* Return value: false = abort, true = go on */
-inline static bool _conflict_policy(struct ui* const i, struct task* const t) {
-	char question[64];
-	snprintf(question, sizeof(question),
-			"There are %d conflicts",
-			t->conflicts);
-	static const struct select_option o[] = {
-		{ KUTF8("s"), "skip" },
-		{ KUTF8("o"), "overwrite" },
-		{ KUTF8("a"), "abort" }
-	};
-	switch (ui_select(i, question, o, 3)) {
-	case 0:
-		t->tf |= TF_SKIP_CONFLICTS;
-		break;
-	case 1:
-		t->tf |= TF_OVERWRITE_CONFLICTS;
-		break;
-	case 2:
-		return false;
-	default:
-		break;
-	}
-	return true;
-}
-
-inline static bool _symlink_policy(struct ui* const i, struct task* const t) {
-	static const char* const q = "There are symlinks";
-	static const struct select_option o[] = {
-		{ KUTF8("r"), "raw" },
-		{ KUTF8("c"), "recalculate" },
-		{ KUTF8("d"), "dereference" },
-		{ KUTF8("s"), "skip" },
-		{ KUTF8("a"), "abort" }
-	};
-	switch (ui_select(i, q, o, 5)) {
-	case 0:
-		t->tf |= TF_RAW_LINKS;
-		break;
-	case 1:
-		t->tf |= TF_RECALCULATE_LINKS;
-		break;
-	case 2:
-		t->tf |= TF_DEREF_LINKS;
-		break;
-	case 3:
-		t->tf |= TF_SKIP_LINKS;
-		break;
-	case 4:
-		return false;
-	default:
-		break;
-	}
-	return true;
 }
 
 static void task_execute(struct ui* const i, struct task* const t) {
 	task_action ta = NULL;
 	char msg[512]; // TODO
+	char psize[SIZE_BUF_SIZE];
 	static const struct select_option remove_o[] = {
+		{ KUTF8("y"), "yes" },
 		{ KUTF8("n"), "no" },
-		{ KUTF8("y"), "yes" }
 	};
 	// TODO skip all errors, skip same errno
-	// TODO dynamically adjust task_do() iteration count
-	// to be more verbose on slow transfers
 	static const struct select_option error_o[] = {
 		{ KUTF8("t"), "try again" },
 		{ KUTF8("s"), "skip" },
 		{ KUTF8("a"), "abort" },
 	};
+	static const struct select_option conflict_o[] = {
+		{ KUTF8("o"), "overwrite" },
+		{ KUTF8("s"), "skip" },
+		{ KUTF8("a"), "abort" },
+	};
+	static const struct select_option symlink_o[] = {
+		{ KUTF8("r"), "raw" },
+		{ KUTF8("c"), "recalculate" },
+		{ KUTF8("d"), "dereference" },
+		{ KUTF8("s"), "skip" },
+		{ KUTF8("a"), "abort" },
+	};
+	static const char* const symlink_q = "There are symlinks";
 	switch (t->ts) {
 	case TS_CLEAN:
 		break;
@@ -1077,32 +1042,43 @@ static void task_execute(struct ui* const i, struct task* const t) {
 		i->timeout = 500;
 		i->m = MODE_WAIT;
 		task_progress(i, t, "--");
-		task_do(t, 1024*2, task_action_estimate, TS_CONFIRM);
+		task_do(t, task_action_estimate, TS_CONFIRM);
+		if (t->err) t->ts = TS_FAILED;
 		if (t->tw.tws == AT_LINK && !(t->tf & (TF_ANY_LINK_METHOD))) {
 			if (t->t & (TASK_COPY | TASK_MOVE)) {
-				if (!_symlink_policy(i, t)) {
-					t->ts = TS_FINISHED;
+				switch (ui_select(i, symlink_q, symlink_o, 5)) {
+				case 0: t->tf |= TF_RAW_LINKS; break;
+				case 1: t->tf |= TF_RECALCULATE_LINKS; break;
+				case 2: t->tf |= TF_DEREF_LINKS; break;
+				case 3: t->tf |= TF_SKIP_LINKS; break;
+				case 4: t->ts = TS_FINISHED; break;
+				default: break;
 				}
 			}
 			else if (t->t & TASK_REMOVE) {
 				t->tf |= TF_RAW_LINKS; // TODO
 			}
 		}
-		if (t->err) t->ts = TS_FAILED;
 		break;
 	case TS_CONFIRM:
 		t->ts = TS_RUNNING;
 		if (t->t == TASK_REMOVE) {
-			// TODO show size
+			pretty_size(t->size_total, psize);
 			snprintf(msg, sizeof(msg),
-				"Remove %u files?", t->files_total);
-			if (!ui_select(i, msg, remove_o, 2)) {
+				"Remove %u files? (%s)",
+				t->files_total, psize);
+			if (ui_select(i, msg, remove_o, 2)) {
 				t->ts = TS_FINISHED;
 			}
 		}
-		else if (t->t & (TASK_COPY | TASK_MOVE)) {
-			if ((t->conflicts && !_conflict_policy(i, t))) {
-				t->ts = TS_FINISHED;
+		else if (t->conflicts && t->t & (TASK_COPY | TASK_MOVE)) {
+			snprintf(msg, sizeof(msg),
+				"There are %d conflicts", t->conflicts);
+			switch (ui_select(i, msg, conflict_o, 3)) {
+			case 0: t->tf |= TF_OVERWRITE_CONFLICTS; break;
+			case 1: t->tf |= TF_SKIP_CONFLICTS; break;
+			case 2: t->ts = TS_FINISHED; break;
+			default: break;
 			}
 		}
 		task_progress(i, t, "==");
@@ -1116,7 +1092,7 @@ static void task_execute(struct ui* const i, struct task* const t) {
 			ta = task_action_chmod;
 		}
 		task_progress(i, t, ">>");
-		task_do(t, 1024*10, ta, TS_FINISHED);
+		task_do(t, ta, TS_FINISHED);
 		break;
 	case TS_PAUSED:
 		i->timeout = -1;
@@ -1145,10 +1121,13 @@ static void task_execute(struct ui* const i, struct task* const t) {
 			if (t->t == TASK_MOVE) {
 				jump_n_entries(i->pv, -1);
 			}
+			pretty_size(t->size_done, psize);
 			i->mt = MSG_INFO;
 			snprintf(i->msg, MSG_BUFFER_SIZE,
-				"processed %u files (%u symlinks), %u dirs",
-				t->files_done, t->symlinks, t->dirs_done);
+				"processed %u files "
+				"(%u symlinks), %u dirs; %s",
+				t->files_done, t->symlinks,
+				t->dirs_done, psize);
 		}
 		task_clean(t);
 		i->m = MODE_MANAGER;
