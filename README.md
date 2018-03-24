@@ -20,7 +20,7 @@ A minimalistic terminal file manager.
 | $EDITOR | text editor | vi |
 | $PAGER | pager | less |
 | $HOME | user's home directory | /etc/passwd |
-| $SHELL | shell to be spawned by `:sh` | /usr/bin/sh |
+| $SHELL | shell used by `:sh` | sh |
 #### Planned features
 - Calculate volume of directories
 - Filter files
