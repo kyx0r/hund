@@ -63,6 +63,7 @@ void ui_init(struct ui* const i, struct panel* const pv,
 	i->prompt_cursor_pos = i->timeout = -1;
 
 	memset(&i->B, 0, sizeof(struct append_buffer));
+	i->bottombar_offset = 0;
 
 	i->fvs[0] = i->pv = pv;
 	i->fvs[1] = i->sv = sv;
@@ -70,7 +71,7 @@ void ui_init(struct ui* const i, struct panel* const pv,
 	memset(i->il, 0, INPUT_LIST_LENGTH*sizeof(struct input));
 	i->ili = 0;
 
-	i->kmap = default_mapping; // TODO ???
+	i->kmap = default_mapping;
 	i->kml = default_mapping_length;
 	i->mks = calloc(default_mapping_length, sizeof(unsigned short));
 	//i->kmap = malloc(default_mapping_length*sizeof(struct input2cmd));
@@ -78,9 +79,9 @@ void ui_init(struct ui* const i, struct panel* const pv,
 		memcpy(&i->kmap[k], &default_mapping[k], sizeof(struct input2cmd));
 	}*/
 
-	memset(i->perm, 0, sizeof(i->perm));
-	memset(i->o, 0, sizeof(i->o));
-	memset(i->g, 0, sizeof(i->g));
+	i->perm[0] = i->perm[1] = 0;
+	i->o[0] = i->o[1] = 0;
+	i->g[0] = i->g[1] = 0;
 
 	global_i = i;
 	int err;
@@ -160,21 +161,105 @@ static size_t stringify_p(const mode_t m, char* const perms) {
 
 static size_t stringify_u(const uid_t u, char* const user) {
 	const struct passwd* const pwd = getpwuid(u);
-	if (pwd) {
-		return snprintf(user, LOGIN_BUF_SIZE, "%s", pwd->pw_name);
-	}
-	else {
-		return snprintf(user, LOGIN_BUF_SIZE, "uid:%u", u);
-	}
+	if (pwd) return snprintf(user, LOGIN_BUF_SIZE, "%s", pwd->pw_name);
+	else return snprintf(user, LOGIN_BUF_SIZE, "uid:%u", u);
 }
 
 static size_t stringify_g(const gid_t g, char* const group) {
 	const struct group* const grp = getgrgid(g);
-	if (grp) {
-		return snprintf(group, LOGIN_BUF_SIZE, "%s", grp->gr_name);
+	if (grp) return snprintf(group, LOGIN_BUF_SIZE, "%s", grp->gr_name);
+	else return snprintf(group, LOGIN_BUF_SIZE, "gid:%u", g);
+}
+
+static void _column(const enum column C, const struct file* const cfr,
+		char* const buf, const size_t bufsize, size_t* const buflen) {
+	struct tm T;
+	time_t t;
+	const char* tfmt;
+	time_t tspec;
+	switch (C) {
+		case COL_LONGATIME:
+		case COL_SHORTATIME:
+			tspec = cfr->s.st_atim.tv_sec;
+			break;
+		case COL_LONGCTIME:
+		case COL_SHORTCTIME:
+			tspec = cfr->s.st_ctim.tv_sec;
+			break;
+		case COL_LONGMTIME:
+		case COL_SHORTMTIME:
+			tspec = cfr->s.st_mtim.tv_sec;
+			break;
+		default:
+			tspec = 0;
+			break;
 	}
-	else {
-		return snprintf(group, LOGIN_BUF_SIZE, "gid:%u", g);
+	switch (C) {
+	case COL_INODE:
+		*buflen = snprintf(buf, bufsize, "%6lu", cfr->s.st_ino);
+		break;
+	case COL_LONGSIZE:
+		*buflen = snprintf(buf, bufsize, "%10lu", cfr->s.st_size);
+		break;
+	case COL_SHORTSIZE:
+		pretty_size(cfr->s.st_size, buf);
+		*buflen = strlen(buf);
+		memmove(buf+(SIZE_BUF_SIZE-1-*buflen), buf, *buflen);
+		memset(buf, ' ', (SIZE_BUF_SIZE-1-*buflen));
+		*buflen = SIZE_BUF_SIZE-1;
+		break;
+	case COL_LONGPERM:
+		*buflen = stringify_p(cfr->s.st_mode, buf);
+		buf[*buflen] = 0;
+		break;
+	case COL_SHORTPERM:
+		*buflen = snprintf(buf, bufsize,
+			"%04o", cfr->s.st_mode & 07777);
+		break;
+	case COL_UID:
+		*buflen = snprintf(buf, bufsize, "%u", cfr->s.st_uid);
+		break;
+	case COL_USER:
+		*buflen = stringify_u(cfr->s.st_uid, buf);
+		break;
+	case COL_GID:
+		*buflen = snprintf(buf, bufsize, "%u", cfr->s.st_gid);
+		break;
+	case COL_GROUP:
+		*buflen = stringify_g(cfr->s.st_gid, buf);
+		break;
+	case COL_LONGATIME:
+	case COL_LONGCTIME:
+	case COL_LONGMTIME:
+		if (!localtime_r(&tspec, &T)) {
+			memset(&T, 0, sizeof(struct tm));
+		}
+		strftime(buf, TIME_SIZE, timefmt, &T);
+		*buflen = strlen(buf);
+		break;
+	case COL_SHORTATIME:
+	case COL_SHORTCTIME:
+	case COL_SHORTMTIME:
+		t = time(NULL);
+		if (t - tspec > 60*60*24*365) {
+			tfmt = "%y'%b";
+		}
+		else if (t - tspec > 60*60*24) {
+			tfmt = "%b %d";
+		}
+		else {
+			tfmt = " %H:%M";
+		}
+		if (!localtime_r(&tspec, &T)) {
+			memset(&T, 0, sizeof(struct tm));
+		}
+		strftime(buf, TIME_SIZE, tfmt, &T);
+		*buflen = strlen(buf);
+		break;
+	default:
+		buf[0] = 0;
+		*buflen = 0;
+		break;
 	}
 }
 
@@ -195,94 +280,7 @@ static void _entry(struct ui* const i, const struct panel* const fv,
 
 	char column[48];
 	size_t cl;
-	struct tm T;
-	time_t t;
-	const char* tfmt;
-	time_t tspec;
-	switch (fv->column) {
-		case COL_LONGATIME:
-		case COL_SHORTATIME:
-			tspec = cfr->s.st_atim.tv_sec;
-			break;
-		case COL_LONGCTIME:
-		case COL_SHORTCTIME:
-			tspec = cfr->s.st_ctim.tv_sec;
-			break;
-		case COL_LONGMTIME:
-		case COL_SHORTMTIME:
-			tspec = cfr->s.st_mtim.tv_sec;
-			break;
-		default:
-			tspec = 0;
-			break;
-	}
-	switch (fv->column) {
-	case COL_INODE:
-		cl = snprintf(column, sizeof(column), "%6lu", cfr->s.st_ino);
-		break;
-	case COL_LONGSIZE:
-		cl = snprintf(column, sizeof(column), "%10lu", cfr->s.st_size);
-		break;
-	case COL_SHORTSIZE:
-		pretty_size(cfr->s.st_size, column);
-		cl = strlen(column);
-		memmove(column+(SIZE_BUF_SIZE-1-cl), column, cl);
-		memset(column, ' ', (SIZE_BUF_SIZE-1-cl));
-		cl = SIZE_BUF_SIZE-1;
-		break;
-	case COL_LONGPERM:
-		cl = stringify_p(cfr->s.st_mode, column);
-		column[cl] = 0;
-		break;
-	case COL_SHORTPERM:
-		cl = snprintf(column, sizeof(column),
-			"%04o", cfr->s.st_mode & 07777);
-		break;
-	case COL_UID:
-		cl = snprintf(column, sizeof(column), "%u", cfr->s.st_uid);
-		break;
-	case COL_USER:
-		cl = stringify_u(cfr->s.st_uid, column);
-		break;
-	case COL_GID:
-		cl = snprintf(column, sizeof(column), "%u", cfr->s.st_gid);
-		break;
-	case COL_GROUP:
-		cl = stringify_g(cfr->s.st_gid, column);
-		break;
-	case COL_LONGATIME:
-	case COL_LONGCTIME:
-	case COL_LONGMTIME:
-		if (!localtime_r(&tspec, &T)) {
-			memset(&T, 0, sizeof(struct tm));
-		}
-		strftime(column, TIME_SIZE, timefmt, &T);
-		cl = strlen(column);
-		break;
-	case COL_SHORTATIME:
-	case COL_SHORTCTIME:
-	case COL_SHORTMTIME:
-		t = time(NULL);
-		if (t - tspec > 60*60*24*365) {
-			tfmt = "%y'%b";
-		}
-		else if (t - tspec > 60*60*24) {
-			tfmt = "%b %d";
-		}
-		else {
-			tfmt = " %H:%M";
-		}
-		if (!localtime_r(&tspec, &T)) {
-			memset(&T, 0, sizeof(struct tm));
-		}
-		strftime(column, TIME_SIZE, tfmt, &T);
-		cl = strlen(column);
-		break;
-	default:
-		column[0] = 0;
-		cl = 0;
-		break;
-	}
+	_column(fv->column, cfr, column, sizeof(column), &cl);
 
 	if (1+(fv->column != COL_NONE)+cl+1 > width) return;
 	const size_t name_allowed = width - (1+(fv->column != COL_NONE)+cl+1);
@@ -445,11 +443,8 @@ static void _keyname(const struct input* const in, char* const buf) {
 		case 'I':
 			strcpy(buf, "tab");
 			break;
-		case 'J':
+		case 'M':
 			strcpy(buf, "enter");
-			break;
-		case 'H':
-			strcpy(buf, N[I_BACKSPACE]);
 			break;
 		default:
 			buf[0] = '^';
@@ -459,12 +454,13 @@ static void _keyname(const struct input* const in, char* const buf) {
 		break;
 	default:
 		strcpy(buf, N[in->t]);
+		break;
 	}
 }
 
-inline static void _find_all_keyseqs4cmd(const struct ui* const i, const enum command c,
-		const enum mode m, const struct input2cmd* ic[],
-		size_t* const ki) {
+inline static void _find_all_keyseqs4cmd(const struct ui* const i,
+		const enum command c, const enum mode m,
+		const struct input2cmd* ic[], size_t* const ki) {
 	*ki = 0;
 	for (size_t k = 0; k < i->kml; ++k) {
 		if (i->kmap[k].c != c || i->kmap[k].m != m) continue;
@@ -515,7 +511,6 @@ int help_to_file(struct ui* const i, char* const tmpn) {
 		write(tmpfd, "\n", 1);
 	}
 
-	/* COPYRIGHT NOTICE */
 	int L = 0;
 	while (more_help[L]) {
 		write(tmpfd, more_help[L], strlen(more_help[L]));
@@ -561,6 +556,7 @@ static void _panels(struct ui* const i) {
 
 static void _bottombar(struct ui* const i) {
 	append(&i->B, CSI_CLEAR_LINE);
+	i->bottombar_offset = i->B.top;
 	if (i->prompt) {
 		const size_t aw = utf8_width(i->prch);
 		const size_t pw = utf8_width(i->prompt);
@@ -573,9 +569,7 @@ static void _bottombar(struct ui* const i) {
 		}
 		append(&i->B, i->prch, aw);
 		append(&i->B, i->prompt, strlen(i->prompt));
-		if (padding) {
-			fill(&i->B, ' ', padding);
-		}
+		if (padding) fill(&i->B, ' ', padding);
 	}
 	else if (i->mt) {
 		int cp = 0;
@@ -602,12 +596,13 @@ static void _bottombar(struct ui* const i) {
 }
 
 void ui_draw(struct ui* const i) {
+	// TODO WAIT: only redraw progress
 	ui_update_geometry(i);
 	i->B.top = 0;
 	memset(i->B.buf, 0, i->B.capacity);
 	append(&i->B, CSI_CURSOR_HIDE);
 	append(&i->B, CSI_CURSOR_TOP_LEFT);
-	if (i->m == MODE_MANAGER || i->m == MODE_WAIT) { // TODO mode wait
+	if (i->m == MODE_MANAGER || i->m == MODE_WAIT) {
 		const struct file* const H = hfr(i->pv);
 		if (H) {
 			stringify_p(H->s.st_mode, i->perms);
@@ -618,10 +613,7 @@ void ui_draw(struct ui* const i) {
 			memset(i->perms, '-', 10);
 			i->user[0] = i->group[0] = 0;
 		}
-		_pathbars(i);
-		_panels(i);
-		_statusbar(i);
-		_bottombar(i);
+
 	}
 	else if (i->m == MODE_CHMOD) {
 		i->perm[1] = i->perm[0];
@@ -630,11 +622,11 @@ void ui_draw(struct ui* const i) {
 		stringify_p(i->perm[1], i->perms);
 		stringify_u(i->o[1], i->user);
 		stringify_g(i->g[1], i->group);
-		_pathbars(i);
-		_panels(i);
-		_statusbar(i);
-		_bottombar(i);
 	}
+	_pathbars(i);
+	_panels(i);
+	_statusbar(i);
+	_bottombar(i);
 	write(STDOUT_FILENO, i->B.buf, i->B.top);
 	if (i->prompt && i->prompt_cursor_pos >= 0) {
 		write(STDOUT_FILENO, CSI_CURSOR_SHOW);
@@ -676,7 +668,7 @@ void chmod_close(struct ui* const i) {
 	i->m = MODE_MANAGER;
 	free(i->path);
 	i->path = NULL;
-	memset(i->perm, 0, sizeof(i->perm));
+	i->perm[0] = i->perm[1] = 0;
 }
 
 int ui_select(struct ui* const i, const char* const q,
@@ -693,8 +685,7 @@ int ui_select(struct ui* const i, const char* const q,
 		if (j) T += snprintf(P+T, sizeof(P)-T, ", ");
 		char b[KEYNAME_BUF_SIZE];
 		_keyname(&o[j].i, b);
-		T += snprintf(P+T, sizeof(P)-T, "%s", b);
-		T += snprintf(P+T, sizeof(P)-T, "=%s", o[j].h);
+		T += snprintf(P+T, sizeof(P)-T, "%s=%s", b, o[j].h);
 	}
 	ui_draw(i);
 	struct input in;
@@ -887,6 +878,7 @@ int spawn(char* const arg[], const enum spawn_flags f) {
 	int ret = 0, status = 0, nullfd;
 	write(STDOUT_FILENO, CSI_CLEAR_ALL);
 	if ((ret = stop_raw_mode(&global_i->T))) return ret;
+	write(STDOUT_FILENO, "\r\n", 2);
 	pid_t pid = fork();
 	if (pid == 0) {
 		if (f & SF_SLIENT) {
@@ -895,7 +887,7 @@ int spawn(char* const arg[], const enum spawn_flags f) {
 			if (dup2(nullfd, STDOUT_FILENO) == -1) ret = errno;
 			close(nullfd);
 		}
-		execve(arg[0], arg, environ);
+		execvp(arg[0], arg);
 		return errno;
 	}
 	else if (pid != -1) {

@@ -34,8 +34,6 @@
 #include "utf8.h"
 #include "terminal.h"
 
-extern char** environ;
-
 #define MSG_BUFFER_SIZE 128
 #define KEYNAME_BUF_SIZE 16
 // TODO adjust KEYNAME_BUF_SIZE
@@ -665,8 +663,8 @@ struct ui {
 	bool run;
 
 	enum mode m;
-	enum msg_type mt;
 
+	enum msg_type mt;
 	char msg[MSG_BUFFER_SIZE];
 
 	char prch[16]; // TODO adjust size
@@ -677,6 +675,7 @@ struct ui {
 
 	struct append_buffer B;
 	struct termios T;
+	size_t bottombar_offset;
 
 	struct panel* fvs[2];
 	struct panel* pv;
