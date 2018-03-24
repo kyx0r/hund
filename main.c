@@ -632,10 +632,12 @@ static void cmd_quick_chmod_plus_x(struct ui* const i) {
 
 static void cmd_command(struct ui* const i, struct task* const t,
 		struct marks* const m) {
+	static char* anykey = \
+		"; read -n1 -r -p \"Press any key to continue...\" key\n"
+		"if [ \"$key\" != '' ]; then echo; fi";
 	// TODO TODO TODO
-	(void)(t);
-	(void)(m);
-	char cmd[80]; // TODO
+	(void)(t); (void)(m);
+	char cmd[1024]; // TODO
 	memset(cmd, 0, sizeof(cmd));
 	char* t_top = cmd;
 	i->prompt = cmd;
@@ -666,8 +668,15 @@ static void cmd_command(struct ui* const i, struct task* const t,
 		cmd_quick_chmod_plus_x(i);
 	}
 	else if (!strcmp(cmd, "sh")) {
-		chdir(i->pv->wd);
-		char* const arg[] = { xgetenv(sh), NULL };
+		chdir(i->pv->wd); // TODO err
+		char* const arg[] = { xgetenv(sh), "-i", NULL };
+		spawn(arg, 0);
+	}
+	else if (!memcmp(cmd, "sh ", 3)) {
+		chdir(i->pv->wd); // TODO err
+		const size_t cmdl = strnlen(cmd, sizeof(cmd)-1);
+		strcpy(cmd+cmdl, anykey);
+		char* const arg[] = { xgetenv(sh), "-i", "-c", cmd+3, NULL };
 		spawn(arg, 0);
 	}
 	// lm = list marks (in pager)

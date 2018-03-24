@@ -452,7 +452,7 @@ static const size_t default_mapping_length =
 
 static const char* const cmd_help[] = {
 	[CMD_QUIT] = "Quit hund.",
-	[CMD_HELP] = "Display help screen.",
+	[CMD_HELP] = "Display help.",
 
 	[CMD_COPY] = "Copy selected file to the other directory.",
 	[CMD_MOVE] = "Move selected file to the other directory.",
@@ -602,7 +602,8 @@ static const char* const more_help[] = {
 	"q\texit hund",
 	"h\topen help",
 	"+x\tquick chmod +x",
-	"sh\topen terminal",
+	"sh\topen shell",
+	"sh ...\texecute command in shell",
 	"",
 	"SORTING",
 	"+\tascending",
@@ -633,6 +634,9 @@ static const char* const more_help[] = {
 	"COLUMN",
 	"Only one column at a time can be displayed",
 	"Most of them are available in two versions: short and long",
+	"",
+	"MARKS",
+	"Available letters: a-zA-Z",
 	NULL,
 };
 
