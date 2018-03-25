@@ -162,17 +162,19 @@ static size_t stringify_p(const mode_t m, char* const perms) {
 static size_t stringify_u(const uid_t u, char* const user) {
 	const struct passwd* const pwd = getpwuid(u);
 	if (pwd) return snprintf(user, LOGIN_BUF_SIZE, "%s", pwd->pw_name);
-	else return snprintf(user, LOGIN_BUF_SIZE, "uid:%u", u);
+	else return snprintf(user, LOGIN_BUF_SIZE, "%u", u);
 }
 
 static size_t stringify_g(const gid_t g, char* const group) {
 	const struct group* const grp = getgrgid(g);
 	if (grp) return snprintf(group, LOGIN_BUF_SIZE, "%s", grp->gr_name);
-	else return snprintf(group, LOGIN_BUF_SIZE, "gid:%u", g);
+	else return snprintf(group, LOGIN_BUF_SIZE, "%u", g);
 }
 
 static void _column(const enum column C, const struct file* const cfr,
 		char* const buf, const size_t bufsize, size_t* const buflen) {
+	// TODO adjust width of columns
+	// TODO inode, longsize, shortsize: length may be very different
 	struct tm T;
 	time_t t;
 	const char* tfmt;
@@ -266,9 +268,6 @@ static void _column(const enum column C, const struct file* const cfr,
 static void _entry(struct ui* const i, const struct panel* const fv,
 		const size_t width, const fnum_t e) {
 	// TODO scroll filenames that are too long to fit in the panel width
-	// TODO signal invalid filenames
-	// TODO inode, longsize, shortsize: length may be very different
-	// TODO adjust width of columns
 	const struct file* const cfr = fv->file_list[e];
 	const bool hl = e == fv->selection && fv == i->pv;
 
@@ -276,7 +275,7 @@ static void _entry(struct ui* const i, const struct panel* const fv,
 	const enum theme_element fsym = mode2theme(cfr->s.st_mode);
 
 	char name[NAME_BUF_SIZE];
-	cut_unwanted(cfr->name, name, '.', NAME_BUF_SIZE);
+	const unsigned u = cut_unwanted(cfr->name, name, '.', NAME_BUF_SIZE);
 
 	char column[48];
 	size_t cl;
@@ -294,12 +293,16 @@ static void _entry(struct ui* const i, const struct panel* const fv,
 		open = '[';
 		close = ']';
 	}
+	if (u) close = '*';
 
 	append_theme(&i->B, fsym + (hl ? 1 : 0));
+	if (cfr->selected) append_attr(&i->B, ATTR_BOLD, NULL);
 	fill(&i->B, open, 1);
 	append(&i->B, name, utf8_w2nb(name, name_draw));
 	fill(&i->B, ' ', width - (1+name_draw+cl+1));
 	append(&i->B, column, cl);
+	if (u) append_attr(&i->B,
+		ATTR_YELLOW | ATTR_BOLD | ATTR_FOREGROUND, NULL);
 	fill(&i->B, close, 1);
 	append_attr(&i->B, ATTR_NORMAL, NULL);
 }
@@ -372,8 +375,8 @@ static void _statusbar(struct ui* const i) {
 				"[%u] ", i->pv->num_selected);
 	}
 	sl += snprintf(S+sl, sizeof(S)-sl, "%c%.*s",
-			(i->pv->scending > 0 ? '+' : '-'),
-			(int)FV_ORDER_SIZE, i->pv->order);
+		(i->pv->scending > 0 ? '+' : '-'),
+		(int)FV_ORDER_SIZE, i->pv->order);
 
 	const size_t cw = utf8_width(S);
 	const size_t uw = utf8_width(i->user);
