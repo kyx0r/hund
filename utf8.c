@@ -139,6 +139,7 @@ size_t utf8_cp2nb(const codepoint_t cp) {
 
 /* Glyph to width */
 size_t utf8_g2w(const codepoint_t cp) {
+	if (cp < 0x20) return 0;
 	if (cp < 0x7f) return 1;
 	if (cp_in(zero_width, zero_width_len-1, cp)) return 0;
 	if (cp_in(double_width, double_width_len-1, cp)) return 2;
@@ -228,13 +229,15 @@ size_t utf8_remove(char* const a, const size_t j) {
 /*
  * Copies only valid utf8 characters and non-control ascii to buf
  */
-void cut_unwanted(const char* str, char* buf, const char c, size_t n) {
+unsigned cut_unwanted(const char* str, char* buf, const char c, size_t n) {
+	unsigned u = 0;
 	while (*str && n) {
 		const size_t nb = utf8_g2nb(str);
 		if (!nb || (nb == 1 && *str < ' ')) {
 			*buf = c;
 			buf += 1;
 			str += 1;
+			u += 1;
 		}
 		else {
 			memcpy(buf, str, nb);
@@ -244,6 +247,7 @@ void cut_unwanted(const char* str, char* buf, const char c, size_t n) {
 		n -= 1;
 	}
 	*buf = 0; // null-terminator
+	return u;
 }
 
 /*

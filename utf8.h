@@ -40,7 +40,7 @@ bool utf8_validate(const char* const);
 void utf8_insert(char*, const char* const, const size_t);
 size_t utf8_remove(char* const, const size_t);
 
-void cut_unwanted(const char*, char*, const char, size_t);
+unsigned cut_unwanted(const char*, char*, const char, size_t);
 
 bool cp_in(const codepoint_t [][2], size_t, const codepoint_t);
 
