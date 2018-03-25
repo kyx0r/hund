@@ -96,9 +96,10 @@ void delete_file_list(struct panel* const);
 fnum_t file_on_list(const struct panel* const, const char* const);
 void file_highlight(struct panel* const, const char* const);
 
-bool file_find(struct panel* const, const char* const, fnum_t, fnum_t);
+bool file_find(struct panel* const, const char* const,
+		const fnum_t, const fnum_t);
 
-bool panel_select_file(struct panel* const);
+struct file* panel_select_file(struct panel* const);
 int panel_enter_selected_dir(struct panel* const);
 int panel_up_dir(struct panel* const);
 

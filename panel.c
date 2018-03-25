@@ -19,28 +19,13 @@
 
 #include "panel.h"
 
-/* This file contains panel-related helper functions.
- *
- * They do things that would otherwise clutter main loop.
- * The main problem that inspired separating those tasks from main loop
- * was performing visibility tests.
- *
- * They are supposed to care about:
- * - selection position and it's validity
- * - whether file is visible or not
- * - whether file_list is empty or not
- * - error codes/failure of functions that they call
- * - rescanning file_list (if needed)
- */
-
 /*
  * Checks if file is visible at the moment.
  * Invalid selections are assumed to be invisible.
  * Everything on empty list is invisible.
  * These assumptions make visible() more useful.
  *
- */
-/* Truth table - is file visible at the moment?
+ * Truth table - is file visible at the moment?
  *          file.ext | .hidden.ext
  * show_hidden = 1 |1|1|
  * show_hidden = 0 |1|0|
@@ -53,7 +38,7 @@ bool visible(const struct panel* const fv, const fnum_t i) {
 /* Highlighted File Record */
 struct file* hfr(const struct panel* const fv) {
 	return (visible(fv, fv->selection)
-			? fv->file_list[fv->selection] : NULL);
+		? fv->file_list[fv->selection] : NULL);
 }
 
 inline void first_entry(struct panel* const fv) {
@@ -88,7 +73,7 @@ void jump_n_entries(struct panel* const fv, const int n) {
 	} while (N);
 }
 
-void delete_file_list(struct panel* const fv) {
+inline void delete_file_list(struct panel* const fv) {
 	file_list_clean(&fv->file_list, &fv->num_files);
 	fv->selection = fv->num_hidden = 0;
 }
@@ -120,33 +105,19 @@ void file_highlight(struct panel* const fv, const char* const N) {
 }
 
 bool file_find(struct panel* const fv, const char* const name,
-		fnum_t start, fnum_t end) {
-	if (start <= end) {
-		for (fnum_t i = start; i <= end; ++i) {
-			if (visible(fv, i) &&
-			    contains(fv->file_list[i]->name, name)) {
-				fv->selection = i;
-				return true;
-			}
-			//if (i == end) break;
+		const fnum_t start, const fnum_t end) {
+	const int d = start <= end ? 1 : -1;
+	for (fnum_t i = start; (d > 0 ? i <= end : i >= end); i += d) {
+		if (visible(fv, i) && contains(fv->file_list[i]->name, name)) {
+			fv->selection = i;
+			return true;
 		}
-	}
-	else if (end < start) {
-		for (fnum_t i = start; i >= end; --i) {
-			if (visible(fv, i) &&
-					contains(fv->file_list[i]->name, name)) {
-				fv->selection = i;
-				return true;
-			}
-			if (i == end) break;
-			// ^ prevents unsigned integer underflow
-			// TODO do it better
-		}
+		if (i == end) break;
 	}
 	return false;
 }
 
-bool panel_select_file(struct panel* const fv) {
+struct file* panel_select_file(struct panel* const fv) {
 	struct file* fr;
 	if ((fr = hfr(fv))) {
 		if ((fr->selected = !fr->selected)) {
@@ -155,15 +126,14 @@ bool panel_select_file(struct panel* const fv) {
 		else {
 			fv->num_selected -= 1;
 		}
-		return true;
 	}
-	return false;
+	return fr;
 }
 
 int panel_enter_selected_dir(struct panel* const fv) {
 	const struct file* H;
-	if (!(H = hfr(fv))) return 0;
 	int err;
+	if (!(H = hfr(fv))) return 0;
 	if ((err = pushd(fv->wd, &fv->wdlen, H->name, H->nl))
 	|| (err = panel_scan_dir(fv))) {
 		panel_up_dir(fv);
@@ -190,12 +160,11 @@ void panel_toggle_hidden(struct panel* const fv) {
 	if (!visible(fv, fv->selection)) {
 		first_entry(fv);
 	}
-	if (!fv->show_hidden) {
-		for (fnum_t f = 0; f < fv->num_files; ++f) {
-			if (fv->file_list[f]->selected && !visible(fv, f)) {
-				fv->file_list[f]->selected = false;
-				fv->num_selected -= 1;
-			}
+	if (fv->show_hidden) return;
+	for (fnum_t f = 0; f < fv->num_files; ++f) {
+		if (fv->file_list[f]->selected && !visible(fv, f)) {
+			fv->file_list[f]->selected = false;
+			fv->num_selected -= 1;
 		}
 	}
 }
@@ -349,7 +318,8 @@ char* panel_path_to_selected(struct panel* const fv) {
 
 void panel_sorting_changed(struct panel* const fv) {
 	char before[NAME_BUF_SIZE];
-	strncpy(before, fv->file_list[fv->selection]->name, NAME_BUF_SIZE);
+	memcpy(before, fv->file_list[fv->selection]->name,
+		fv->file_list[fv->selection]->nl+1);
 	panel_sort(fv);
 	file_highlight(fv, before);
 }
@@ -358,33 +328,28 @@ void panel_sorting_changed(struct panel* const fv) {
  * If there is no selection, the highlighted file is selected
  */
 void panel_selected_to_list(struct panel* const fv,
-		struct string_list* const list) {
+		struct string_list* const L) {
+	fnum_t start = 0;
+	fnum_t stop = fv->num_files-1;
+	const struct file* fr;
 	if (!fv->num_selected) {
-		struct file* const fr = hfr(fv);
-		if (!fr) {
-			memset(list, 0, sizeof(*list));
+		if (!(fr = panel_select_file(fv))) {
+			memset(L, 0, sizeof(struct string_list));
 			return;
 		}
-		fv->num_selected = 1;
-		fr->selected = true;
-		list->len = 1;
-		list->arr = malloc(sizeof(struct string*));
-		list->arr[0] = malloc(sizeof(struct string)+fr->nl+1);
-		list->arr[0]->len = fr->nl;
-		memcpy(list->arr[0]->str, fr->name, fr->nl+1);
-		return;
+		start = fv->selection;
+		stop = fv->selection;
 	}
-	list->len = 0;
-	list->arr = calloc(fv->num_selected, sizeof(struct string*));
-	fnum_t f = 0, s = 0;
-	for (; f < fv->num_files && s < fv->num_selected; ++f) {
+	L->len = 0;
+	L->arr = calloc(fv->num_selected, sizeof(struct string*));
+	fnum_t f = start, s = 0;
+	for (; f <= stop && s < fv->num_selected; ++f) {
 		if (!fv->file_list[f]->selected) continue;
-		const char* const fn = fv->file_list[f]->name;
 		const size_t fnl = fv->file_list[f]->nl;
-		list->arr[list->len] = malloc(sizeof(struct string)+fnl+1);
-		list->arr[list->len]->len = fnl;
-		memcpy(list->arr[list->len]->str, fn, fnl+1);
-		list->len += 1;
+		L->arr[L->len] = malloc(sizeof(struct string)+fnl+1);
+		L->arr[L->len]->len = fnl;
+		memcpy(L->arr[L->len]->str, fv->file_list[f]->name, fnl+1);
+		L->len += 1;
 		s += 1;
 	}
 }
