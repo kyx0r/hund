@@ -658,6 +658,26 @@ enum msg_type {
 static const char* const timefmt = "%Y-%m-%d %H:%M:%S";
 #define TIME_SIZE (4+1+2+1+2+1+2+1+2+1+2+1)
 
+enum {
+	BUF_PATHBAR = 0,
+	BUF_PANELS,
+	BUF_STATUSBAR,
+	BUF_BOTTOMBAR,
+	BUF_NUM
+};
+
+enum dirty_flag {
+	DIRTY_PATHBAR = 1<<BUF_PATHBAR,
+	DIRTY_PANELS = 1<<BUF_PANELS,
+	DIRTY_STATUSBAR = 1<<BUF_STATUSBAR,
+	DIRTY_BOTTOMBAR = 1<<BUF_BOTTOMBAR,
+	DIRTY_ALL = DIRTY_PATHBAR|DIRTY_PANELS|DIRTY_STATUSBAR|DIRTY_BOTTOMBAR,
+};
+
+struct ui;
+
+typedef void (*draw_t)(struct ui* const, struct append_buffer* const);
+
 struct ui {
 	int scrh, scrw; // Last window dimensions
 	int pw[2]; // Panel Width
@@ -677,9 +697,10 @@ struct ui {
 
 	int timeout; // microseconds
 
-	struct append_buffer B;
+	struct append_buffer B[BUF_NUM];
+	draw_t do_draw[BUF_NUM];
+	enum dirty_flag dirty;
 	struct termios T;
-	size_t bottombar_offset;
 
 	struct panel* fvs[2];
 	struct panel* pv;

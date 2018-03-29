@@ -41,6 +41,7 @@
  * - Jump to file pointed by symlink (and return)
  * - Unify "-- *** --" indicators
  * - Processed symlinks - count processed symlinks separately
+ * - cache login/group names or entire /etc/passwd
  */
 
 static char* ed[] = {"$VISUAL", "$EDITOR", "vi", NULL};
@@ -213,6 +214,7 @@ static void cmd_find(struct ui* const i) {
 	fnum_t s = 0; // Start
 	fnum_t e = N-1; // End
 	for (;;) {
+		i->dirty |= DIRTY_PANELS|DIRTY_STATUSBAR|DIRTY_BOTTOMBAR;
 		ui_draw(i);
 		r = fill_textbox(i, t, &t_top, NAME_MAX_LEN, &o);
 		if (!r) {
@@ -558,6 +560,7 @@ inline static void cmd_change_sorting(struct ui* const i) {
 	int r;
 	i->mt = MSG_INFO;
 	strcpy(i->msg, "-- SORT --");
+	i->dirty |= DIRTY_BOTTOMBAR | DIRTY_STATUSBAR;
 	ui_draw(i);
 	for (;;) {
 		r = fill_textbox(i, buf, &top, FV_ORDER_SIZE, NULL);
@@ -568,6 +571,7 @@ inline static void cmd_change_sorting(struct ui* const i) {
 		}
 		i->mt = MSG_INFO;
 		strcpy(i->msg, "-- SORT --");
+		i->dirty |= DIRTY_BOTTOMBAR | DIRTY_STATUSBAR;
 		ui_draw(i);
 	}
 	for (size_t j = 0; j < FV_ORDER_SIZE; ++j) {
@@ -647,6 +651,7 @@ static void cmd_command(struct ui* const i, struct task* const t,
 	int r = 1;
 	struct input o;
 	for (;;) {
+		i->dirty |= DIRTY_BOTTOMBAR;
 		ui_draw(i);
 		r = fill_textbox(i, cmd, &t_top, sizeof(cmd)-1, &o);
 		if (!r) {
@@ -691,12 +696,17 @@ static void process_input(struct ui* const i, struct task* const t,
 	struct panel* tmp = NULL;
 	int err = 0;
 	fnum_t f;
+	i->dirty |= DIRTY_PANELS | DIRTY_STATUSBAR;
+	if (i->m == MODE_CHMOD) {
+		i->dirty |= DIRTY_STATUSBAR | DIRTY_BOTTOMBAR;
+	}
 	switch (get_cmd(i)) {
 	/* CHMOD */
 	case CMD_RETURN:
 		chmod_close(i);
 		break;
 	case CMD_CHANGE:
+		i->dirty |= DIRTY_STATUSBAR | DIRTY_BOTTOMBAR;
 		prepare_task(i, t, TASK_CHMOD);
 		break;
 	case CMD_CHOWN:
@@ -852,11 +862,13 @@ static void process_input(struct ui* const i, struct task* const t,
 		if (err && err != ENOTDIR) {
 			failed(i, "enter dir", strerror(err));
 		}
+		i->dirty |= DIRTY_PATHBAR;
 		break;
 	case CMD_UP_DIR:
 		if ((err = panel_up_dir(i->pv))) {
 			failed(i, "up dir", strerror(err));
 		}
+		i->dirty |= DIRTY_PATHBAR;
 		break;
 	case CMD_COPY:
 		prepare_task(i, t, TASK_COPY);
@@ -877,7 +889,7 @@ static void process_input(struct ui* const i, struct task* const t,
 		cmd_quick_chmod_plus_x(i);
 		break;
 	case CMD_OPEN_FILE:
-		open_selected_with(i, "xdg-open"); // TODO
+		open_selected_with(i, "open"); // TODO
 		break;
 	case CMD_COMMAND:
 		cmd_command(i, t, m);
@@ -957,6 +969,7 @@ static void process_input(struct ui* const i, struct task* const t,
 		break;
 	case CMD_CHMOD:
 		if ((s = panel_path_to_selected(i->pv))) {
+			i->dirty = DIRTY_STATUSBAR | DIRTY_BOTTOMBAR;
 			chmod_open(i, s);
 		}
 		else {
@@ -995,6 +1008,7 @@ static void process_input(struct ui* const i, struct task* const t,
 	case CMD_COL_LONGMTIME: i->pv->column = COL_LONGMTIME; break;
 	case CMD_COL_SHORTMTIME: i->pv->column = COL_SHORTMTIME; break;
 	default:
+		i->dirty = 0;
 		break;
 	}
 }
@@ -1003,6 +1017,7 @@ static void task_progress(struct ui* const i,
 		struct task* const t,
 		const char* const S) {
 	i->mt = MSG_INFO;
+	i->dirty |= DIRTY_BOTTOMBAR;
 	int n = snprintf(i->msg, MSG_BUFFER_SIZE,
 			"%s %d/%df, %d/%dd", S,
 			t->files_done, t->files_total,

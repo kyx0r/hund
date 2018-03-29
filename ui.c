@@ -41,13 +41,21 @@ static enum theme_element mode2theme(const mode_t m) {
 struct ui* global_i;
 static void handle_winch(int sig) {
 	if (sig != SIGWINCH) return;
-	free(global_i->B.buf);
-	global_i->B.top = global_i->B.capacity = 0;
-	global_i->B.buf = NULL;
+	for (int b = 0; b < BUF_NUM; ++b) {
+		free(global_i->B[b].buf);
+		global_i->B[b].top = global_i->B[b].capacity = 0;
+		global_i->B[b].buf = NULL;
+	}
+	global_i->dirty |= DIRTY_ALL;
 	write(STDOUT_FILENO, CSI_CLEAR_ALL);
 	ui_update_geometry(global_i);
 	ui_draw(global_i);
 }
+
+void _pathbar(struct ui* const, struct append_buffer* const);
+void _panels(struct ui* const, struct append_buffer* const);
+void _statusbar(struct ui* const, struct append_buffer* const);
+void _bottombar(struct ui* const, struct append_buffer* const);
 
 void ui_init(struct ui* const i, struct panel* const pv,
 		struct panel* const sv) {
@@ -62,8 +70,12 @@ void ui_init(struct ui* const i, struct panel* const pv,
 	i->prompt = NULL;
 	i->prompt_cursor_pos = i->timeout = -1;
 
-	memset(&i->B, 0, sizeof(struct append_buffer));
-	i->bottombar_offset = 0;
+	memset(i->B, 0, BUF_NUM*sizeof(struct append_buffer));
+	i->do_draw[BUF_PATHBAR] = _pathbar;
+	i->do_draw[BUF_PANELS] = _panels;
+	i->do_draw[BUF_STATUSBAR] = _statusbar;
+	i->do_draw[BUF_BOTTOMBAR] = _bottombar;
+	i->dirty = DIRTY_ALL;
 
 	i->fvs[0] = i->pv = pv;
 	i->fvs[1] = i->sv = sv;
@@ -101,7 +113,9 @@ void ui_end(struct ui* const i) {
 	free(i->mks);
 	write(STDOUT_FILENO, CSI_CLEAR_ALL);
 	write(STDOUT_FILENO, CSI_CURSOR_SHOW);
-	free(i->B.buf);
+	for (int b = 0; b < BUF_NUM; ++b) {
+		if (i->B[b].buf) free(i->B[b].buf);
+	}
 	int err;
 	if ((err = stop_raw_mode(&i->T))) {
 		fprintf(stderr, "failed to deinitalize screen: (%d) %s\n",
@@ -111,9 +125,9 @@ void ui_end(struct ui* const i) {
 	memset(i, 0, sizeof(struct ui));
 }
 
-static void _pathbars(struct ui* const i) {
-	append(&i->B, CSI_CLEAR_LINE);
-	append_theme(&i->B, THEME_PATHBAR);
+void _pathbar(struct ui* const i, struct append_buffer* const ab) {
+	append(ab, CSI_CLEAR_LINE);
+	append_theme(ab, THEME_PATHBAR);
 	for (size_t j = 0; j < 2; ++j) {
 		const int p = prettify_path_i(i->fvs[j]->wd);
 		const int t = p ? 1 : 0;
@@ -121,22 +135,22 @@ static void _pathbars(struct ui* const i) {
 		const size_t wdw = utf8_width(wd) + t;
 		const size_t rem = i->pw[j]-2;
 		size_t padding, wdl;
-		fill(&i->B, ' ', 1);
+		fill(ab, ' ', 1);
 		if (wdw > rem) {
 			padding = 0;
 			wd += utf8_w2nb(wd, wdw - rem) - t;
 			wdl = utf8_w2nb(wd, rem);
 		}
 		else {
-			if (t) fill(&i->B, '~', 1);
+			if (t) fill(ab, '~', 1);
 			padding = rem - wdw;
 			wdl = i->fvs[j]->wdlen - p + t;
 		}
-		append(&i->B, wd, wdl);
-		fill(&i->B, ' ', 1+padding);
+		append(ab, wd, wdl);
+		fill(ab, ' ', 1+padding);
 	}
-	append_attr(&i->B, ATTR_NORMAL, NULL);
-	append(&i->B, "\r\n", 2);
+	append_attr(ab, ATTR_NORMAL, NULL);
+	append(ab, "\r\n", 2);
 }
 
 static size_t stringify_p(const mode_t m, char* const perms) {
@@ -267,6 +281,7 @@ static void _column(const enum column C, const struct file* const cfr,
 
 static void _entry(struct ui* const i, const struct panel* const fv,
 		const size_t width, const fnum_t e) {
+	struct append_buffer* const ab = &i->B[BUF_PANELS];
 	// TODO scroll filenames that are too long to fit in the panel width
 	const struct file* const cfr = fv->file_list[e];
 	const bool hl = e == fv->selection && fv == i->pv;
@@ -295,16 +310,16 @@ static void _entry(struct ui* const i, const struct panel* const fv,
 	}
 	if (u) close = '*';
 
-	append_theme(&i->B, fsym + (hl ? 1 : 0));
-	if (cfr->selected) append_attr(&i->B, ATTR_BOLD, NULL);
-	fill(&i->B, open, 1);
-	append(&i->B, name, utf8_w2nb(name, name_draw));
-	fill(&i->B, ' ', width - (1+name_draw+cl+1));
-	append(&i->B, column, cl);
-	if (u) append_attr(&i->B,
+	append_theme(ab, fsym + (hl ? 1 : 0));
+	if (cfr->selected) append_attr(ab, ATTR_BOLD, NULL);
+	fill(ab, open, 1);
+	append(ab, name, utf8_w2nb(name, name_draw));
+	fill(ab, ' ', width - (1+name_draw+cl+1));
+	append(ab, column, cl);
+	if (u) append_attr(ab,
 		ATTR_YELLOW | ATTR_BOLD | ATTR_FOREGROUND, NULL);
-	fill(&i->B, close, 1);
-	append_attr(&i->B, ATTR_NORMAL, NULL);
+	fill(ab, close, 1);
+	append_attr(ab, ATTR_NORMAL, NULL);
 }
 
 /*
@@ -353,7 +368,7 @@ static fnum_t _start_search_index(const struct panel* const s,
 	return bi;
 }
 
-static void _statusbar(struct ui* const i) {
+void _statusbar(struct ui* const i, struct append_buffer* const ab) {
 	// TODO now that there are columns...
 	const struct file* const _hfr = hfr(i->pv);
 	struct tm T;
@@ -382,35 +397,35 @@ static void _statusbar(struct ui* const i) {
 	const size_t uw = utf8_width(i->user);
 	const size_t gw = utf8_width(i->group);
 	const size_t sw = uw+1+gw+1+10+1+TIME_SIZE+1;
-	append_theme(&i->B, THEME_STATUSBAR);
-	fill(&i->B, ' ', 1);
+	append_theme(ab, THEME_STATUSBAR);
+	fill(ab, ' ', 1);
 	if ((size_t)i->scrw < cw+sw) {
-		fill(&i->B, ' ', i->scrw-1);
-		append_attr(&i->B, ATTR_NORMAL, NULL);
-		append(&i->B, "\r\n", 2);
+		fill(ab, ' ', i->scrw-1);
+		append_attr(ab, ATTR_NORMAL, NULL);
+		append(ab, "\r\n", 2);
 		return;
 	}
-	append(&i->B, S, sl);
-	fill(&i->B, ' ', i->scrw-cw-sw); // Padding
-	append(&i->B, i->user, strnlen(i->user, LOGIN_MAX_LEN));
-	fill(&i->B, ' ', 1);
-	append(&i->B, i->group, strnlen(i->group, LOGIN_MAX_LEN));
-	fill(&i->B, ' ', 1);
-	append(&i->B, &i->perms[0], 1);
+	append(ab, S, sl);
+	fill(ab, ' ', i->scrw-cw-sw); // Padding
+	append(ab, i->user, strnlen(i->user, LOGIN_MAX_LEN));
+	fill(ab, ' ', 1);
+	append(ab, i->group, strnlen(i->group, LOGIN_MAX_LEN));
+	fill(ab, ' ', 1);
+	append(ab, &i->perms[0], 1);
 	for (size_t p = 1; p < 10; ++p) {
 		const mode_t m[2] = {
 			(i->perm[0] & 0777) & (0400 >> (p-1)),
 			(i->perm[1] & 0777) & (0400 >> (p-1))
 		};
-		if (m[0] != m[1]) append_attr(&i->B, ATTR_UNDERLINE, NULL);
-		append(&i->B, &i->perms[p], 1);
-		if (m[0] != m[1]) append_attr(&i->B, ATTR_NOT_UNDERLINE, NULL);
+		if (m[0] != m[1]) append_attr(ab, ATTR_UNDERLINE, NULL);
+		append(ab, &i->perms[p], 1);
+		if (m[0] != m[1]) append_attr(ab, ATTR_NOT_UNDERLINE, NULL);
 	}
-	fill(&i->B, ' ', 1);
-	append(&i->B, i->time, strnlen(i->time, TIME_SIZE));
-	fill(&i->B, ' ', 1);
-	append_attr(&i->B, ATTR_NORMAL, NULL);
-	append(&i->B, "\r\n", 2);
+	fill(ab, ' ', 1);
+	append(ab, i->time, strnlen(i->time, TIME_SIZE));
+	fill(ab, ' ', 1);
+	append_attr(ab, ATTR_NORMAL, NULL);
+	append(ab, "\r\n", 2);
 }
 
 static void _keyname(const struct input* const in, char* const buf) {
@@ -531,35 +546,34 @@ int help_to_file(struct ui* const i, char* const tmpn) {
 	return err;
 }
 
-static void _panels(struct ui* const i) {
+void _panels(struct ui* const i, struct append_buffer* const ab) {
 	fnum_t e[2] = {
 		_start_search_index(i->fvs[0], i->fvs[0]->num_hidden, i->ph-1),
 		_start_search_index(i->fvs[1], i->fvs[1]->num_hidden, i->ph-1),
 	};
 	for (int L = 0; L < i->ph; ++L) {
-		append(&i->B, CSI_CLEAR_LINE);
+		append(ab, CSI_CLEAR_LINE);
 		for (size_t p = 0; p < 2; ++p) {
 			const fnum_t nf = i->fvs[p]->num_files;
 			while (e[p] < nf && !visible(i->fvs[p], e[p])) {
 				e[p] += 1;
 			}
 			if (e[p] >= nf) {
-				append_theme(&i->B, THEME_OTHER);
-				fill(&i->B, ' ', i->pw[p]);
-				append_attr(&i->B, ATTR_NORMAL, NULL);
+				append_theme(ab, THEME_OTHER);
+				fill(ab, ' ', i->pw[p]);
+				append_attr(ab, ATTR_NORMAL, NULL);
 			}
 			else {
 				_entry(i, i->fvs[p], i->pw[p], e[p]);
 			}
 			e[p] += 1;
 		}
-		append(&i->B, "\r\n", 2);
+		append(ab, "\r\n", 2);
 	}
 }
 
-static void _bottombar(struct ui* const i) {
-	append(&i->B, CSI_CLEAR_LINE);
-	i->bottombar_offset = i->B.top;
+void _bottombar(struct ui* const i, struct append_buffer* const ab) {
+	append(ab, CSI_CLEAR_LINE);
 	if (i->prompt) {
 		const size_t aw = utf8_width(i->prch);
 		const size_t pw = utf8_width(i->prompt);
@@ -570,9 +584,9 @@ static void _bottombar(struct ui* const i) {
 		else {
 			padding = 0;
 		}
-		append(&i->B, i->prch, aw);
-		append(&i->B, i->prompt, strlen(i->prompt));
-		if (padding) fill(&i->B, ' ', padding);
+		append(ab, i->prch, aw);
+		append(ab, i->prompt, strlen(i->prompt));
+		if (padding) fill(ab, ' ', padding);
 	}
 	else if (i->mt) {
 		int cp = 0;
@@ -581,30 +595,25 @@ static void _bottombar(struct ui* const i) {
 		case MSG_ERROR: cp = THEME_ERROR; break;
 		default: break;
 		}
-		append_theme(&i->B, cp);
-		append(&i->B, i->msg, strlen(i->msg));
-		append_attr(&i->B, ATTR_NORMAL, NULL);
-		fill(&i->B, ' ', i->scrw-utf8_width(i->msg));
+		append_theme(ab, cp);
+		append(ab, i->msg, strlen(i->msg));
+		append_attr(ab, ATTR_NORMAL, NULL);
+		fill(ab, ' ', i->scrw-utf8_width(i->msg));
 		i->mt = MSG_NONE;
 	}
 	else if (i->m == MODE_CHMOD) {
-		append(&i->B, "-- CHMOD --", 11);
+		append(ab, "-- CHMOD --", 11);
 		char p[4+1+1+4+1+1+4+1+1+4+1];
-		fill(&i->B, ' ', i->scrw-(sizeof(p)-1)-11);
+		fill(ab, ' ', i->scrw-(sizeof(p)-1)-11);
 		snprintf(p, sizeof(p), "%04o +%04o -%04o =%04o",
 				i->perm[0] & 07777, i->plus,
 				i->minus, i->perm[1] & 07777);
-		append(&i->B, p, sizeof(p));
+		append(ab, p, sizeof(p));
 	}
 }
 
 void ui_draw(struct ui* const i) {
-	// TODO WAIT: only redraw progress
 	ui_update_geometry(i);
-	i->B.top = 0;
-	memset(i->B.buf, 0, i->B.capacity);
-	append(&i->B, CSI_CURSOR_HIDE);
-	append(&i->B, CSI_CURSOR_TOP_LEFT);
 	if (i->m == MODE_MANAGER || i->m == MODE_WAIT) {
 		const struct file* const H = hfr(i->pv);
 		if (H) {
@@ -616,7 +625,6 @@ void ui_draw(struct ui* const i) {
 			memset(i->perms, '-', 10);
 			i->user[0] = i->group[0] = 0;
 		}
-
 	}
 	else if (i->m == MODE_CHMOD) {
 		i->perm[1] = i->perm[0];
@@ -626,11 +634,16 @@ void ui_draw(struct ui* const i) {
 		stringify_u(i->o[1], i->user);
 		stringify_g(i->g[1], i->group);
 	}
-	_pathbars(i);
-	_panels(i);
-	_statusbar(i);
-	_bottombar(i);
-	write(STDOUT_FILENO, i->B.buf, i->B.top);
+	write(STDOUT_FILENO, CSI_CURSOR_HIDE); // TODO two to one
+	write(STDOUT_FILENO, CSI_CURSOR_TOP_LEFT);
+	for (int b = 0; b < BUF_NUM; ++b) {
+		if (i->dirty & (1 << b)) {
+			i->B[b].top = 0;
+			i->do_draw[b](i, &i->B[b]);
+		}
+		write(STDOUT_FILENO, i->B[b].buf, i->B[b].top);
+	}
+	i->dirty = 0;
 	if (i->prompt && i->prompt_cursor_pos >= 0) {
 		write(STDOUT_FILENO, CSI_CURSOR_SHOW);
 		move_cursor(i->scrh, i->prompt_cursor_pos%i->scrw+1);
@@ -690,6 +703,7 @@ int ui_select(struct ui* const i, const char* const q,
 		_keyname(&o[j].i, b);
 		T += snprintf(P+T, sizeof(P)-T, "%s=%s", b, o[j].h);
 	}
+	i->dirty |= DIRTY_BOTTOMBAR;
 	ui_draw(i);
 	struct input in;
 	for (;;) {
@@ -841,11 +855,13 @@ int prompt(struct ui* const i, char* const t,
 	strcpy(i->prch, ">");
 	i->prompt = t;
 	i->prompt_cursor_pos = 1;
+	i->dirty |= DIRTY_BOTTOMBAR;
 	ui_draw(i);
 	int r;
 	do {
 		r = fill_textbox(i, t, &t_top, t_size, NULL);
-		ui_draw(i); // TODO only redraw bottombar
+		i->dirty |= DIRTY_BOTTOMBAR;
+		ui_draw(i);
 	} while (r && r != -1);
 	i->prompt = NULL;
 	i->prompt_cursor_pos = -1;
@@ -859,6 +875,7 @@ int prompt(struct ui* const i, char* const t,
 bool ui_rescan(struct ui* const i, struct panel* const a,
 		struct panel* const b) {
 	int err;
+	i->dirty = DIRTY_ALL;
 	if (a && (err = panel_scan_dir(a))) {
 		failed(i, "directory scan", strerror(err));
 		return false;
@@ -873,15 +890,15 @@ bool ui_rescan(struct ui* const i, struct panel* const a,
 inline void failed(struct ui* const i, const char* const what,
 		const char* const why) {
 	i->mt = MSG_ERROR;
+	i->dirty |= DIRTY_BOTTOMBAR;
 	snprintf(i->msg, MSG_BUFFER_SIZE, "%s failed: %s", what, why);
 }
 
 int spawn(char* const arg[], const enum spawn_flags f) {
-	// TODO errors
 	int ret = 0, status = 0, nullfd;
-	write(STDOUT_FILENO, CSI_CLEAR_ALL);
+	if (write(STDOUT_FILENO, CSI_CLEAR_ALL) == -1) return errno;
 	if ((ret = stop_raw_mode(&global_i->T))) return ret;
-	write(STDOUT_FILENO, "\r\n", 2);
+	if (write(STDOUT_FILENO, "\r\n", 2) == -1) return errno;
 	pid_t pid = fork();
 	if (pid == 0) {
 		if (f & SF_SLIENT) {
@@ -894,15 +911,17 @@ int spawn(char* const arg[], const enum spawn_flags f) {
 		return errno;
 	}
 	else if (pid != -1) {
+		global_i->dirty |= DIRTY_BOTTOMBAR;
 		global_i->mt = MSG_INFO;
 		strcpy(global_i->msg, "external program is running...");
-		while (waitpid(pid, &status, 0) == -1);
+		while (waitpid(pid, &status, 0) == -1); // TODO
 	}
 	else {
 		ret = errno;
 	}
 	global_i->msg[0] = 0;
 	ret = start_raw_mode(&global_i->T);
+	global_i->dirty = DIRTY_ALL;
 	ui_draw(global_i);
 	return ret;
 }
