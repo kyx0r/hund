@@ -682,6 +682,7 @@ int ui_select(struct ui* const i, const char* const q,
 	char P[512]; // TODO
 	i->prch[0] = 0;
 	i->prompt = P;
+	i->prompt_cursor_pos = -1;
 	T += snprintf(P+T, sizeof(P)-T, "%s ", q);
 	for (size_t j = 0; j < oc; ++j) {
 		if (j) T += snprintf(P+T, sizeof(P)-T, ", ");
