@@ -163,5 +163,6 @@ size_t fill(struct append_buffer* const, const char, const size_t);
 #define CSI_CURSOR_HIDE "\x1b[?25l", 6
 #define CSI_SCREEN_ALTERNATIVE "\x1b[?47h", 6
 #define CSI_SCREEN_NORMAL "\x1b[?47l", 6
+#define CSI_CURSOR_HIDE_TOP_LEFT "\x1b[?25l\x1b[H", 9
 
 #endif

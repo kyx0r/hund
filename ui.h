@@ -674,10 +674,6 @@ enum dirty_flag {
 	DIRTY_ALL = DIRTY_PATHBAR|DIRTY_PANELS|DIRTY_STATUSBAR|DIRTY_BOTTOMBAR,
 };
 
-struct ui;
-
-typedef void (*draw_t)(struct ui* const, struct append_buffer* const);
-
 struct ui {
 	int scrh, scrw; // Last window dimensions
 	int pw[2]; // Panel Width
@@ -698,7 +694,6 @@ struct ui {
 	int timeout; // microseconds
 
 	struct append_buffer B[BUF_NUM];
-	draw_t do_draw[BUF_NUM];
 	enum dirty_flag dirty;
 	struct termios T;
 
@@ -726,6 +721,20 @@ struct ui {
 	char user[LOGIN_BUF_SIZE];
 	char group[LOGIN_BUF_SIZE];
 };
+
+typedef void (*draw_t)(struct ui* const, struct append_buffer* const);
+void ui_pathbar(struct ui* const, struct append_buffer* const);
+void ui_panels(struct ui* const, struct append_buffer* const);
+void ui_statusbar(struct ui* const, struct append_buffer* const);
+void ui_bottombar(struct ui* const, struct append_buffer* const);
+
+static const draw_t do_draw[] = {
+	[BUF_PATHBAR] = ui_pathbar,
+	[BUF_PANELS] = ui_panels,
+	[BUF_STATUSBAR] = ui_statusbar,
+	[BUF_BOTTOMBAR] = ui_bottombar,
+};
+
 
 void ui_init(struct ui* const, struct panel* const,
 		struct panel* const);

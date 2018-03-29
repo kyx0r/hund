@@ -47,15 +47,8 @@ static void handle_winch(int sig) {
 		global_i->B[b].buf = NULL;
 	}
 	global_i->dirty |= DIRTY_ALL;
-	write(STDOUT_FILENO, CSI_CLEAR_ALL);
-	ui_update_geometry(global_i);
 	ui_draw(global_i);
 }
-
-void _pathbar(struct ui* const, struct append_buffer* const);
-void _panels(struct ui* const, struct append_buffer* const);
-void _statusbar(struct ui* const, struct append_buffer* const);
-void _bottombar(struct ui* const, struct append_buffer* const);
 
 void ui_init(struct ui* const i, struct panel* const pv,
 		struct panel* const sv) {
@@ -71,10 +64,6 @@ void ui_init(struct ui* const i, struct panel* const pv,
 	i->prompt_cursor_pos = i->timeout = -1;
 
 	memset(i->B, 0, BUF_NUM*sizeof(struct append_buffer));
-	i->do_draw[BUF_PATHBAR] = _pathbar;
-	i->do_draw[BUF_PANELS] = _panels;
-	i->do_draw[BUF_STATUSBAR] = _statusbar;
-	i->do_draw[BUF_BOTTOMBAR] = _bottombar;
 	i->dirty = DIRTY_ALL;
 
 	i->fvs[0] = i->pv = pv;
@@ -125,7 +114,7 @@ void ui_end(struct ui* const i) {
 	memset(i, 0, sizeof(struct ui));
 }
 
-void _pathbar(struct ui* const i, struct append_buffer* const ab) {
+void ui_pathbar(struct ui* const i, struct append_buffer* const ab) {
 	append(ab, CSI_CLEAR_LINE);
 	append_theme(ab, THEME_PATHBAR);
 	for (size_t j = 0; j < 2; ++j) {
@@ -368,7 +357,7 @@ static fnum_t _start_search_index(const struct panel* const s,
 	return bi;
 }
 
-void _statusbar(struct ui* const i, struct append_buffer* const ab) {
+void ui_statusbar(struct ui* const i, struct append_buffer* const ab) {
 	// TODO now that there are columns...
 	const struct file* const _hfr = hfr(i->pv);
 	struct tm T;
@@ -546,7 +535,7 @@ int help_to_file(struct ui* const i, char* const tmpn) {
 	return err;
 }
 
-void _panels(struct ui* const i, struct append_buffer* const ab) {
+void ui_panels(struct ui* const i, struct append_buffer* const ab) {
 	fnum_t e[2] = {
 		_start_search_index(i->fvs[0], i->fvs[0]->num_hidden, i->ph-1),
 		_start_search_index(i->fvs[1], i->fvs[1]->num_hidden, i->ph-1),
@@ -572,7 +561,7 @@ void _panels(struct ui* const i, struct append_buffer* const ab) {
 	}
 }
 
-void _bottombar(struct ui* const i, struct append_buffer* const ab) {
+void ui_bottombar(struct ui* const i, struct append_buffer* const ab) {
 	append(ab, CSI_CLEAR_LINE);
 	if (i->prompt) {
 		const size_t aw = utf8_width(i->prch);
@@ -627,19 +616,16 @@ void ui_draw(struct ui* const i) {
 		}
 	}
 	else if (i->m == MODE_CHMOD) {
-		i->perm[1] = i->perm[0];
-		i->perm[1] |= i->plus;
-		i->perm[1] &= ~i->minus;
+		i->perm[1] = (i->perm[0] | i->plus) & ~i->minus;
 		stringify_p(i->perm[1], i->perms);
 		stringify_u(i->o[1], i->user);
 		stringify_g(i->g[1], i->group);
 	}
-	write(STDOUT_FILENO, CSI_CURSOR_HIDE); // TODO two to one
-	write(STDOUT_FILENO, CSI_CURSOR_TOP_LEFT);
+	write(STDOUT_FILENO, CSI_CURSOR_HIDE_TOP_LEFT);
 	for (int b = 0; b < BUF_NUM; ++b) {
 		if (i->dirty & (1 << b)) {
 			i->B[b].top = 0;
-			i->do_draw[b](i, &i->B[b]);
+			do_draw[b](i, &i->B[b]);
 		}
 		write(STDOUT_FILENO, i->B[b].buf, i->B[b].top);
 	}
