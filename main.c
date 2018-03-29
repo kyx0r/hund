@@ -39,7 +39,6 @@
  * - Keybindings must make more sense
  * - Pipe data to pager for showing data
  * - Jump to file pointed by symlink (and return)
- * - Unify "-- *** --" indicators
  * - Processed symlinks - count processed symlinks separately
  * - cache login/group names or entire /etc/passwd
  */
@@ -551,7 +550,6 @@ inline static void cmd_mkdir(struct ui* const i) {
 inline static void cmd_change_sorting(struct ui* const i) {
 	// TODO visibility
 	// TODO cursor
-	// TODO -- SORT --
 
 	char old[FV_ORDER_SIZE];
 	memcpy(old, i->pv->order, FV_ORDER_SIZE);
@@ -570,7 +568,6 @@ inline static void cmd_change_sorting(struct ui* const i) {
 			return;
 		}
 		i->mt = MSG_INFO;
-		strcpy(i->msg, "-- SORT --");
 		i->dirty |= DIRTY_BOTTOMBAR | DIRTY_STATUSBAR;
 		ui_draw(i);
 	}
