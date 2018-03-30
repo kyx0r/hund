@@ -46,8 +46,9 @@
 static char* ed[] = {"$VISUAL", "$EDITOR", "vi", NULL};
 static char* pager[] = {"$PAGER", "less", NULL};
 static char* sh[] = {"$SHELL", "sh", NULL};
+//static char* open[] = {"$OPEN", "open", NULL};
 
-static char* xgetenv(char* q[]) {
+char* xgetenv(char* q[]) {
 	char* r = NULL;
 	while (*q && !r) {
 		if (**q == '$') {
@@ -59,6 +60,25 @@ static char* xgetenv(char* q[]) {
 		q += 1;
 	}
 	return r;
+}
+
+int spawn_pager(int* const fd, pid_t* const pid, int* const e) {
+	int pipefd[2];
+	if (pipe(pipefd) || (*pid = fork()) == -1) {
+		*e = errno;
+		return -1;
+	}
+	if (*pid == 0) {
+		close(pipefd[1]);
+		dup2(pipefd[0], STDIN_FILENO);
+		close(pipefd[0]);
+		char* arg[] = { xgetenv(pager), "-", NULL };
+		execvp(arg[0], arg);
+		*e = errno;
+		return -1;
+	}
+	*fd = pipefd[1];
+	return *e = 0;
 }
 
 struct mark_path {
@@ -152,31 +172,49 @@ void marks_jump(struct ui* const i, struct marks* const m) {
 	}
 }
 
+int marks_to_fd(struct marks* const m, const int fd) {
+	// TODO errors
+	int err = 0;
+	struct mark_path* mp;
+	for (int i = 0; i < 0x7f; ++i) {
+		if (!(mp = marks_get(m, i))) continue;
+		char H[2] = { i, ' ' };
+		write(fd, H, 2);
+		write(fd, mp->data, mp->len[0]);
+		write(fd, "/", 1);
+		write(fd, mp->data+mp->len[0]+1, mp->len[1]);
+		write(fd, "\n", 1);
+	}
+	return err;
+}
+
+static void list_marks(struct ui* const i, struct marks* const m) {
+	int fd, e, status;
+	pid_t p;
+	if (spawn_pager(&fd, &p, &e)) {
+		failed(i, "pager", strerror(e));
+		return;
+	}
+	marks_to_fd(m, fd);
+	close(fd);
+	waitpid(p, &status, 0);
+}
+
 static int open_file_with(char* const p, char* const f) {
 	char* const arg[] = { p, f, NULL };
 	return spawn(arg, 0);
 }
 
 static void open_help(struct ui* const i) {
-	int pipefd[2], status, e;
+	int e, fd, status;
 	pid_t p;
-	if (pipe(pipefd) || (p = fork()) == -1) {
-		e = errno;
+	if (spawn_pager(&fd, &p, &e)) {
 		failed(i, "help", strerror(e));
 		return;
 	}
-	if (p == 0) {
-		close(pipefd[1]);
-		dup2(pipefd[0], STDIN_FILENO);
-		close(pipefd[0]);
-		char* arg[] = { xgetenv(pager), "-", NULL };
-		execvp(arg[0], arg);
-	}
-	else {
-		help_to_fd(i, pipefd[1]);
-		close(pipefd[1]);
-		waitpid(p, &status, 0);
-	}
+	help_to_fd(i, fd);
+	close(fd);
+	waitpid(p, &status, 0);
 }
 
 static int edit_list(struct string_list* const in,
@@ -681,6 +719,9 @@ static void cmd_command(struct ui* const i, struct task* const t,
 	else if (!strcmp(cmd, "+x")) {
 		cmd_quick_chmod_plus_x(i);
 	}
+	else if (!strcmp(cmd, "lm")) {
+		list_marks(i, m);
+	}
 	else if (!strcmp(cmd, "sh")) {
 		chdir(i->pv->wd); // TODO err
 		char* const arg[] = { xgetenv(sh), "-i", NULL };
@@ -693,7 +734,6 @@ static void cmd_command(struct ui* const i, struct task* const t,
 		char* const arg[] = { xgetenv(sh), "-i", "-c", cmd+3, NULL };
 		spawn(arg, 0);
 	}
-	// lm = list marks (in pager)
 	// open
 	// nos = no selection (like noh)
 	// ...and commands that clutter ui.h
@@ -1136,11 +1176,11 @@ static void task_execute(struct ui* const i, struct task* const t) {
 			t->tw.path, t->err, strerror(t->err));
 		t->err = 0;
 		switch (ui_select(i, msg, error_o, 3)) {
-		case 1:
-			t->err = tree_walk_step(&t->tw);
+		case 0:
 			t->ts = TS_RUNNING;
 			break;
-		case 0:
+		case 1:
+			t->err = tree_walk_step(&t->tw);
 			t->ts = TS_RUNNING;
 			break;
 		case 2:
