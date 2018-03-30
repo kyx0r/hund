@@ -62,11 +62,10 @@ char* xgetenv(char* q[]) {
 	return r;
 }
 
-int spawn_pager(int* const fd, pid_t* const pid, int* const e) {
+int pager_spawn(int* const fd, pid_t* const pid) {
 	int pipefd[2];
 	if (pipe(pipefd) || (*pid = fork()) == -1) {
-		*e = errno;
-		return -1;
+		return errno;
 	}
 	if (*pid == 0) {
 		close(pipefd[1]);
@@ -74,11 +73,16 @@ int spawn_pager(int* const fd, pid_t* const pid, int* const e) {
 		close(pipefd[0]);
 		char* arg[] = { xgetenv(pager), "-", NULL };
 		execvp(arg[0], arg);
-		*e = errno;
-		return -1;
+		return errno;
 	}
 	*fd = pipefd[1];
-	return *e = 0;
+	return 0;
+}
+
+void pager_done(const int fd, const pid_t pid) {
+	int status;
+	close(fd);
+	waitpid(pid, &status, 0);
 }
 
 struct mark_path {
@@ -87,33 +91,38 @@ struct mark_path {
 };
 
 struct marks {
-	struct mark_path* az['z'-'a'];
-	struct mark_path* AZ['Z'-'A'];
+	struct mark_path* nu['9'-'0'+1];
+	struct mark_path* az['z'-'a'+1];
+	struct mark_path* AZ['Z'-'A'+1];
 };
 
 void marks_free(struct marks* const);
-struct mark_path* marks_get(const struct marks* const, const char);
+struct mark_path** marks_get(struct marks* const, const char);
 struct mark_path* marks_set(struct marks* const, const char,
 		const char* const, size_t, const char* const, size_t);
 void marks_input(struct ui* const, struct marks* const);
 void marks_jump(struct ui* const, struct marks* const);
 
 void marks_free(struct marks* const M) {
-	for (size_t i = 0; i < 'z'-'a'; ++i) {
-		if (M->az[i]) free(M->az[i]);
-	}
-	for (size_t i = 0; i < 'Z'-'A'; ++i) {
-		if (M->AZ[i]) free(M->AZ[i]);
+	struct mark_path** mp;
+	for (char c = ' '; c < 0x7f; ++c) { // TODO
+		mp = marks_get(M, c);
+		if (!mp || !*mp) continue;
+		free(*mp);
+		*mp = NULL;
 	}
 	memset(M, 0, sizeof(struct marks));
 }
 
-struct mark_path* marks_get(const struct marks* const M, const char C) {
-	if ('a' <= C && C <= 'z') {
-		return M->az[C-'a'];
+struct mark_path** marks_get(struct marks* const M, const char C) {
+	if ('0' <= C && C <= '9') {
+		return &M->nu[C-'0'];
 	}
 	else if ('A' <= C && C <= 'Z') {
-		return M->AZ[C-'A'];
+		return &M->AZ[C-'A'];
+	}
+	else if ('a' <= C && C <= 'z') {
+		return &M->az[C-'a'];
 	}
 	return NULL;
 }
@@ -121,18 +130,9 @@ struct mark_path* marks_get(const struct marks* const M, const char C) {
 struct mark_path* marks_set(struct marks* const M, const char C,
 		const char* const wd, size_t wdlen,
 		const char* const n, size_t nlen) {
-	struct mark_path** mp;
-	if ('a' <= C && C <= 'z') {
-		mp = &M->az[C-'a'];
-	}
-	else if ('A' <= C && C <= 'Z') {
-		mp = &M->AZ[C-'A'];
-	}
-	else {
-		return NULL;
-	}
-	if (*mp) free(*mp);
-	*mp = malloc(sizeof(struct mark_path)+wdlen+1+nlen+1);
+	struct mark_path** mp = marks_get(M, C);
+	if (!mp) return NULL;
+	*mp = realloc(*mp, sizeof(struct mark_path)+wdlen+1+nlen+1);
 	memcpy((*mp)->data, wd, wdlen+1);
 	memcpy((*mp)->data+wdlen+1, n, nlen+1);
 	(*mp)->len[0] = wdlen;
@@ -152,52 +152,51 @@ void marks_input(struct ui* const i, struct marks* const m) {
 void marks_jump(struct ui* const i, struct marks* const m) {
 	const struct input in = get_input(-1);
 	if (in.t != I_UTF8) return;
-	struct mark_path* mp = marks_get(m, in.utf[0]);
-	if (!mp) {
+	struct mark_path** mp = marks_get(m, in.utf[0]);
+	if (!mp || !*mp) {
 		failed(i, "jump to mark", "Unknown mark");
 		return;
 	}
-	mp->data[mp->len[0]] = '/';
-	if (access(mp->data, F_OK)) {
+	(*mp)->data[(*mp)->len[0]] = '/';
+	if (access((*mp)->data, F_OK)) {
 		int e = errno;
 		failed(i, "jump to mark", strerror(e));
-		mp->data[mp->len[0]] = 0;
+		(*mp)->data[(*mp)->len[0]] = 0;
 		return;
 	}
-	mp->data[mp->len[0]] = 0;
-	memcpy(i->pv->wd, mp->data, mp->len[0]+1);
-	i->pv->wdlen = mp->len[0];
+	(*mp)->data[(*mp)->len[0]] = 0;
+	memcpy(i->pv->wd, (*mp)->data, (*mp)->len[0]+1);
+	i->pv->wdlen = (*mp)->len[0];
 	if (ui_rescan(i, i->pv, NULL)) {
-		file_highlight(i->pv, mp->data+mp->len[0]+1);
+		file_highlight(i->pv, (*mp)->data+(*mp)->len[0]+1);
 	}
 }
 
 int marks_to_fd(struct marks* const m, const int fd) {
 	// TODO errors
 	int err = 0;
-	struct mark_path* mp;
-	for (int i = 0; i < 0x7f; ++i) {
-		if (!(mp = marks_get(m, i))) continue;
+	struct mark_path** mp;
+	for (int i = ' '; i < 0x7f; ++i) { // TODO
+		if (!(mp = marks_get(m, i)) || !*mp) continue;
 		char H[2] = { i, ' ' };
 		write(fd, H, 2);
-		write(fd, mp->data, mp->len[0]);
+		write(fd, (*mp)->data, (*mp)->len[0]);
 		write(fd, "/", 1);
-		write(fd, mp->data+mp->len[0]+1, mp->len[1]);
+		write(fd, (*mp)->data+(*mp)->len[0]+1, (*mp)->len[1]);
 		write(fd, "\n", 1);
 	}
 	return err;
 }
 
-static void list_marks(struct ui* const i, struct marks* const m) {
-	int fd, e, status;
+static inline void list_marks(struct ui* const i, struct marks* const m) {
+	int fd, e;
 	pid_t p;
-	if (spawn_pager(&fd, &p, &e)) {
+	if ((e = pager_spawn(&fd, &p))) {
 		failed(i, "pager", strerror(e));
 		return;
 	}
 	marks_to_fd(m, fd);
-	close(fd);
-	waitpid(p, &status, 0);
+	pager_done(fd, p);
 }
 
 static int open_file_with(char* const p, char* const f) {
@@ -206,15 +205,14 @@ static int open_file_with(char* const p, char* const f) {
 }
 
 static void open_help(struct ui* const i) {
-	int e, fd, status;
+	int e, fd;
 	pid_t p;
-	if (spawn_pager(&fd, &p, &e)) {
+	if ((e = pager_spawn(&fd, &p))) {
 		failed(i, "help", strerror(e));
 		return;
 	}
 	help_to_fd(i, fd);
-	close(fd);
-	waitpid(p, &status, 0);
+	pager_done(fd, p);
 }
 
 static int edit_list(struct string_list* const in,
@@ -686,8 +684,8 @@ static void cmd_command(struct ui* const i, struct task* const t,
 	static char* anykey = \
 		"; read -n1 -r -p \"Press any key to continue...\" key\n"
 		"if [ \"$key\" != '' ]; then echo; fi";
-	// TODO TODO TODO
-	(void)(t); (void)(m);
+	(void)(t);
+	int e;
 	char cmd[1024]; // TODO
 	memset(cmd, 0, sizeof(cmd));
 	char* t_top = cmd;
@@ -709,34 +707,52 @@ static void cmd_command(struct ui* const i, struct task* const t,
 			return;
 		}
 	}
+	i->dirty |= DIRTY_BOTTOMBAR;
 	i->prompt = NULL;
 	if (!strcmp(cmd, "q")) {
 		i->run = false;
 	}
-	else if (!strcmp(cmd, "h")) {
+	else if (!strcmp(cmd, "h") || !strcmp(cmd, "help")) {
 		open_help(i);
 	}
 	else if (!strcmp(cmd, "+x")) {
+		i->dirty |= DIRTY_STATUSBAR; // TODO
 		cmd_quick_chmod_plus_x(i);
 	}
 	else if (!strcmp(cmd, "lm")) {
 		list_marks(i, m);
 	}
 	else if (!strcmp(cmd, "sh")) {
-		chdir(i->pv->wd); // TODO err
+		if (chdir(i->pv->wd)) {
+			e = errno;
+			failed(i, "chdir", strerror(e));
+			return;
+		}
 		char* const arg[] = { xgetenv(sh), "-i", NULL };
 		spawn(arg, 0);
 	}
 	else if (!memcmp(cmd, "sh ", 3)) {
-		chdir(i->pv->wd); // TODO err
+		if (chdir(i->pv->wd)) {
+			e = errno;
+			failed(i, "chdir", strerror(e));
+			return;
+		}
 		const size_t cmdl = strnlen(cmd, sizeof(cmd)-1);
 		strcpy(cmd+cmdl, anykey);
 		char* const arg[] = { xgetenv(sh), "-i", "-c", cmd+3, NULL };
 		spawn(arg, 0);
 	}
-	// open
-	// nos = no selection (like noh)
-	// ...and commands that clutter ui.h
+	else if (!memcmp(cmd, "set ", 4)) {
+		// ...
+	}
+	else if (!strcmp(cmd, "noh") || !strcmp(cmd, "nos")) {
+		i->dirty |= DIRTY_PANELS | DIRTY_STATUSBAR;
+		i->pv->num_selected = 0; // TODO duplicate?
+		for (fnum_t f = 0; f < i->pv->num_files; ++f) {
+			i->pv->file_list[f]->selected = false;
+		}
+	}
+	// else if TODO
 }
 
 static void process_input(struct ui* const i, struct task* const t,
@@ -934,9 +950,6 @@ static void process_input(struct ui* const i, struct task* const t,
 	case CMD_EDIT_FILE:
 		open_selected_with(i, xgetenv(ed));
 		break;
-	case CMD_QUICK_PLUS_X: // TODO
-		cmd_quick_chmod_plus_x(i);
-		break;
 	case CMD_OPEN_FILE:
 		open_selected_with(i, "open"); // TODO
 		break;
@@ -972,7 +985,7 @@ static void process_input(struct ui* const i, struct task* const t,
 			}
 		}
 		break;
-	case CMD_SELECT_NONE:
+	case CMD_SELECT_NONE: // TODO duplicate?
 		i->pv->num_selected = 0;
 		for (fnum_t f = 0; f < i->pv->num_files; ++f) {
 			i->pv->file_list[f]->selected = false;
