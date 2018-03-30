@@ -739,7 +739,7 @@ static const draw_t do_draw[] = {
 void ui_init(struct ui* const, struct panel* const,
 		struct panel* const);
 void ui_end(struct ui* const);
-int help_to_file(struct ui* const, char* const tmpn);
+int help_to_fd(struct ui* const, const int);
 void ui_draw(struct ui* const);
 void ui_update_geometry(struct ui* const);
 

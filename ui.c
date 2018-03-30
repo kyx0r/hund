@@ -483,9 +483,8 @@ inline static void _find_all_keyseqs4cmd(const struct ui* const i,
  * TODO ambiguity: there is no difference between tab (3 ascii keys)
  *      and tab (1 special key) + others
  */
-int help_to_file(struct ui* const i, char* const tmpn) {
-	int err = 0, tmpfd;
-	if ((tmpfd = mkstemp(tmpn)) == -1) return errno;
+int help_to_fd(struct ui* const i, const int tmpfd) {
+	int err = 0;
 	for (size_t m = 0; m < MODE_NUM; ++m) {
 		/* MODE TITLE */
 		write(tmpfd, mode_strings[m], strlen(mode_strings[m]));
@@ -531,7 +530,6 @@ int help_to_file(struct ui* const i, char* const tmpn) {
 		write(tmpfd, "\n", 1);
 		L += 1;
 	}
-	close(tmpfd);
 	return err;
 }
 
@@ -883,11 +881,14 @@ inline void failed(struct ui* const i, const char* const what,
 
 int spawn(char* const arg[], const enum spawn_flags f) {
 	int ret = 0, status = 0, nullfd;
+	pid_t pid;
 	if (write(STDOUT_FILENO, CSI_CLEAR_ALL) == -1) return errno;
 	if ((ret = stop_raw_mode(&global_i->T))) return ret;
 	if (write(STDOUT_FILENO, "\r\n", 2) == -1) return errno;
-	pid_t pid = fork();
-	if (pid == 0) {
+	if ((pid = fork()) == -1) {
+		ret = errno;
+	}
+	else if (pid == 0) {
 		if (f & SF_SLIENT) {
 			nullfd = open("/dev/null", O_WRONLY, 0100);
 			if (dup2(nullfd, STDERR_FILENO) == -1) ret = errno;
@@ -897,14 +898,11 @@ int spawn(char* const arg[], const enum spawn_flags f) {
 		execvp(arg[0], arg);
 		return errno;
 	}
-	else if (pid != -1) {
+	else {
 		global_i->dirty |= DIRTY_BOTTOMBAR;
 		global_i->mt = MSG_INFO;
 		strcpy(global_i->msg, "external program is running...");
-		while (waitpid(pid, &status, 0) == -1); // TODO
-	}
-	else {
-		ret = errno;
+		waitpid(pid, &status, 0);
 	}
 	global_i->msg[0] = 0;
 	ret = start_raw_mode(&global_i->T);

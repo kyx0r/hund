@@ -37,10 +37,10 @@
  * - Rename/copy/move: display conflicts in list and allow user to browse the list
  * - Creating links: offer relative or absolute link path
  * - Keybindings must make more sense
- * - Pipe data to pager for showing data
  * - Jump to file pointed by symlink (and return)
  * - Processed symlinks - count processed symlinks separately
  * - cache login/group names or entire /etc/passwd
+ * - Use piped less more
  */
 
 static char* ed[] = {"$VISUAL", "$EDITOR", "vi", NULL};
@@ -158,13 +158,25 @@ static int open_file_with(char* const p, char* const f) {
 }
 
 static void open_help(struct ui* const i) {
-	int e;
-	char tmpn[] = "/tmp/hund.help.XXXXXXXX";
-	help_to_file(i, tmpn);
-	if ((e = open_file_with(xgetenv(pager), tmpn))) {
-		failed(i, "spawn", strerror(e));
+	int pipefd[2], status, e;
+	pid_t p;
+	if (pipe(pipefd) || (p = fork()) == -1) {
+		e = errno;
+		failed(i, "help", strerror(e));
+		return;
 	}
-	unlink(tmpn);
+	if (p == 0) {
+		close(pipefd[1]);
+		dup2(pipefd[0], STDIN_FILENO);
+		close(pipefd[0]);
+		char* arg[] = { xgetenv(pager), "-", NULL };
+		execvp(arg[0], arg);
+	}
+	else {
+		help_to_fd(i, pipefd[1]);
+		close(pipefd[1]);
+		waitpid(p, &status, 0);
+	}
 }
 
 static int edit_list(struct string_list* const in,
