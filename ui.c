@@ -695,6 +695,7 @@ int ui_select(struct ui* const i, const char* const q,
 		in = get_input(i->timeout);
 		for (size_t j = 0; j < oc; ++j) {
 			if (!memcmp(&in, &o[j].i, sizeof(struct input))) {
+				i->dirty |= DIRTY_BOTTOMBAR;
 				i->prompt = NULL;
 				i->timeout = oldtimeout;
 				return j;
@@ -775,7 +776,7 @@ enum command get_cmd(struct ui* const i) {
  * Unhandled inputs are put into 'o' (if not NULL) and 2 is returned
  */
 int fill_textbox(struct ui* const I, char* const buf, char** const buftop,
-	const size_t bsize, struct input* const o) {
+		const size_t bsize, struct input* const o) {
 	const struct input i = get_input(I->timeout);
 	if (i.t == I_NONE) return 1;
 	if (IS_CTRL(i, '[') || i.t == I_ESCAPE) return -1;
@@ -848,6 +849,7 @@ int prompt(struct ui* const i, char* const t,
 		i->dirty |= DIRTY_BOTTOMBAR;
 		ui_draw(i);
 	} while (r && r != -1);
+	i->dirty |= DIRTY_BOTTOMBAR;
 	i->prompt = NULL;
 	i->prompt_cursor_pos = -1;
 	return r;
