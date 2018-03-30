@@ -79,8 +79,82 @@ void file_list_clean(struct file*** const fl, fnum_t* const nf) {
  * nf = Number of Files
  * nhf = Number of Hidden Files
  */
+
+struct node {
+	struct node* next;
+	struct file* file;
+};
+
 int scan_dir(const char* const wd, struct file*** const fl,
 		fnum_t* const nf, fnum_t* const nhf) {
+#if 1
+	DIR* dir = opendir(wd);
+	if (!dir) return errno;
+	const size_t wdlen = strnlen(wd, PATH_MAX_LEN);
+
+	char fpath[PATH_BUF_SIZE];
+	memcpy(fpath, wd, wdlen+1);
+	size_t fpathlen = wdlen;
+
+	file_list_clean(fl, nf);
+	*nhf = 0;
+
+	int err = 0;
+	struct node *H = NULL, *tmp;
+	struct dirent* de;
+	struct file* nfr;
+	while ((de = readdir(dir)) != NULL) {
+		if (DOTDOT(de->d_name)) continue;
+		*nf += 1;
+		const size_t nl = strnlen(de->d_name, NAME_MAX_LEN);
+		if (!(tmp = calloc(1, sizeof(struct node)))
+		|| !(nfr = malloc(sizeof(struct file)+nl+1))) {
+			err = errno;
+			if (tmp) free(tmp);
+			while (H) {
+				tmp = H;
+				H = H->next;
+				if (tmp->file) free(tmp->file);
+				free(tmp);
+			}
+			*nf = *nhf = 0;
+			break;
+		}
+		tmp->next = H;
+		tmp->file = nfr;
+		H = tmp;
+
+		if (de->d_name[0] == '.') {
+			*nhf += 1;
+		}
+		nfr->selected = false;
+		nfr->nl = (unsigned char)nl;
+		memcpy(nfr->name, de->d_name, nl+1);
+
+		if (!(err = pushd(fpath, &fpathlen, nfr->name, nl))) {
+			if (lstat(fpath, &nfr->s)) {
+				err = errno;
+				memset(&nfr->s, 0, sizeof(struct stat));
+			}
+			popd(fpath, &fpathlen);
+		}
+		else {
+			memset(&nfr->s, 0, sizeof(struct stat));
+		}
+	}
+
+	*fl = calloc(*nf, sizeof(struct file*));
+	fnum_t i = 0;
+	while (H) {
+		tmp = H;
+		H = H->next;
+		(*fl)[i] = tmp->file;
+		free(tmp);
+		i += 1;
+	}
+	closedir(dir);
+	return err;
+#else
 	size_t wdlen = strnlen(wd, PATH_MAX_LEN);
 	file_list_clean(fl, nf);
 	*nhf = 0;
@@ -134,6 +208,7 @@ int scan_dir(const char* const wd, struct file*** const fl,
 	}
 	closedir(dir);
 	return err;
+#endif
 }
 
 /*
@@ -284,7 +359,7 @@ int cd(char* const current, size_t* const cl,
 		rem -= 1;
 	}
 	else {
-		if (!memcmp(dest, "/", 2)) {
+		if (dest[0] == '/' && dest[1] == 0) {
 			B[0] = 0;
 			Bl = 0;
 		}
@@ -304,14 +379,14 @@ int cd(char* const current, size_t* const cl,
 		if (!b) b = a+rem;
 		else rem -= 1;
 
-		if (b-a == 1 && !memcmp(a, ".", 1));
-		else if (b-a == 2 && !memcmp(a, "..", 2)) {
+		if (b-a == 1 && *a == '.');
+		else if (b-a == 2 && a[0] == '.' && a[1] == '.') {
 			while (Bl > 0 && B[Bl-1] != '/') {
 				B[--Bl] = 0;
 			}
 			B[--Bl] = 0;
 		}
-		else if (b-a == 1 && a == dest && !memcmp(a, "~", 1)) {
+		else if (b-a == 1 && a == dest && a[0] == '~') {
 			const char* const home = get_home();
 			const size_t hl = strnlen(home, PATH_MAX_LEN);
 			memcpy(B, home, hl);
@@ -454,8 +529,9 @@ int file_to_list(const int fd, struct string_list* const list) {
 			return e;
 		}
 		if (!rd && !*name) break;
-		nl = memchr(name, '\n', sizeof(name));
-		if (!nl && !(nl = memchr(name, 0, sizeof(name)))) {
+		;
+		if (!(nl = memchr(name, '\n', sizeof(name)))
+		&& !(nl = memchr(name, 0, sizeof(name)))) {
 			list_free(list);
 			return ENAMETOOLONG;
 		}
