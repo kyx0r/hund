@@ -149,7 +149,8 @@ void task_action_estimate(struct task* const, int* const);
 void task_action_copyremove(struct task* const, int* const);
 void task_do(struct task* const, task_action, const enum task_state);
 
-int tree_walk_start(struct tree_walk* const, const char* const, const char* const);
+int tree_walk_start(struct tree_walk* const, const char* const,
+		const char* const, const size_t);
 void tree_walk_end(struct tree_walk* const);
 int tree_walk_step(struct tree_walk* const);
 

@@ -33,7 +33,7 @@ void task_new(struct task* const t, const enum task_type tp,
 	t->t = tp;
 	t->ts = TS_ESTIMATE;
 	t->tf = tf;
-	t->src = src;
+	t->src = src; // TODO lengths
 	t->dst = dst;
 	t->sources = *sources;
 	t->renamed = *renamed;
@@ -49,13 +49,10 @@ void task_new(struct task* const t, const enum task_type tp,
 	memset(&t->tw, 0, sizeof(struct tree_walk));
 }
 
-static int _close_files(struct task* const t) {
-	// TODO maybe too much?
-	int e = 0;
-	if (t->in != -1 && close(t->in)) e = errno;
-	if (t->out != -1 && close(t->out)) e = errno;
+static void _close_files(struct task* const t) {
+	if (t->in != -1) close(t->in);
+	if (t->out != -1) close(t->out);
 	t->in = t->out = -1;
-	return e;
 }
 
 void task_clean(struct task* const t) {
@@ -70,6 +67,7 @@ void task_clean(struct task* const t) {
 }
 
 int task_build_path(const struct task* const t, char* R) {
+	// TODO
 	// TODO be smarter about checking the length
 	const char* S = NULL;
 	const char* D = NULL;
@@ -82,6 +80,7 @@ int task_build_path(const struct task* const t, char* R) {
 		old_len += 1+strnlen(S, NAME_MAX_LEN);
 	}
 	char* const _R = R;
+	memset(_R, 0, PATH_BUF_SIZE);
 	const size_t dst_len = strnlen(t->dst, PATH_MAX_LEN);
 	memcpy(R, t->dst, dst_len);
 	R += dst_len;
@@ -109,12 +108,15 @@ int task_build_path(const struct task* const t, char* R) {
 		P += 1;
 		old_len -= 1;
 	}
-	const size_t ppart = t->tw.pathlen-old_len+1;
+	const size_t ppart = t->tw.pathlen-old_len;
 	if ((R - _R)+ppart > PATH_MAX_LEN) {
 		memset(_R, 0, PATH_BUF_SIZE);
 		return ENAMETOOLONG;
 	}
 	memcpy(R, P, ppart);
+	if (*(R+ppart-1) == '/') { // TODO
+		*(R+ppart-1) = 0;
+	}
 	return 0;
 }
 
@@ -188,7 +190,8 @@ void task_do(struct task* const t, task_action ta,
 	}
 	if (t->tw.tws == AT_NOWHERE) {
 		t->err = tree_walk_start(&t->tw, t->src,
-			t->sources.arr[t->current_source]->str);
+			t->sources.arr[t->current_source]->str,
+			t->sources.arr[t->current_source]->len);
 		if (t->err) {
 			t->tw.tws = AT_NOWHERE;
 			return;
@@ -256,7 +259,8 @@ static int _copy(struct task* const t,
 		rb = read(t->out, buf, sizeof(buf));
 		if (!rb) { // done copying
 			t->files_done += 1;
-			return _close_files(t);
+			_close_files(t);
+			return e;
 		}
 		if (rb == -1) {
 			e = errno;
@@ -321,12 +325,14 @@ static int _stat_file(struct tree_walk* const tw) {
 }
 
 int tree_walk_start(struct tree_walk* const tw,
-		const char* const path, const char* const file) {
+		const char* const path,
+		const char* const file,
+		const size_t file_len) {
 	if (tw->path) free(tw->path);
 	tw->pathlen = strnlen(path, PATH_MAX_LEN);
 	tw->path = malloc(PATH_BUF_SIZE);
 	memcpy(tw->path, path, tw->pathlen+1);
-	pushd(tw->path, &tw->pathlen, file, strlen(file)); // TODO
+	pushd(tw->path, &tw->pathlen, file, file_len);
 	tw->tl = false;
 	if (tw->dt) free(tw->dt);
 	tw->dt = calloc(1, sizeof(struct dirtree));
