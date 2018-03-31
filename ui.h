@@ -128,58 +128,12 @@ enum command {
 	CMD_CHOWN,
 	CMD_CHGRP,
 
-	CMD_A_PLUS_R,
-	CMD_A_MINUS_R,
-
-	CMD_A_PLUS_W,
-	CMD_A_MINUS_W,
-
-	CMD_A_PLUS_X,
-	CMD_A_MINUS_X,
-
-	CMD_U_PLUS_R,
-	CMD_U_MINUS_R,
-
-	CMD_U_PLUS_W,
-	CMD_U_MINUS_W,
-
-	CMD_U_PLUS_X,
-	CMD_U_MINUS_X,
-
-	CMD_U_PLUS_IOX,
-	CMD_U_MINUS_IOX,
-
-	CMD_G_PLUS_R,
-	CMD_G_MINUS_R,
-
-	CMD_G_PLUS_W,
-	CMD_G_MINUS_W,
-
-	CMD_G_PLUS_X,
-	CMD_G_MINUS_X,
-
-	CMD_G_PLUS_IOX,
-	CMD_G_MINUS_IOX,
-
-	CMD_O_PLUS_R,
-	CMD_O_MINUS_R,
-
-	CMD_O_PLUS_W,
-	CMD_O_MINUS_W,
-
-	CMD_O_PLUS_X,
-	CMD_O_MINUS_X,
-
-	CMD_O_PLUS_SB,
-	CMD_O_MINUS_SB,
-
-	CMD_U_ZERO,
-	CMD_G_ZERO,
-	CMD_O_ZERO,
-
-	CMD_U_RESET,
-	CMD_G_RESET,
-	CMD_O_RESET,
+	CMD_A,
+	CMD_U,
+	CMD_G,
+	CMD_O,
+	CMD_PL,
+	CMD_MI,
 
 	CMD_TASK_QUIT,
 	CMD_TASK_PAUSE,
@@ -384,58 +338,12 @@ static struct input2cmd default_mapping[] = {
 	{ { KUTF8("c"), KUTF8("o") }, MODE_CHMOD, CMD_CHOWN },
 	{ { KUTF8("c"), KUTF8("g") }, MODE_CHMOD, CMD_CHGRP },
 
-	{ { KUTF8("+"), KUTF8("r") }, MODE_CHMOD, CMD_A_PLUS_R, },
-	{ { KUTF8("-"), KUTF8("r") }, MODE_CHMOD, CMD_A_MINUS_R, },
-
-	{ { KUTF8("+"), KUTF8("w") }, MODE_CHMOD, CMD_A_PLUS_W, },
-	{ { KUTF8("-"), KUTF8("w") }, MODE_CHMOD, CMD_A_MINUS_W, },
-
-	{ { KUTF8("+"), KUTF8("x") }, MODE_CHMOD, CMD_A_PLUS_X, },
-	{ { KUTF8("-"), KUTF8("x") }, MODE_CHMOD, CMD_A_MINUS_X, },
-
-	{ { KUTF8("u"), KUTF8("+"), KUTF8("r") }, MODE_CHMOD, CMD_U_PLUS_R, },
-	{ { KUTF8("u"), KUTF8("-"), KUTF8("r") }, MODE_CHMOD, CMD_U_MINUS_R, },
-
-	{ { KUTF8("u"), KUTF8("+"), KUTF8("w") }, MODE_CHMOD, CMD_U_PLUS_W, },
-	{ { KUTF8("u"), KUTF8("-"), KUTF8("w") }, MODE_CHMOD, CMD_U_MINUS_W, },
-
-	{ { KUTF8("u"), KUTF8("+"), KUTF8("x") }, MODE_CHMOD, CMD_U_PLUS_X, },
-	{ { KUTF8("u"), KUTF8("-"), KUTF8("x") }, MODE_CHMOD, CMD_U_MINUS_X, },
-
-	{ { KUTF8("u"), KUTF8("+"), KUTF8("s") }, MODE_CHMOD, CMD_U_PLUS_IOX, },
-	{ { KUTF8("u"), KUTF8("-"), KUTF8("s") }, MODE_CHMOD, CMD_U_MINUS_IOX, },
-
-	{ { KUTF8("g"), KUTF8("+"), KUTF8("r") }, MODE_CHMOD, CMD_G_PLUS_R, },
-	{ { KUTF8("g"), KUTF8("-"), KUTF8("r") }, MODE_CHMOD, CMD_G_MINUS_R, },
-
-	{ { KUTF8("g"), KUTF8("+"), KUTF8("w") }, MODE_CHMOD, CMD_G_PLUS_W, },
-	{ { KUTF8("g"), KUTF8("-"), KUTF8("w") }, MODE_CHMOD, CMD_G_MINUS_W, },
-
-	{ { KUTF8("g"), KUTF8("+"), KUTF8("x") }, MODE_CHMOD, CMD_G_PLUS_X, },
-	{ { KUTF8("g"), KUTF8("-"), KUTF8("x") }, MODE_CHMOD, CMD_G_MINUS_X, },
-
-	{ { KUTF8("g"), KUTF8("+"), KUTF8("s") }, MODE_CHMOD, CMD_G_PLUS_IOX, },
-	{ { KUTF8("g"), KUTF8("-"), KUTF8("s") }, MODE_CHMOD, CMD_G_MINUS_IOX, },
-
-	{ { KUTF8("o"), KUTF8("+"), KUTF8("r") }, MODE_CHMOD, CMD_O_PLUS_R, },
-	{ { KUTF8("o"), KUTF8("-"), KUTF8("r") }, MODE_CHMOD, CMD_O_MINUS_R, },
-
-	{ { KUTF8("o"), KUTF8("+"), KUTF8("w") }, MODE_CHMOD, CMD_O_PLUS_W, },
-	{ { KUTF8("o"), KUTF8("-"), KUTF8("w") }, MODE_CHMOD, CMD_O_MINUS_W, },
-
-	{ { KUTF8("o"), KUTF8("+"), KUTF8("x") }, MODE_CHMOD, CMD_O_PLUS_X, },
-	{ { KUTF8("o"), KUTF8("-"), KUTF8("x") }, MODE_CHMOD, CMD_O_MINUS_X, },
-
-	{ { KUTF8("+"), KUTF8("t") }, MODE_CHMOD, CMD_O_PLUS_SB, },
-	{ { KUTF8("-"), KUTF8("t") }, MODE_CHMOD, CMD_O_MINUS_SB, },
-
-	{ { KUTF8("u"), KUTF8("0") }, MODE_CHMOD, CMD_U_ZERO, },
-	{ { KUTF8("g"), KUTF8("0") }, MODE_CHMOD, CMD_G_ZERO, },
-	{ { KUTF8("o"), KUTF8("0") }, MODE_CHMOD, CMD_O_ZERO, },
-
-	{ { KUTF8("u"), KUTF8("=") }, MODE_CHMOD, CMD_U_RESET, },
-	{ { KUTF8("g"), KUTF8("=") }, MODE_CHMOD, CMD_G_RESET, },
-	{ { KUTF8("o"), KUTF8("=") }, MODE_CHMOD, CMD_O_RESET, },
+	{ { KUTF8("a") }, MODE_CHMOD, CMD_A, },
+	{ { KUTF8("u") }, MODE_CHMOD, CMD_U, },
+	{ { KUTF8("g") }, MODE_CHMOD, CMD_G, },
+	{ { KUTF8("o") }, MODE_CHMOD, CMD_O, },
+	{ { KUTF8("+") }, MODE_CHMOD, CMD_PL, },
+	{ { KUTF8("-") }, MODE_CHMOD, CMD_MI, },
 
 	/* MODE WAIT */
 	{ { KUTF8("q"), KUTF8("q") }, MODE_WAIT, CMD_TASK_QUIT },
@@ -526,58 +434,12 @@ static const char* const cmd_help[] = {
 	[CMD_CHOWN] = "Change owner of file",
 	[CMD_CHGRP] = "Change group of file",
 
-	[CMD_A_PLUS_R] = "Add read permission",
-	[CMD_A_MINUS_R] = "Remove read permission",
-
-	[CMD_A_PLUS_W] = "Add write permission",
-	[CMD_A_MINUS_W] = "Remove write permission",
-
-	[CMD_A_PLUS_X] = "Add execute permission",
-	[CMD_A_MINUS_X] = "Remove execute permission",
-
-	[CMD_U_PLUS_R] = "Add read permission for owner",
-	[CMD_U_MINUS_R] = "Remove read permission for owner",
-
-	[CMD_U_PLUS_W] = "Add write permission for owner",
-	[CMD_U_MINUS_W] = "Remove write permission for owner",
-
-	[CMD_U_PLUS_X] = "Add execute permission for owner",
-	[CMD_U_MINUS_X] = "Remove execute permission for owner",
-
-	[CMD_U_PLUS_IOX] = "Set user ID on execution",
-	[CMD_U_MINUS_IOX] = "Unset user ID on execution",
-
-	[CMD_G_PLUS_R] = "Add read permission for group",
-	[CMD_G_MINUS_R] = "Remove read permission for group",
-
-	[CMD_G_PLUS_W] = "Add write permission for group",
-	[CMD_G_MINUS_W] = "Remove write permission for group",
-
-	[CMD_G_PLUS_X] = "Add execute permission for group",
-	[CMD_G_MINUS_X] = "Remove execute permission for group",
-
-	[CMD_G_PLUS_IOX] = "Set group ID on execution",
-	[CMD_G_MINUS_IOX] = "Unset group ID on execution",
-
-	[CMD_O_PLUS_R] = "Add read permission for others",
-	[CMD_O_MINUS_R] = "Remove read permission for others",
-
-	[CMD_O_PLUS_W] = "Add write permission for others",
-	[CMD_O_MINUS_W] = "Remove write permission for others",
-
-	[CMD_O_PLUS_X] = "Add execute permission for others",
-	[CMD_O_MINUS_X] = "Remove execute permission for others",
-
-	[CMD_O_PLUS_SB] = "Set sticky bit",
-	[CMD_O_MINUS_SB] = "Unset sticky bit",
-
-	[CMD_U_ZERO] = "Remove all permissions for owner",
-	[CMD_G_ZERO] = "Remove all permissions for group",
-	[CMD_O_ZERO] = "Remove all permissions for others",
-
-	[CMD_U_RESET] = "Reset permission masks for owner",
-	[CMD_G_RESET] = "Reset permission masks for group",
-	[CMD_O_RESET] = "Reset permission masks for others",
+	[CMD_A] = "Modify permissions for all",
+	[CMD_U] = "Modify permissions for owner",
+	[CMD_G] = "Modify permissions for group",
+	[CMD_O] = "Modify permissions for others",
+	[CMD_PL] = "Add permissions for all",
+	[CMD_MI] = "Remove permissions for all",
 
 	[CMD_TASK_QUIT] = "Abort task",
 	[CMD_TASK_PAUSE] = "Pause task",
@@ -621,7 +483,7 @@ static const char* const more_help[] = {
 	"G\tsort by group name",
 	"*\treversing order of sorting makes them last",
 	"Most important sorting key is at the end",
-	"EXAPLES",
+	"EXAMPLES",
 	"+d\tdirectories are first",
 	"-d\tdirectories are last",
 	"+xd\tdirectories are first",
@@ -637,6 +499,9 @@ static const char* const more_help[] = {
 	"m<letter>\tSet mark",
 	"'<letter>\tGoto mark",
 	"Available letters: 0-9 A-Z a-z",
+	"",
+	"CHMOD",
+	"", // TODO
 	NULL,
 };
 

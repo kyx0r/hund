@@ -739,6 +739,62 @@ static void interpeter(struct ui* const i, struct task* const t,
 	}
 }
 
+static void _perm(struct ui* const i, const bool unset, const int mask) {
+	mode_t* m[2] = { &i->plus, &i->minus, };
+	struct input in = get_input(i->timeout);
+	if (in.t != I_UTF8) return;
+	#define REL(M) do { \
+		*m[0] |= (mask & (M)); \
+		*m[1] &= ~(mask & (M)); \
+	} while (0);
+	#define SET(M) do { \
+		*m[0] = (~mask & *m[0]) | (mask & (M)); \
+		*m[1] = (~mask & *m[1]) | (mask & ~(M)); \
+	} while (0);
+	if (in.utf[0] == '+' || in.utf[0] == '-') {
+		in = get_input(i->timeout);
+		if (in.t != I_UTF8) return;
+		if (unset || in.utf[0] == '-') {
+			mode_t* tmp = m[0];
+			m[0] = m[1];
+			m[1] = tmp;
+		}
+		switch (in.utf[0]) {
+		case '0': REL(00000); break;
+		case 'x':
+		case '1': REL(00111); break;
+		case 'w':
+		case '2': REL(00222); break;
+		case '3': REL(00333); break;
+		case 'r':
+		case '4': REL(00444); break;
+		case '5': REL(00555); break;
+		case '6': REL(00666); break;
+		case '7': REL(00777); break;
+		case 't': REL(07000); break;
+		}
+	}
+	else {
+		switch (in.utf[0]) {
+		case '0': SET(00000); break;
+		case '1': SET(00111); break;
+		case '2': SET(00222); break;
+		case '3': SET(00333); break;
+		case '4': SET(00444); break;
+		case '5': SET(00555); break;
+		case '6': SET(00666); break;
+		case '7': SET(00777); break;
+		case 'r': REL(00444); break;
+		case 'w': REL(00222); break;
+		case 'x': REL(00111); break;
+		case 't': REL(07000); break;
+		case '=': i->plus = i->minus = 0; break;
+		}
+	}
+	#undef REL
+	#undef SET
+}
+
 static void cmd_command(struct ui* const i, struct task* const t,
 		struct marks* const m) {
 	(void)(t);
@@ -822,66 +878,12 @@ static void process_input(struct ui* const i, struct task* const t,
 		free(s);
 		break;
 
-	#define PLUS(m) i->plus |= (m); i->minus &= ~(m);
-	#define MINUS(m) i->minus |= (m); i->plus &= ~(m);
-	#define RESET(m) i->plus &= ~(m); i->minus &= ~(m);
-
-	case CMD_A_PLUS_R: PLUS(S_IRUSR | S_IRGRP | S_IROTH); break;
-	case CMD_A_MINUS_R: MINUS(S_IRUSR | S_IRGRP | S_IROTH); break;
-
-	case CMD_A_PLUS_W: PLUS(S_IWUSR | S_IWGRP | S_IWOTH); break;
-	case CMD_A_MINUS_W: MINUS(S_IWUSR | S_IWGRP | S_IWOTH); break;
-
-	case CMD_A_PLUS_X: PLUS(S_IXUSR | S_IXGRP | S_IXOTH); break;
-	case CMD_A_MINUS_X: MINUS(S_IXUSR | S_IXGRP | S_IXOTH); break;
-
-	case CMD_U_PLUS_R: PLUS(S_IRUSR); break;
-	case CMD_U_MINUS_R: MINUS(S_IRUSR); break;
-
-	case CMD_U_PLUS_W: PLUS(S_IWUSR); break;
-	case CMD_U_MINUS_W: MINUS(S_IWUSR) break;
-
-	case CMD_U_PLUS_X: PLUS(S_IXUSR); break;
-	case CMD_U_MINUS_X: MINUS(S_IXUSR); break;
-
-	case CMD_U_PLUS_IOX: PLUS(S_ISUID); break;
-	case CMD_U_MINUS_IOX: MINUS(S_ISUID); break;
-
-	case CMD_G_PLUS_R: PLUS(S_IRGRP); break;
-	case CMD_G_MINUS_R: MINUS(S_IRGRP); break;
-
-	case CMD_G_PLUS_W: PLUS(S_IWGRP); break;
-	case CMD_G_MINUS_W: MINUS(S_IWGRP); break;
-
-	case CMD_G_PLUS_X: PLUS(S_IXGRP); break;
-	case CMD_G_MINUS_X: MINUS(S_IXGRP); break;
-
-	case CMD_G_PLUS_IOX: PLUS(S_ISGID); break;
-	case CMD_G_MINUS_IOX: MINUS(S_ISGID); break;
-
-	case CMD_O_PLUS_R: PLUS(S_IROTH); break;
-	case CMD_O_MINUS_R: MINUS(S_IROTH); break;
-
-	case CMD_O_PLUS_W: PLUS(S_IWOTH); break;
-	case CMD_O_MINUS_W: MINUS(S_IWOTH); break;
-
-	case CMD_O_PLUS_X: PLUS(S_IXOTH); break;
-	case CMD_O_MINUS_X: MINUS(S_IXOTH); break;
-
-	case CMD_O_PLUS_SB: PLUS(S_ISVTX); break;
-	case CMD_O_MINUS_SB: MINUS(S_ISVTX); break;
-
-	case CMD_U_ZERO: MINUS(S_IRUSR | S_IWUSR | S_IXUSR); break;
-	case CMD_G_ZERO: MINUS(S_IRGRP | S_IWGRP | S_IXGRP); break;
-	case CMD_O_ZERO: MINUS(S_IROTH | S_IWOTH | S_IXOTH); break;
-
-	case CMD_U_RESET: RESET(S_IRUSR | S_IWUSR | S_IXUSR); break;
-	case CMD_G_RESET: RESET(S_IRGRP | S_IWGRP | S_IXGRP); break;
-	case CMD_O_RESET: RESET(S_IROTH | S_IWOTH | S_IXOTH); break;
-
-	#undef PLUS
-	#undef MINUS
-	#undef RESET
+	case CMD_A: _perm(i, false, 00777); break;
+	case CMD_U: _perm(i, false, S_ISUID | 0700); break;
+	case CMD_G: _perm(i, false, S_ISGID | 0070); break;
+	case CMD_O: _perm(i, false, S_ISVTX | 0007); break;
+	case CMD_PL: _perm(i, false, 0777); break;
+	case CMD_MI: _perm(i, true, 0777); break;
 
 	/* WAIT */
 	case CMD_TASK_QUIT:
@@ -1064,6 +1066,7 @@ static void process_input(struct ui* const i, struct task* const t,
 	case CMD_SORT_CHANGE:
 		cmd_change_sorting(i);
 		break;
+	// TODO CMD_COL_CHG, same as chmod
 	case CMD_COL_NONE: i->pv->column = COL_NONE; break;
 	case CMD_COL_INODE: i->pv->column = COL_INODE; break;
 	case CMD_COL_LONGSIZE: i->pv->column = COL_LONGSIZE; break;
@@ -1269,13 +1272,11 @@ int main(int argc, char* argv[]) {
 	static const char* const help = \
 	"Usage: hund [OPTION...] [left panel] [right panel]\n"
 	"Options:\n"
-	"  -c, --chdir=PATH      change initial directory\n"
 	"  -h, --help            display this help message\n"
 	"Type `?` while in hund for more help\n";
 
-	static const char sopt[] = "hc:";
+	static const char sopt[] = "h:";
 	static const struct option lopt[] = {
-		{"chdir", required_argument, 0, 'c'},
 		{"help", no_argument, 0, 'h'},
 		{0, 0, 0, 0}
 	};
@@ -1283,15 +1284,6 @@ int main(int argc, char* argv[]) {
 	int err;
 	while ((o = getopt_long(argc, argv, sopt, lopt, &opti)) != -1) {
 		switch (o) {
-		case 'c':
-			if (chdir(optarg)) {
-				err = errno;
-				fprintf(stderr, "chdir failed:"
-						" %s (%d)\n",
-						strerror(err), err);
-				exit(EXIT_FAILURE);
-			}
-			break;
 		case 'h':
 			printf("%s", help);
 			exit(EXIT_SUCCESS);
