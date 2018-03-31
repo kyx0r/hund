@@ -60,7 +60,7 @@ void task_clean(struct task* const t) {
 	list_free(&t->renamed);
 	t->src = t->dst = NULL;
 	t->t = TASK_NONE;
-	t->tf = TF_NONE;
+	t->tf = 0;
 	t->ts = TS_CLEAN;
 	t->conflicts = t->specials = t->err = 0;
 	_close_files(t);
@@ -245,8 +245,8 @@ static int _open_files(struct task* const t,
 	return 0;
 }
 
-static int _copy(struct task* const t,
-		const char* const src, const char* const dst, int* const c) {
+static int _copy(struct task* const t, const char* const src,
+		const char* const dst, int* const c) {
 	char buf[BUFSIZ];
 	// TODO if it fails at any point it should seek back
 	// to enable retrying
@@ -410,11 +410,15 @@ int tree_walk_step(struct tree_walk* const tw) {
 }
 
 inline static int _copyremove_step(struct task* const t, int* const c) {
+	// TODO absolute mess; simplify
+	// TODO skipped counter
 	char np[PATH_BUF_SIZE];
 	const bool cp = t->t & (TASK_COPY | TASK_MOVE);
 	const bool rm = t->t & (TASK_MOVE | TASK_REMOVE);
-	const bool sc = t->tf & TF_SKIP_CONFLICTS;
 	const bool ov = t->tf & TF_OVERWRITE_CONFLICTS;
+	int err = 0;
+
+	/* QUICK MOVE */
 	if ((t->t & TASK_MOVE) && same_fs(t->src, t->dst)) {
 		task_build_path(t, np);
 		if (rename(t->tw.path, np)) {
@@ -426,23 +430,36 @@ inline static int _copyremove_step(struct task* const t, int* const c) {
 		t->dirs_done = t->dirs_total;
 		return 0;
 	}
-	int err = 0;
+
+	/* SKIP LINKS FLAG */
 	if ((t->tw.tws & AT_LINK) && (t->tf & TF_SKIP_LINKS)) {
 		return 0;
 	}
+
+	/* COPYING */
 	if (cp) {
 		task_build_path(t, np);
+
+		/* IF DESTINATION EXISTS */
 		if (!access(np, F_OK)) {
-			if (sc) return 0;
-			if (ov && (t->tw.tws & (AT_FILE | AT_LINK))) {
-				if (unlink(np)) return errno;
+			if (t->tf & TF_SKIP_CONFLICTS) return 0;
+			if (ov || (t->tf & TF_OVERWRITE_ONCE)) {
+				t->tf &= ~TF_OVERWRITE_ONCE;
+				if ((t->tw.tws & (AT_FILE | AT_LINK))
+					&& unlink(np)) return errno;
+			}
+			else if (t->tf & TF_ASK_CONFLICTS) {
+				return EEXIST;
 			}
 		}
+
 		switch (t->tw.tws) {
 		case AT_FILE:
 			if ((err = _copy(t, t->tw.path, np, c))) {
 				return err;
 			}
+			/* Opened = unfinished.
+			 * Next call will push copying forward. */
 			if (_files_opened(t)) {
 				return 0;
 			}
@@ -455,26 +472,28 @@ inline static int _copyremove_step(struct task* const t, int* const c) {
 				err = link_copy_recalculate(t->src,
 						t->tw.path, np);
 			}
+			if (err) return err;
+			t->size_done += t->tw.cs.st_size;
+			t->files_done += 1;
 			break;
 		case AT_DIR:
 			if (mkdir(np, t->tw.cs.st_mode)) {
+				/* TODO
+				 * One cannot remove non-empty directory
+				 * to prevent EEXIST error on overwrite flag
+				 */
 				err = errno;
+				if (ov && err == EEXIST) {
+					err = 0;
+				}
 			}
-			break;
-		default:
-			break;
-		}
-		if (err && !((sc || ov) && err == EEXIST)) {
-			return err;
-		}
-		if (t->tw.tws & AT_LINK) {
-			t->size_done += t->tw.cs.st_size;
-			t->files_done += 1;
-		}
-		else if (t->tw.tws & AT_DIR) {
+			if (err) return err;
 			t->size_done += t->tw.cs.st_size;
 			t->dirs_done += 1;
 			*c -= t->tw.cs.st_size;
+			break;
+		default:
+			break;
 		}
 	}
 	if (rm) {
@@ -482,7 +501,7 @@ inline static int _copyremove_step(struct task* const t, int* const c) {
 			if (unlink(t->tw.path)) {
 				return errno;
 			}
-			if (!cp) {
+			if (!cp) { // TODO
 				t->size_done += t->tw.cs.st_size;
 				t->files_done += 1;
 				*c -= t->tw.cs.st_size;
@@ -502,7 +521,7 @@ inline static int _copyremove_step(struct task* const t, int* const c) {
 
 void task_action_copyremove(struct task* const t, int* const c) {
 	if ((t->err = _copyremove_step(t, c))
-	|| (t->in != -1 || t->out != -1)
+	|| (_files_opened(t))
 	|| (t->err = tree_walk_step(&t->tw))) {
 		return;
 	}

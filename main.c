@@ -34,13 +34,15 @@
 /*
  * GENERAL TODO
  * - Dir scanning via task?
- * - Rename/copy/move: display conflicts in list and allow user to browse the list
  * - Creating links: offer relative or absolute link path
  * - Keybindings must make more sense
  * - Jump to file pointed by symlink (and return)
- * - Processed symlinks - count processed symlinks separately
  * - cache login/group names or entire /etc/passwd
  * - Use piped less more
+ * - Add marks jumping INTO directories, not exact entries
+ * - Shorten chmod commands to limited, initial commands:
+ *   { a, +, -, u, g, o } -> { r, w, x, 0..7, = }
+ * - Display input buffer.
  */
 
 static char* ed[] = {"$VISUAL", "$EDITOR", "vi", NULL};
@@ -261,7 +263,7 @@ static void cmd_find(struct ui* const i) {
 	fnum_t s = 0; // Start
 	fnum_t e = N-1; // End
 	for (;;) {
-		i->dirty |= DIRTY_PANELS|DIRTY_STATUSBAR|DIRTY_BOTTOMBAR;
+		i->dirty |= DIRTY_PANELS | DIRTY_STATUSBAR | DIRTY_BOTTOMBAR;
 		ui_draw(i);
 		r = fill_textbox(i, t, &t_top, NAME_MAX_LEN, &o);
 		if (!r) {
@@ -287,6 +289,7 @@ static void cmd_find(struct ui* const i) {
 		}
 		file_find(i->pv, t, s, e);
 	}
+	i->dirty |= DIRTY_PANELS | DIRTY_STATUSBAR | DIRTY_BOTTOMBAR;
 	i->prompt = NULL;
 }
 
@@ -353,7 +356,7 @@ static void prepare_task(struct ui* const i, struct task* const t,
 			return;
 		}
 	}
-	enum task_flags tf = TF_NONE;
+	enum task_flags tf = 0;
 	if (tt == TASK_CHMOD && S_ISDIR(i->perm[0])
 	&& !ui_select(i, "Apply recursively?", o, 2)) {
 		tf |= TF_RECURSIVE_CHMOD;
@@ -596,7 +599,6 @@ inline static void cmd_mkdir(struct ui* const i) {
 }
 
 inline static void cmd_change_sorting(struct ui* const i) {
-	// TODO visibility
 	// TODO cursor
 
 	char old[FV_ORDER_SIZE];
@@ -679,14 +681,68 @@ static void cmd_quick_chmod_plus_x(struct ui* const i) {
 	ui_rescan(i, i->pv, NULL);
 }
 
-static void cmd_command(struct ui* const i, struct task* const t,
-		struct marks* const m) {
+static void interpeter(struct ui* const i, struct task* const t,
+		struct marks* const m, char* const line) {
 	static char* anykey = \
 		"; read -n1 -r -p \"Press any key to continue...\" key\n"
 		"if [ \"$key\" != '' ]; then echo; fi";
-	(void)(t);
 	int e;
-	char cmd[1024]; // TODO
+	(void)(t);
+	if (!strcmp(line, "q")) {
+		i->run = false;
+	}
+	else if (!strcmp(line, "h") || !strcmp(line, "help")) {
+		open_help(i);
+	}
+	else if (!strcmp(line, "+x")) {
+		i->dirty |= DIRTY_STATUSBAR; // TODO
+		cmd_quick_chmod_plus_x(i);
+	}
+	else if (!strcmp(line, "lm")) {
+		list_marks(i, m);
+	}
+	else if (!strcmp(line, "sh")) {
+		if (chdir(i->pv->wd)) {
+			e = errno;
+			failed(i, "chdir", strerror(e));
+			return;
+		}
+		char* const arg[] = { xgetenv(sh), "-i", NULL };
+		spawn(arg, 0);
+	}
+	else if (!memcmp(line, "sh ", 3)) {
+		if (chdir(i->pv->wd)) {
+			e = errno;
+			failed(i, "chdir", strerror(e));
+			return;
+		}
+		const size_t linel = strnlen(line, sizeof(line)-1);
+		strcpy(line+linel, anykey);
+		char* const arg[] = { xgetenv(sh), "-i", "-c", line+3, NULL };
+		spawn(arg, 0);
+	}
+	else if (!memcmp(line, "m ", 2)) {
+		// ...
+	}
+	else if (!memcmp(line, "set ", 4)) {
+		// ...
+	}
+	else if (!strcmp(line, "noh") || !strcmp(line, "nos")) {
+		i->dirty |= DIRTY_PANELS | DIRTY_STATUSBAR;
+		i->pv->num_selected = 0; // TODO duplicate?
+		for (fnum_t f = 0; f < i->pv->num_files; ++f) {
+			i->pv->file_list[f]->selected = false;
+		}
+	}
+	else {
+		failed(i, "interpreter", "Unrecognized command"); // TODO
+	}
+}
+
+static void cmd_command(struct ui* const i, struct task* const t,
+		struct marks* const m) {
+	(void)(t);
+	char cmd[1024];
 	memset(cmd, 0, sizeof(cmd));
 	char* t_top = cmd;
 	i->prompt = cmd;
@@ -709,50 +765,7 @@ static void cmd_command(struct ui* const i, struct task* const t,
 	}
 	i->dirty |= DIRTY_BOTTOMBAR;
 	i->prompt = NULL;
-	if (!strcmp(cmd, "q")) {
-		i->run = false;
-	}
-	else if (!strcmp(cmd, "h") || !strcmp(cmd, "help")) {
-		open_help(i);
-	}
-	else if (!strcmp(cmd, "+x")) {
-		i->dirty |= DIRTY_STATUSBAR; // TODO
-		cmd_quick_chmod_plus_x(i);
-	}
-	else if (!strcmp(cmd, "lm")) {
-		list_marks(i, m);
-	}
-	else if (!strcmp(cmd, "sh")) {
-		if (chdir(i->pv->wd)) {
-			e = errno;
-			failed(i, "chdir", strerror(e));
-			return;
-		}
-		char* const arg[] = { xgetenv(sh), "-i", NULL };
-		spawn(arg, 0);
-	}
-	else if (!memcmp(cmd, "sh ", 3)) {
-		if (chdir(i->pv->wd)) {
-			e = errno;
-			failed(i, "chdir", strerror(e));
-			return;
-		}
-		const size_t cmdl = strnlen(cmd, sizeof(cmd)-1);
-		strcpy(cmd+cmdl, anykey);
-		char* const arg[] = { xgetenv(sh), "-i", "-c", cmd+3, NULL };
-		spawn(arg, 0);
-	}
-	else if (!memcmp(cmd, "set ", 4)) {
-		// ...
-	}
-	else if (!strcmp(cmd, "noh") || !strcmp(cmd, "nos")) {
-		i->dirty |= DIRTY_PANELS | DIRTY_STATUSBAR;
-		i->pv->num_selected = 0; // TODO duplicate?
-		for (fnum_t f = 0; f < i->pv->num_files; ++f) {
-			i->pv->file_list[f]->selected = false;
-		}
-	}
-	// else if TODO
+	interpeter(i, t, m, cmd);
 }
 
 static void process_input(struct ui* const i, struct task* const t,
@@ -1108,9 +1121,16 @@ static void task_execute(struct ui* const i, struct task* const t) {
 		{ KUTF8("s"), "skip" },
 		{ KUTF8("a"), "abort" },
 	};
-	static const struct select_option conflict_o[] = {
+	static const struct select_option manual_o[] = {
 		{ KUTF8("o"), "overwrite" },
+		{ KUTF8("O"), "overwrite all" },
 		{ KUTF8("s"), "skip" },
+		{ KUTF8("S"), "skip all" },
+	};
+	static const struct select_option conflict_o[] = {
+		{ KUTF8("i"), "ask" },
+		{ KUTF8("o"), "overwrite all" },
+		{ KUTF8("s"), "skip all" },
 		{ KUTF8("a"), "abort" },
 	};
 	static const struct select_option symlink_o[] = {
@@ -1160,10 +1180,11 @@ static void task_execute(struct ui* const i, struct task* const t) {
 		else if (t->conflicts && t->t & (TASK_COPY | TASK_MOVE)) {
 			snprintf(msg, sizeof(msg),
 				"There are %d conflicts", t->conflicts);
-			switch (ui_select(i, msg, conflict_o, 3)) {
-			case 0: t->tf |= TF_OVERWRITE_CONFLICTS; break;
-			case 1: t->tf |= TF_SKIP_CONFLICTS; break;
-			case 2: t->ts = TS_FINISHED; break;
+			switch (ui_select(i, msg, conflict_o, 4)) {
+			case 0: t->tf |= TF_ASK_CONFLICTS; break;
+			case 1: t->tf |= TF_OVERWRITE_CONFLICTS; break;
+			case 2: t->tf |= TF_SKIP_CONFLICTS; break;
+			case 3: t->ts = TS_FINISHED; break;
 			default: break;
 			}
 		}
@@ -1187,19 +1208,40 @@ static void task_execute(struct ui* const i, struct task* const t) {
 	case TS_FAILED:
 		snprintf(msg, sizeof(msg), "@ %s\r\n(%d) %s.",
 			t->tw.path, t->err, strerror(t->err));
-		t->err = 0;
-		switch (ui_select(i, msg, error_o, 3)) {
-		case 0:
+		if (t->err == EEXIST) {
+			switch (ui_select(i, msg, manual_o, 4)) {
+			case 0:
+				t->tf |= TF_OVERWRITE_ONCE;
+				break;
+			case 1:
+				t->tf &= ~TF_ASK_CONFLICTS;
+				t->tf |= TF_OVERWRITE_CONFLICTS;
+				break;
+			case 2:
+				t->err = tree_walk_step(&t->tw);
+				break;
+			case 3:
+				t->tf &= ~TF_ASK_CONFLICTS;
+				t->tf |= TF_SKIP_CONFLICTS;
+				break;
+			}
 			t->ts = TS_RUNNING;
-			break;
-		case 1:
-			t->err = tree_walk_step(&t->tw);
-			t->ts = TS_RUNNING;
-			break;
-		case 2:
-			t->ts = TS_FINISHED;
-			break;
 		}
+		else {
+			switch (ui_select(i, msg, error_o, 3)) {
+			case 0:
+				t->ts = TS_RUNNING;
+				break;
+			case 1:
+				t->err = tree_walk_step(&t->tw);
+				t->ts = TS_RUNNING;
+				break;
+			case 2:
+				t->ts = TS_FINISHED;
+				break;
+			}
+		}
+		t->err = 0;
 		break;
 	case TS_FINISHED:
 		i->timeout = -1;
@@ -1210,10 +1252,8 @@ static void task_execute(struct ui* const i, struct task* const t) {
 			pretty_size(t->size_done, psize);
 			i->mt = MSG_INFO;
 			snprintf(i->msg, MSG_BUFFER_SIZE,
-				"processed %u files "
-				"(%u symlinks), %u dirs; %s",
-				t->files_done, t->symlinks,
-				t->dirs_done, psize);
+				"processed %u files, %u dirs; %s",
+				t->files_done, t->dirs_done, psize);
 		}
 		task_clean(t);
 		i->m = MODE_MANAGER;
@@ -1221,28 +1261,6 @@ static void task_execute(struct ui* const i, struct task* const t) {
 	default:
 		break;
 	}
-}
-
-inline static int _init_wd(struct panel fvs[2], char* const init_wd[2]) {
-	int e;
-	for (int v = 0; v < 2; ++v) {
-		const char* const d = (init_wd[v] ? init_wd[v] : "");
-		fvs[v].wdlen = 0;
-		if (getcwd(fvs[v].wd, PATH_BUF_SIZE)) {
-			fvs[v].wdlen = strnlen(fvs[v].wd, PATH_MAX_LEN);
-			size_t dlen = strnlen(d, PATH_MAX_LEN);
-			if ((e = cd(fvs[v].wd, &fvs[v].wdlen, d, dlen))
-			|| (e = panel_scan_dir(&fvs[v]))) {
-				return e;
-			}
-		}
-		else {
-			memcpy(fvs[v].wd, "/", 2);
-			fvs[v].wdlen = 1;
-		}
-		first_entry(&fvs[v]);
-	}
-	return 0;
 }
 
 extern struct ui* I;
@@ -1310,11 +1328,26 @@ int main(int argc, char* argv[]) {
 
 	struct ui i;
 	ui_init(&i, &fvs[0], &fvs[1]);
-	if ((err = _init_wd(fvs, init_wd))) {
-		fprintf(stderr, "failed to initalize: (%d) %s\n",
-				err, strerror(err));
-		ui_end(&i);
-		exit(EXIT_FAILURE);
+
+	for (int v = 0; v < 2; ++v) {
+		const char* const d = (init_wd[v] ? init_wd[v] : "");
+		fvs[v].wdlen = 0;
+		if (getcwd(fvs[v].wd, PATH_BUF_SIZE)) {
+			fvs[v].wdlen = strnlen(fvs[v].wd, PATH_MAX_LEN);
+			size_t dlen = strnlen(d, PATH_MAX_LEN);
+			if ((err = cd(fvs[v].wd, &fvs[v].wdlen, d, dlen))
+			|| (err = panel_scan_dir(&fvs[v]))) {
+				fprintf(stderr, "failed to initalize:"
+					" (%d) %s\n", err, strerror(err));
+				ui_end(&i);
+				exit(EXIT_FAILURE);
+			}
+		}
+		else {
+			memcpy(fvs[v].wd, "/", 2);
+			fvs[v].wdlen = 1;
+		}
+		first_entry(&fvs[v]);
 	}
 
 	struct task t;
@@ -1326,6 +1359,7 @@ int main(int argc, char* argv[]) {
 
 	i.mt = MSG_INFO;
 	strncpy(i.msg, "Type ? for help and license notice.", MSG_BUFFER_SIZE);
+
 	while (i.run || t.ts != TS_CLEAN) {
 		ui_draw(&i);
 		if (i.run) { // TODO
@@ -1333,6 +1367,7 @@ int main(int argc, char* argv[]) {
 		}
 		task_execute(&i, &t);
 	}
+
 	for (int v = 0; v < 2; ++v) {
 		delete_file_list(&fvs[v]);
 	}

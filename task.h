@@ -85,14 +85,15 @@ struct tree_walk {
 };
 
 enum task_flags {
-	TF_NONE = 0,
 	TF_RAW_LINKS = 1<<0, // Copy links raw instead of recalculating
 	TF_OVERWRITE_CONFLICTS = 1<<1,
-	TF_SKIP_CONFLICTS = 1<<2,
-	TF_DEREF_LINKS = 1<<3, // If copying/moving links, copy what they point to
-	TF_SKIP_LINKS = 1<<4,
-	TF_RECURSIVE_CHMOD = 1<<5,
-	TF_RECALCULATE_LINKS = 1<<6,
+	TF_OVERWRITE_ONCE = 1<<2,
+	TF_ASK_CONFLICTS = 1<<3,
+	TF_SKIP_CONFLICTS = 1<<4,
+	TF_DEREF_LINKS = 1<<5, // If copying/moving links, copy what they point to
+	TF_SKIP_LINKS = 1<<6,
+	TF_RECURSIVE_CHMOD = 1<<7,
+	TF_RECALCULATE_LINKS = 1<<8,
 	TF_ANY_LINK_METHOD = (TF_RAW_LINKS | TF_DEREF_LINKS
 		| TF_SKIP_LINKS | TF_RECALCULATE_LINKS),
 };
