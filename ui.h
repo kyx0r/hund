@@ -89,26 +89,7 @@ enum command {
 	CMD_SORT_REVERSE,
 	CMD_SORT_CHANGE,
 
-	CMD_COL_NONE,
-	CMD_COL_INODE,
-
-	CMD_COL_LONGSIZE,
-	CMD_COL_SHORTSIZE,
-
-	CMD_COL_LONGPERM,
-	CMD_COL_SHORTPERM,
-
-	CMD_COL_UID,
-	CMD_COL_USER,
-	CMD_COL_GID,
-	CMD_COL_GROUP,
-
-	CMD_COL_LONGATIME,
-	CMD_COL_SHORTATIME,
-	CMD_COL_LONGCTIME,
-	CMD_COL_SHORTCTIME,
-	CMD_COL_LONGMTIME,
-	CMD_COL_SHORTMTIME,
+	CMD_COL,
 
 	CMD_SELECT_FILE,
 	CMD_SELECT_ALL,
@@ -313,23 +294,7 @@ static struct input2cmd default_mapping[] = {
 	{ { KUTF8("s"), KUTF8("r") }, MODE_MANAGER, CMD_SORT_REVERSE },
 	{ { KUTF8("s"), KUTF8("c") }, MODE_MANAGER, CMD_SORT_CHANGE },
 
-	{ { KUTF8("t"), KUTF8("0") }, MODE_MANAGER, CMD_COL_NONE, },
-	{ { KUTF8("t"), KUTF8("i") }, MODE_MANAGER, CMD_COL_INODE, },
-	{ { KUTF8("t"), KUTF8("S") }, MODE_MANAGER, CMD_COL_LONGSIZE, },
-	{ { KUTF8("t"), KUTF8("s") }, MODE_MANAGER, CMD_COL_SHORTSIZE, },
-	{ { KUTF8("t"), KUTF8("P") }, MODE_MANAGER, CMD_COL_LONGPERM, },
-	{ { KUTF8("t"), KUTF8("p") }, MODE_MANAGER, CMD_COL_SHORTPERM, },
-	{ { KUTF8("t"), KUTF8("u") }, MODE_MANAGER, CMD_COL_UID, },
-	{ { KUTF8("t"), KUTF8("U") }, MODE_MANAGER, CMD_COL_USER, },
-	{ { KUTF8("t"), KUTF8("g") }, MODE_MANAGER, CMD_COL_GID, },
-	{ { KUTF8("t"), KUTF8("G") }, MODE_MANAGER, CMD_COL_GROUP, },
-
-	{ { KUTF8("t"), KUTF8("A") }, MODE_MANAGER, CMD_COL_LONGATIME, },
-	{ { KUTF8("t"), KUTF8("a") }, MODE_MANAGER, CMD_COL_SHORTATIME, },
-	{ { KUTF8("t"), KUTF8("C") }, MODE_MANAGER, CMD_COL_LONGCTIME, },
-	{ { KUTF8("t"), KUTF8("c") }, MODE_MANAGER, CMD_COL_SHORTCTIME, },
-	{ { KUTF8("t"), KUTF8("M") }, MODE_MANAGER, CMD_COL_LONGMTIME, },
-	{ { KUTF8("t"), KUTF8("m") }, MODE_MANAGER, CMD_COL_SHORTMTIME, },
+	{ { KUTF8("t") }, MODE_MANAGER, CMD_COL, },
 
 	/* MODE CHMOD */
 	{ { KUTF8("q"), KUTF8("q") }, MODE_CHMOD, CMD_RETURN },
@@ -396,26 +361,7 @@ static const char* const cmd_help[] = {
 	[CMD_SORT_REVERSE] = "Switch between ascending/descending sorting",
 	[CMD_SORT_CHANGE] = "Change sorting",
 
-	[CMD_COL_NONE] = "Hide column",
-	[CMD_COL_INODE] = "Show inode column",
-
-	[CMD_COL_LONGSIZE] = "Show long size column",
-	[CMD_COL_SHORTSIZE] = "Show short size column",
-
-	[CMD_COL_LONGPERM] = "Show long permission column",
-	[CMD_COL_SHORTPERM] = "Show short permission column",
-
-	[CMD_COL_UID] = "Show uid column",
-	[CMD_COL_USER] = "Show owner name column",
-	[CMD_COL_GID] = "Show gid column",
-	[CMD_COL_GROUP] = "Show group name column",
-
-	[CMD_COL_LONGATIME] = "Show long access time column",
-	[CMD_COL_SHORTATIME] = "Show short access time column",
-	[CMD_COL_LONGCTIME] = "Show long create time column",
-	[CMD_COL_SHORTCTIME] = "Show short create time column",
-	[CMD_COL_LONGMTIME] = "Show long modification time column",
-	[CMD_COL_SHORTMTIME] = "Show short modification time column",
+	[CMD_COL] = "Change column",
 
 	[CMD_SELECT_FILE] = "Select/unselect file",
 	[CMD_SELECT_ALL] = "Select all visible files",
@@ -492,8 +438,18 @@ static const char* const more_help[] = {
 	"   \t(executables and others) files are sorted by name",
 	"",
 	"COLUMN",
-	"Only one column at a time can be displayed",
-	"Most of them are available in two versions: short and long",
+	"Only one column at a time can be visible",
+	"t\thide column",
+	"s/S\tshort/long size",
+	"a/A\tshort/long atime",
+	"c/C\tshort/long ctime",
+	"m/M\tshort/long mtime",
+	"p/P\tshort/long permission",
+	"i\tinode number",
+	"u\tuid",
+	"U\tuser name",
+	"g\tgid",
+	"G\tgroup name",
 	"",
 	"MARKS",
 	"m<letter>\tSet mark",
@@ -568,10 +524,7 @@ struct ui {
 
 	struct input2cmd* kmap;
 	size_t kml; // Key Mapping Length
-	unsigned short* mks; // Matching Key Sequence
-
-	struct input il[INPUT_LIST_LENGTH];
-	int ili;
+	struct input K[INPUT_LIST_LENGTH];
 
 	char* path; // path of chmodded file
 

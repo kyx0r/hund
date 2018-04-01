@@ -69,12 +69,9 @@ void ui_init(struct ui* const i, struct panel* const pv,
 	i->fvs[0] = i->pv = pv;
 	i->fvs[1] = i->sv = sv;
 
-	memset(i->il, 0, INPUT_LIST_LENGTH*sizeof(struct input));
-	i->ili = 0;
-
 	i->kmap = default_mapping;
 	i->kml = default_mapping_length;
-	i->mks = calloc(default_mapping_length, sizeof(unsigned short));
+	memset(i->K, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
 	//i->kmap = malloc(default_mapping_length*sizeof(struct input2cmd));
 	/*for (size_t k = 0; k < default_mapping_length; ++k) {
 		memcpy(&i->kmap[k], &default_mapping[k], sizeof(struct input2cmd));
@@ -99,7 +96,6 @@ void ui_init(struct ui* const i, struct panel* const pv,
 }
 
 void ui_end(struct ui* const i) {
-	free(i->mks);
 	write(STDOUT_FILENO, CSI_CLEAR_ALL);
 	write(STDOUT_FILENO, CSI_CURSOR_SHOW);
 	for (int b = 0; b < BUF_NUM; ++b) {
@@ -477,7 +473,6 @@ inline static void _find_all_keyseqs4cmd(const struct ui* const i,
 }
 
 /*
- * TODO reduce write() calls
  * TODO errors
  * TODO tab (8 spaces) may not be enough
  * TODO ambiguity: there is no difference between tab (3 ascii keys)
@@ -673,7 +668,6 @@ void chmod_close(struct ui* const i) {
 
 int ui_select(struct ui* const i, const char* const q,
 		const struct select_option* o, const size_t oc) {
-	// TODO snprintf
 	const int oldtimeout = i->timeout;
 	i->timeout = -1;
 	int T = 0;
@@ -702,69 +696,47 @@ int ui_select(struct ui* const i, const char* const q,
 			}
 		}
 	}
-	//return 0; // unreachable
 }
 
 /*
  * Find matching mappings
  * If there are a few, do nothing, wait longer.
  * If there is only one, send it.
- * TODO simplify
  */
 enum command get_cmd(struct ui* const i) {
-	if (i->ili >= INPUT_LIST_LENGTH) {
-		memset(i->il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
-		i->ili = 0;
+#define ISIZE (sizeof(struct input)*INPUT_LIST_LENGTH)
+	int Kn = 0;
+	while (Kn < INPUT_LIST_LENGTH && i->K[Kn].t != I_NONE) {
+		Kn += 1;
 	}
-	i->il[i->ili] = get_input(i->timeout);
-	i->ili += 1;
-	if (i->il[i->ili-1].t == I_NONE) {
+	if (Kn == INPUT_LIST_LENGTH) {
+		memset(i->K, 0, ISIZE);
+		Kn = 0;
+	}
+	i->K[Kn] = get_input(i->timeout);
+	if (i->K[Kn].t == I_NONE
+	|| i->K[Kn].t == I_ESCAPE
+	|| IS_CTRL(i->K[Kn], '[')) {
+		memset(i->K, 0, ISIZE);
 		return CMD_NONE;
 	}
-	if (i->il[i->ili-1].t == I_ESCAPE || IS_CTRL(i->il[i->ili-1], '[')) {
-		memset(i->il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
-		i->ili = 0;
-		return CMD_NONE;
-	}
-
+	int pm = 0; // partial match
 	for (size_t m = 0; m < i->kml; ++m) {
-		i->mks[m] = 0;
-		const struct input2cmd* const i2c = &i->kmap[m];
-		if (i2c->m != i->m) continue; // mode mismatch
-		const struct input* const in = i2c->i;
-		for (int s = 0; s < i->ili; ++s) {
-			if (in[s].t != i->il[s].t) break;
-			if (!memcmp(&in[s], &i->il[s], sizeof(struct input))) {
-				i->mks[m] += 1;
-			}
-			else {
-				i->mks[m] = 0;
-				break;
-			}
+		if (i->kmap[m].m != i->m) continue;
+		if (!memcmp(i->K, i->kmap[m].i, ISIZE)) {
+			memset(i->K, 0, ISIZE);
+			return i->kmap[m].c;
 		}
-	}
-
-	int matches = 0; // number of matches
-	size_t mi = 0; // (last) Match Index
-	for (size_t m = 0; m < i->kml; ++m) {
-		if (i->mks[m]) {
-			matches += 1;
-			mi = m;
+		bool M = true;
+		for (int t = 0; t < Kn+1; ++t) {
+			M = M && !memcmp(&i->kmap[m].i[t],
+				&i->K[t], sizeof(struct input));
 		}
+		pm += M;
 	}
-
-	if (!matches) {
-		memset(i->il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
-		i->ili = 0;
-		return CMD_NONE;
-	}
-	if (matches == 1 && !memcmp(i->il, i->kmap[mi].i,
-				INPUT_LIST_LENGTH*sizeof(struct input))) {
-		memset(i->il, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
-		i->ili = 0;
-		return i->kmap[mi].c;
-	}
+	if (!pm) memset(i->K, 0, ISIZE);
 	return CMD_NONE;
+#undef ISIZE
 }
 
 /*
