@@ -39,7 +39,6 @@
  * - Jump to file pointed by symlink (and return)
  * - cache login/group names or entire /etc/passwd
  * - Use piped less more
- * - Add marks jumping INTO directories, not exact entries
  * - Display input buffer
  * - Count skipped files
  * - Change symlink target
@@ -88,14 +87,13 @@ void pager_done(const int fd, const pid_t pid) {
 }
 
 struct mark_path {
-	size_t len[2];
+	size_t len;
 	char data[];
 };
 
 struct marks {
-	struct mark_path* nu['9'-'0'+1];
-	struct mark_path* az['z'-'a'+1];
 	struct mark_path* AZ['Z'-'A'+1];
+	struct mark_path* az['z'-'a'+1];
 };
 
 void marks_free(struct marks* const);
@@ -116,14 +114,14 @@ void marks_free(struct marks* const M) {
 	memset(M, 0, sizeof(struct marks));
 }
 
+#define UPPERCASE(C) ('A' <= (C) && (C) <= 'Z')
+#define LOWERCASE(C) ('a' <= (C) && (C) <= 'z')
+
 struct mark_path** marks_get(struct marks* const M, const char C) {
-	if ('0' <= C && C <= '9') {
-		return &M->nu[C-'0'];
-	}
-	else if ('A' <= C && C <= 'Z') {
+	if (UPPERCASE(C)) {
 		return &M->AZ[C-'A'];
 	}
-	else if ('a' <= C && C <= 'z') {
+	else if (LOWERCASE(C)) {
 		return &M->az[C-'a'];
 	}
 	return NULL;
@@ -137,8 +135,8 @@ struct mark_path* marks_set(struct marks* const M, const char C,
 	*mp = realloc(*mp, sizeof(struct mark_path)+wdlen+1+nlen+1);
 	memcpy((*mp)->data, wd, wdlen+1);
 	memcpy((*mp)->data+wdlen+1, n, nlen+1);
-	(*mp)->len[0] = wdlen;
-	(*mp)->len[1] = nlen;
+	(*mp)->data[wdlen] = '/';
+	(*mp)->len = wdlen+1+nlen;
 	return *mp;
 }
 
@@ -154,23 +152,33 @@ void marks_input(struct ui* const i, struct marks* const m) {
 void marks_jump(struct ui* const i, struct marks* const m) {
 	const struct input in = get_input(-1);
 	if (in.t != I_UTF8) return;
-	struct mark_path** mp = marks_get(m, in.utf[0]);
+	const char C = in.utf[0];
+	struct mark_path** mp = marks_get(m, C);
 	if (!mp || !*mp) {
 		failed(i, "jump to mark", "Unknown mark");
 		return;
 	}
-	(*mp)->data[(*mp)->len[0]] = '/';
 	if (access((*mp)->data, F_OK)) {
 		int e = errno;
 		failed(i, "jump to mark", strerror(e));
-		(*mp)->data[(*mp)->len[0]] = 0;
 		return;
 	}
-	(*mp)->data[(*mp)->len[0]] = 0;
-	memcpy(i->pv->wd, (*mp)->data, (*mp)->len[0]+1);
-	i->pv->wdlen = (*mp)->len[0];
-	if (ui_rescan(i, i->pv, NULL)) {
-		file_highlight(i->pv, (*mp)->data+(*mp)->len[0]+1);
+	if (UPPERCASE(C)) {
+		memcpy(i->pv->wd, (*mp)->data, (*mp)->len+1);
+		i->pv->wdlen = (*mp)->len;
+		if (ui_rescan(i, i->pv, NULL)) {
+			first_entry(i->pv);
+		}
+	}
+	else {
+		char* const file = (*mp)->data+current_dir_i((*mp)->data);
+		const size_t flen = strlen(file);
+		const size_t wdlen = (*mp)->len-flen-1;
+		memcpy(i->pv->wd, (*mp)->data, wdlen);
+		i->pv->wdlen = wdlen;
+		if (ui_rescan(i, i->pv, NULL)) {
+			file_highlight(i->pv, file);
+		}
 	}
 }
 
@@ -182,9 +190,7 @@ int marks_to_fd(struct marks* const m, const int fd) {
 		if (!(mp = marks_get(m, i)) || !*mp) continue;
 		char H[2] = { i, ' ' };
 		write(fd, H, 2);
-		write(fd, (*mp)->data, (*mp)->len[0]);
-		write(fd, "/", 1);
-		write(fd, (*mp)->data+(*mp)->len[0]+1, (*mp)->len[1]);
+		write(fd, (*mp)->data, (*mp)->len);
 		write(fd, "\n", 1);
 	}
 	return err;
@@ -714,13 +720,13 @@ static void interpeter(struct ui* const i, struct task* const t,
 		char* const arg[] = { xgetenv(sh), "-i", NULL };
 		spawn(arg, 0);
 	}
-	else if (!memcmp(line, "sh ", 3)) {
+	else if (!memcmp(line, "sh ", 3)) { // TODO
 		if (chdir(i->pv->wd)) {
 			e = errno;
 			failed(i, "chdir", strerror(e));
 			return;
 		}
-		const size_t linel = strnlen(line, sizeof(line)-1);
+		const size_t linel = strlen(line);
 		strcpy(line+linel, anykey);
 		char* const arg[] = { xgetenv(sh), "-i", "-c", line+3, NULL };
 		spawn(arg, 0);
@@ -1308,7 +1314,6 @@ void read_config(struct ui* const i, struct task* const t,
 		while (rem) {
 			z = memchr(buf, '\n', rem);
 			*z = 0;
-
 			linelen = z - buf;
 			interpeter(i, t, m, buf);
 			memmove(buf, z+1, rem-linelen);

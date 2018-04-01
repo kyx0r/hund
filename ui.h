@@ -454,7 +454,9 @@ static const char* const more_help[] = {
 	"MARKS",
 	"m<letter>\tSet mark",
 	"'<letter>\tGoto mark",
-	"Available letters: 0-9 A-Z a-z",
+	"[a-z]\tSave path to highlighted file.",
+	"[A-Z]\tSave only the working directory.",
+	"     \tJump to the working directory and highlight first entry.",
 	"",
 	"CHMOD",
 	"", // TODO
