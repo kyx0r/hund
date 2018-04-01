@@ -40,9 +40,9 @@
  * - cache login/group names or entire /etc/passwd
  * - Use piped less more
  * - Add marks jumping INTO directories, not exact entries
- * - Shorten chmod commands to limited, initial commands:
- *   { a, +, -, u, g, o } -> { r, w, x, 0..7, = }
- * - Display input buffer.
+ * - Display input buffer
+ * - Count skipped files
+ * - Change symlink target
  */
 
 static char* ed[] = {"$VISUAL", "$EDITOR", "vi", NULL};
@@ -688,6 +688,10 @@ static void interpeter(struct ui* const i, struct task* const t,
 		"if [ \"$key\" != '' ]; then echo; fi";
 	int e;
 	(void)(t);
+	//const size_t line_len = strlen(line);
+	if (!line[0] || line[0] == '\n' || line[0] == '#') {
+		return;
+	}
 	if (!strcmp(line, "q")) {
 		i->run = false;
 	}
@@ -721,8 +725,19 @@ static void interpeter(struct ui* const i, struct task* const t,
 		char* const arg[] = { xgetenv(sh), "-i", "-c", line+3, NULL };
 		spawn(arg, 0);
 	}
-	else if (!memcmp(line, "m ", 2)) {
-		// ...
+	else if (!memcmp(line, "mark ", 5)) { // TODO
+		if (line[6] != ' ') {
+			failed(i, "mark", ""); // TODO
+			return;
+		}
+		char* path = line+7;
+		const size_t f = current_dir_i(path);
+		*(path+f-1) = 0;
+		const size_t wdl = strlen(path);
+		const size_t fl = strlen(path+f);
+		if (!marks_set(m, line[5], path, wdl, path+f, fl)) {
+			failed(i, "mark", ""); // TODO
+		}
 	}
 	else if (!memcmp(line, "set ", 4)) {
 		// ...
@@ -793,6 +808,35 @@ static void _perm(struct ui* const i, const bool unset, const int mask) {
 	}
 	#undef REL
 	#undef SET
+}
+
+static void chg_column(struct ui* const i) {
+	strcpy(i->msg, "-- COLUMN --");
+	i->mt = MSG_INFO;
+	i->dirty |= DIRTY_BOTTOMBAR;
+	ui_draw(i);
+	struct input in = get_input(i->timeout);
+	if (in.t != I_UTF8) return;
+	switch (in.utf[0]) {
+	case 't': i->pv->column = COL_NONE; break;
+	case 'i': i->pv->column = COL_INODE; break;
+	case 'S': i->pv->column = COL_LONGSIZE; break;
+	case 's': i->pv->column = COL_SHORTSIZE; break;
+	case 'P': i->pv->column = COL_LONGPERM; break;
+	case 'p': i->pv->column = COL_SHORTPERM; break;
+	case 'u': i->pv->column = COL_UID; break;
+	case 'U': i->pv->column = COL_USER; break;
+	case 'g': i->pv->column = COL_GID; break;
+	case 'G': i->pv->column = COL_GROUP; break;
+	case 'A': i->pv->column = COL_LONGATIME; break;
+	case 'a': i->pv->column = COL_SHORTATIME; break;
+	case 'C': i->pv->column = COL_LONGCTIME; break;
+	case 'c': i->pv->column = COL_SHORTCTIME; break;
+	case 'M': i->pv->column = COL_LONGMTIME; break;
+	case 'm': i->pv->column = COL_SHORTMTIME; break;
+	default: break;
+	}
+	i->dirty |= DIRTY_PANELS | DIRTY_BOTTOMBAR;
 }
 
 static void cmd_command(struct ui* const i, struct task* const t,
@@ -924,6 +968,7 @@ static void process_input(struct ui* const i, struct task* const t,
 		memcpy(i->pv, i->sv, sizeof(struct panel));
 		memcpy(i->sv, tmp, sizeof(struct panel));
 		free(tmp);
+		i->dirty |= DIRTY_PATHBAR;
 		break;
 	case CMD_ENTRY_DOWN:
 		jump_n_entries(i->pv, 1);
@@ -1066,25 +1111,9 @@ static void process_input(struct ui* const i, struct task* const t,
 	case CMD_SORT_CHANGE:
 		cmd_change_sorting(i);
 		break;
-	// TODO CMD_COL_CHG, same as chmod
-	case CMD_COL_NONE: i->pv->column = COL_NONE; break;
-	case CMD_COL_INODE: i->pv->column = COL_INODE; break;
-	case CMD_COL_LONGSIZE: i->pv->column = COL_LONGSIZE; break;
-	case CMD_COL_SHORTSIZE: i->pv->column = COL_SHORTSIZE; break;
-	case CMD_COL_LONGPERM: i->pv->column = COL_LONGPERM; break;
-	case CMD_COL_SHORTPERM: i->pv->column = COL_SHORTPERM; break;
-
-	case CMD_COL_UID: i->pv->column = COL_UID; break;
-	case CMD_COL_USER: i->pv->column = COL_USER; break;
-	case CMD_COL_GID: i->pv->column = COL_GID; break;
-	case CMD_COL_GROUP: i->pv->column = COL_GROUP; break;
-
-	case CMD_COL_LONGATIME: i->pv->column = COL_LONGATIME; break;
-	case CMD_COL_SHORTATIME: i->pv->column = COL_SHORTATIME; break;
-	case CMD_COL_LONGCTIME: i->pv->column = COL_LONGCTIME; break;
-	case CMD_COL_SHORTCTIME: i->pv->column = COL_SHORTCTIME; break;
-	case CMD_COL_LONGMTIME: i->pv->column = COL_LONGMTIME; break;
-	case CMD_COL_SHORTMTIME: i->pv->column = COL_SHORTMTIME; break;
+	case CMD_COL:
+		chg_column(i);
+		break;
 	default:
 		i->dirty = 0;
 		break;
@@ -1266,6 +1295,29 @@ static void task_execute(struct ui* const i, struct task* const t) {
 	}
 }
 
+void read_config(struct ui* const i, struct task* const t,
+		struct marks* const m, const char* const path) {
+	char buf[BUFSIZ];
+	size_t linelen;
+	ssize_t rem = 0;
+	char* z;
+	int fd = open(path, O_RDONLY);
+	if (fd == -1) return;
+	while ((rem = read(fd, buf, sizeof(buf))), rem && rem != -1) {
+		buf[rem] = '\n';
+		while (rem) {
+			z = memchr(buf, '\n', rem);
+			*z = 0;
+
+			linelen = z - buf;
+			interpeter(i, t, m, buf);
+			memmove(buf, z+1, rem-linelen);
+			rem -= linelen+1;
+		}
+	}
+	close(fd);
+}
+
 extern struct ui* I;
 
 int main(int argc, char* argv[]) {
@@ -1274,16 +1326,19 @@ int main(int argc, char* argv[]) {
 	"Options:\n"
 	"  -h, --help            display this help message\n"
 	"Type `?` while in hund for more help\n";
-
-	static const char sopt[] = "h:";
+	int o, opti = 0, err;
+	const char* config = NULL;
+	static const char sopt[] = "hc:";
 	static const struct option lopt[] = {
+		{"config", required_argument, 0, 'c'},
 		{"help", no_argument, 0, 'h'},
 		{0, 0, 0, 0}
 	};
-	int o, opti = 0;
-	int err;
 	while ((o = getopt_long(argc, argv, sopt, lopt, &opti)) != -1) {
 		switch (o) {
+		case 'c':
+			config = optarg;
+			break;
 		case 'h':
 			printf("%s", help);
 			exit(EXIT_SUCCESS);
@@ -1351,6 +1406,30 @@ int main(int argc, char* argv[]) {
 
 	i.mt = MSG_INFO;
 	strncpy(i.msg, "Type ? for help and license notice.", MSG_BUFFER_SIZE);
+
+	static const char* const config_paths[] = {
+		"~/.hundrc",
+		"~/.config/hund/hundrc",
+		NULL
+	};
+	if (!config) {
+		char* p = malloc(PATH_BUF_SIZE);
+		size_t plen = 0;
+		int cp = 0;
+		while (config_paths[cp]) {
+			const size_t cpl = strlen(config_paths[cp]);
+			cd(p, &plen, config_paths[cp], cpl);
+			if (!access(p, F_OK)) {
+				config = config_paths[cp];
+				break;
+			}
+			cp += 1;
+		}
+		free(p);
+	}
+	if (config) {
+		read_config(&i, &t, &m, config);
+	}
 
 	while (i.run || t.ts != TS_CLEAN) {
 		ui_draw(&i);
