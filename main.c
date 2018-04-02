@@ -42,6 +42,7 @@
  * - Display input buffer
  * - Count skipped files
  * - Change symlink target
+ * - simplify empty dir handling - maybe show . or .. ?
  */
 
 static char* ed[] = {"$VISUAL", "$EDITOR", "vi", NULL};
@@ -687,14 +688,14 @@ static void cmd_quick_chmod_plus_x(struct ui* const i) {
 	ui_rescan(i, i->pv, NULL);
 }
 
-static void interpeter(struct ui* const i, struct task* const t,
+static void interpreter(struct ui* const i, struct task* const t,
 		struct marks* const m, char* const line) {
 	static char* anykey = \
 		"; read -n1 -r -p \"Press any key to continue...\" key\n"
 		"if [ \"$key\" != '' ]; then echo; fi";
 	int e;
 	(void)(t);
-	//const size_t line_len = strlen(line);
+	const size_t line_len = strlen(line);
 	if (!line[0] || line[0] == '\n' || line[0] == '#') {
 		return;
 	}
@@ -720,14 +721,13 @@ static void interpeter(struct ui* const i, struct task* const t,
 		char* const arg[] = { xgetenv(sh), "-i", NULL };
 		spawn(arg, 0);
 	}
-	else if (!memcmp(line, "sh ", 3)) { // TODO
+	else if (!memcmp(line, "sh ", 3)) {
 		if (chdir(i->pv->wd)) {
 			e = errno;
 			failed(i, "chdir", strerror(e));
 			return;
 		}
-		const size_t linel = strlen(line);
-		strcpy(line+linel, anykey);
+		strcpy(line+line_len, anykey);
 		char* const arg[] = { xgetenv(sh), "-i", "-c", line+3, NULL };
 		spawn(arg, 0);
 	}
@@ -744,6 +744,9 @@ static void interpeter(struct ui* const i, struct task* const t,
 		if (!marks_set(m, line[5], path, wdl, path+f, fl)) {
 			failed(i, "mark", ""); // TODO
 		}
+	}
+	else if (!memcmp(line, "map ", 4)) {
+		// ...
 	}
 	else if (!memcmp(line, "set ", 4)) {
 		// ...
@@ -809,7 +812,6 @@ static void _perm(struct ui* const i, const bool unset, const int mask) {
 		case 'w': REL(00222); break;
 		case 'x': REL(00111); break;
 		case 't': REL(07000); break;
-		case '=': i->plus = i->minus = 0; break;
 		}
 	}
 	#undef REL
@@ -871,7 +873,7 @@ static void cmd_command(struct ui* const i, struct task* const t,
 	}
 	i->dirty |= DIRTY_BOTTOMBAR;
 	i->prompt = NULL;
-	interpeter(i, t, m, cmd);
+	interpreter(i, t, m, cmd);
 }
 
 static void process_input(struct ui* const i, struct task* const t,
@@ -1315,7 +1317,7 @@ void read_config(struct ui* const i, struct task* const t,
 			z = memchr(buf, '\n', rem);
 			*z = 0;
 			linelen = z - buf;
-			interpeter(i, t, m, buf);
+			interpreter(i, t, m, buf);
 			memmove(buf, z+1, rem-linelen);
 			rem -= linelen+1;
 		}
@@ -1329,18 +1331,24 @@ int main(int argc, char* argv[]) {
 	static const char* const help = \
 	"Usage: hund [OPTION...] [left panel] [right panel]\n"
 	"Options:\n"
+	"  -c, --config          use suppiled file as a config\n"
+	"  --no-config           do not load any config files\n"
 	"  -h, --help            display this help message\n"
 	"Type `?` while in hund for more help\n";
 	int o, opti = 0, err;
+	int no_config = 0;
 	const char* config = NULL;
 	static const char sopt[] = "hc:";
-	static const struct option lopt[] = {
+	struct option lopt[] = {
+		{"no-config", no_argument, &no_config, 1},
 		{"config", required_argument, 0, 'c'},
 		{"help", no_argument, 0, 'h'},
 		{0, 0, 0, 0}
 	};
 	while ((o = getopt_long(argc, argv, sopt, lopt, &opti)) != -1) {
 		switch (o) {
+		case 0:
+			break;
 		case 'c':
 			config = optarg;
 			break;
@@ -1417,22 +1425,23 @@ int main(int argc, char* argv[]) {
 		"~/.config/hund/hundrc",
 		NULL
 	};
-	if (!config) {
+	if (!no_config && !config) {
 		char* p = malloc(PATH_BUF_SIZE);
+		p[0] = 0;
 		size_t plen = 0;
 		int cp = 0;
 		while (config_paths[cp]) {
 			const size_t cpl = strlen(config_paths[cp]);
 			cd(p, &plen, config_paths[cp], cpl);
 			if (!access(p, F_OK)) {
-				config = config_paths[cp];
+				read_config(&i, &t, &m, p);
 				break;
 			}
 			cp += 1;
 		}
 		free(p);
 	}
-	if (config) {
+	else if (!no_config) {
 		read_config(&i, &t, &m, config);
 	}
 
