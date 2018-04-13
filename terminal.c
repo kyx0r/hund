@@ -105,6 +105,11 @@ int start_raw_mode(struct termios* const before) {
 	}
 	struct termios raw = *before;
 	cfmakeraw(&raw);
+	//raw.c_cc[VINTR] = 0x03;
+	//raw.c_cc[VSUSP] = 0x1a;
+	raw.c_iflag &= ~(BRKINT);
+	raw.c_lflag |= ISIG;
+	write(STDOUT_FILENO, CSI_CURSOR_HIDE); // TODO
 	return (tcsetattr(fd, TCSAFLUSH, &raw) ? errno : 0);
 }
 
@@ -112,7 +117,10 @@ int stop_raw_mode(struct termios* const before) {
 	if (tcsetattr(STDIN_FILENO, TCSAFLUSH, before)) {
 		return errno;
 	}
-	return write(STDOUT_FILENO, CSI_SCREEN_NORMAL) == -1 ? errno : 0;
+	write(STDOUT_FILENO, CSI_SCREEN_NORMAL); // TODO
+	write(STDOUT_FILENO, CSI_CURSOR_SHOW);
+	write(STDOUT_FILENO, "\r\n", 2);
+	return 0;
 }
 
 int char_attr(char* const B, const size_t S,

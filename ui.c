@@ -39,15 +39,52 @@ static enum theme_element mode2theme(const mode_t m) {
 }
 
 struct ui* global_i;
-static void handle_winch(int sig) {
-	if (sig != SIGWINCH) return;
-	for (int b = 0; b < BUF_NUM; ++b) {
-		free(global_i->B[b].buf);
-		global_i->B[b].top = global_i->B[b].capacity = 0;
-		global_i->B[b].buf = NULL;
+
+static int setup_signals(void);
+
+static void sighandler(int sig) {
+	switch (sig) {
+	case SIGTERM:
+	case SIGINT:
+		global_i->run = false; // TODO
+		break;
+	case SIGTSTP:
+		stop_raw_mode(&global_i->T);
+		signal(SIGTSTP, SIG_DFL);
+		kill(getpid(), SIGTSTP);
+		break;
+	case SIGCONT:
+		start_raw_mode(&global_i->T);
+		global_i->dirty |= DIRTY_ALL;
+		ui_draw(global_i);
+		setup_signals();
+		break;
+	case SIGWINCH:
+		for (int b = 0; b < BUF_NUM; ++b) {
+			free(global_i->B[b].buf);
+			global_i->B[b].top = global_i->B[b].capacity = 0;
+			global_i->B[b].buf = NULL;
+		}
+		global_i->dirty |= DIRTY_ALL;
+		ui_draw(global_i);
+		break;
+	default:
+		break;
 	}
-	global_i->dirty |= DIRTY_ALL;
-	ui_draw(global_i);
+}
+
+static int setup_signals(void) {
+	struct sigaction sa;
+	memset(&sa, 0, sizeof(struct sigaction));
+	sa.sa_handler = sighandler;
+	if (sigaction(SIGTERM, &sa, NULL)
+	|| sigaction(SIGINT, &sa, NULL)
+	|| sigaction(SIGTSTP, &sa, NULL)
+	|| sigaction(SIGCONT, &sa, NULL)
+	|| sigaction(SIGWINCH, &sa, NULL)) {
+		return errno;
+	}
+	return 0;
 }
 
 void ui_init(struct ui* const i, struct panel* const pv,
@@ -83,11 +120,7 @@ void ui_init(struct ui* const i, struct panel* const pv,
 
 	global_i = i;
 	int err;
-	struct sigaction sa;
-	memset(&sa, 0, sizeof(struct sigaction));
-	sa.sa_handler = handle_winch;
-	if ((err = start_raw_mode(&i->T))
-	|| (sigaction(SIGWINCH, &sa, NULL) ? (err = errno) : 0)) {
+		if ((err = start_raw_mode(&i->T)) || (err = setup_signals())) {
 		fprintf(stderr, "failed to initalize screen: (%d) %s\n",
 				err, strerror(err));
 		exit(EXIT_FAILURE);
