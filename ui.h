@@ -245,6 +245,7 @@ static struct input2cmd default_mapping[] = {
 	{ { KUTF8("g"), KUTF8("l")}, MODE_MANAGER, CMD_LINK },
 
 	{ { KCTRL('I') }, MODE_MANAGER, CMD_SWITCH_PANEL },
+	{ { KUTF8(" ") }, MODE_MANAGER, CMD_SWITCH_PANEL },
 
 	{ { KUTF8("z") }, MODE_MANAGER, CMD_DUP_PANEL },
 	{ { KUTF8("Z") }, MODE_MANAGER, CMD_SWAP_PANELS },
@@ -318,7 +319,7 @@ static struct input2cmd default_mapping[] = {
 };
 
 static const size_t default_mapping_length =
-	(sizeof(default_mapping)/sizeof(struct input2cmd));
+	(sizeof(default_mapping)/sizeof(default_mapping[0]));
 
 static const char* const cmd_help[] = {
 	[CMD_QUIT] = "Quit hund",
