@@ -87,7 +87,6 @@ struct node {
 
 int scan_dir(const char* const wd, struct file*** const fl,
 		fnum_t* const nf, fnum_t* const nhf) {
-#if 1
 	DIR* dir = opendir(wd);
 	if (!dir) return errno;
 	const size_t wdlen = strnlen(wd, PATH_MAX_LEN);
@@ -142,8 +141,7 @@ int scan_dir(const char* const wd, struct file*** const fl,
 			memset(&nfr->s, 0, sizeof(struct stat));
 		}
 	}
-
-	*fl = calloc(*nf, sizeof(struct file*));
+	*fl = malloc(*nf * sizeof(struct file*));
 	fnum_t i = 0;
 	while (H) {
 		tmp = H;
@@ -154,61 +152,6 @@ int scan_dir(const char* const wd, struct file*** const fl,
 	}
 	closedir(dir);
 	return err;
-#else
-	size_t wdlen = strnlen(wd, PATH_MAX_LEN);
-	file_list_clean(fl, nf);
-	*nhf = 0;
-	int err = 0;
-	DIR* dir = opendir(wd);
-	if (!dir) return errno;
-	char fpath[PATH_BUF_SIZE];
-	memset(fpath, 0, sizeof(fpath));
-	struct dirent* de;
-	while ((de = readdir(dir)) != NULL) {
-		*nf += 1;
-	}
-	*nf -= 2; // skip . and ..
-	if (!*nf) {
-		*fl = NULL;
-		closedir(dir);
-		return err;
-	}
-	rewinddir(dir);
-	void* tmp = calloc(*nf, sizeof(struct file*));
-	if (!tmp) {
-		closedir(dir);
-		return ENOMEM;
-	}
-	*fl = tmp;
-	fnum_t gf = 0; // Gathered Files
-	while ((de = readdir(dir)) != NULL) {
-		if (DOTDOT(de->d_name)) continue;
-		if (de->d_name[0] == '.') {
-			*nhf += 1;
-		}
-		const size_t nl = strnlen(de->d_name, NAME_MAX_LEN);
-		struct file* nfr = malloc(sizeof(*nfr)+nl+1);
-		if (!nfr) {
-			err = ENOMEM;
-			*nhf = 0;
-			file_list_clean(fl, nf);
-			break;
-		}
-		(*fl)[gf] = nfr;
-		gf += 1;
-		nfr->nl = (unsigned char)nl;
-		nfr->selected = false;
-		memcpy(nfr->name, de->d_name, nl+1);
-		memcpy(fpath, wd, wdlen+1);
-		size_t fpathlen = wdlen;
-		if ((err = pushd(fpath, &fpathlen, nfr->name, nl))
-		|| (lstat(fpath, &nfr->s) ? (err = errno) : 0)) {
-			memset(&nfr->s, 0, sizeof(struct stat));
-		}
-	}
-	closedir(dir);
-	return err;
-#endif
 }
 
 /*
@@ -512,6 +455,7 @@ void list_free(struct string_list* const list) {
  * TODO flexible buffer length
  * TODO more testing
  * TODO support for other line endings
+ * TODO redo
  */
 int file_to_list(const int fd, struct string_list* const list) {
 	list_free(list);
