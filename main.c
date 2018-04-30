@@ -36,11 +36,10 @@
  * - Dir scanning via task?
  * - Creating links: offer relative or absolute link path
  * - Keybindings must make more sense
- * - Jump to file pointed by symlink (and return)
  * - cache login/group names or entire /etc/passwd
  * - Use piped less more
  * - Display input buffer
- * - Count skipped files
+ * - Jump to file pointed by symlink (and return)
  * - Change symlink target
  * - simplify empty dir handling - maybe show . or .. ?
  */
@@ -81,7 +80,7 @@ int pager_spawn(int* const fd, pid_t* const pid) {
 	return 0;
 }
 
-void pager_done(const int fd, const pid_t pid) {
+void pager_done(int fd, const pid_t pid) {
 	int status;
 	close(fd);
 	waitpid(pid, &status, 0);
@@ -184,27 +183,27 @@ void marks_jump(struct ui* const i, struct marks* const m) {
 }
 
 int marks_to_fd(struct marks* const m, const int fd) {
-	// TODO errors
-	int err = 0;
 	struct mark_path** mp;
-	for (int i = ' '; i < 0x7f; ++i) { // TODO
+	for (int i = ' '; i < 0x7f; ++i) {
 		if (!(mp = marks_get(m, i)) || !*mp) continue;
 		char H[2] = { i, ' ' };
-		write(fd, H, 2);
-		write(fd, (*mp)->data, (*mp)->len);
-		write(fd, "\n", 1);
+		if (write(fd, H, 2) == -1
+		|| write(fd, (*mp)->data, (*mp)->len) == -1
+		|| write(fd, "\n", 1) == -1) {
+			return errno;
+		}
 	}
-	return err;
+	return 0;
 }
 
 static inline void list_marks(struct ui* const i, struct marks* const m) {
 	int fd, e;
 	pid_t p;
-	if ((e = pager_spawn(&fd, &p))) {
+	if ((e = pager_spawn(&fd, &p))
+	|| (e = marks_to_fd(m, fd))) {
 		failed(i, "pager", strerror(e));
 		return;
 	}
-	marks_to_fd(m, fd);
 	pager_done(fd, p);
 }
 
@@ -214,7 +213,7 @@ static int open_file_with(char* const p, char* const f) {
 }
 
 static void open_help(struct ui* const i) {
-	int e, fd;
+	int e, fd = -1;
 	pid_t p;
 	if ((e = pager_spawn(&fd, &p))) {
 		failed(i, "help", strerror(e));
