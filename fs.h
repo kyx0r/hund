@@ -64,6 +64,9 @@
 
 #define MKDIR_DEFAULT_PERM (S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
 
+#define UPPERCASE(C) ('A' <= (C) && (C) <= 'Z')
+#define LOWERCASE(C) ('a' <= (C) && (C) <= 'z')
+
 typedef unsigned int fnum_t; // Number of Files
 
 /* From LSB to MSB, by bit index */

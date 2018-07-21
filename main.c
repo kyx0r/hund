@@ -47,7 +47,7 @@
 static char* ed[] = {"$VISUAL", "$EDITOR", "vi", NULL};
 static char* pager[] = {"$PAGER", "less", NULL};
 static char* sh[] = {"$SHELL", "sh", NULL};
-//static char* open[] = {"$OPEN", "open", NULL};
+static char* opener[] = {"$OPEN", NULL};
 
 char* xgetenv(char* q[]) {
 	char* r = NULL;
@@ -113,9 +113,6 @@ void marks_free(struct marks* const M) {
 	}
 	memset(M, 0, sizeof(struct marks));
 }
-
-#define UPPERCASE(C) ('A' <= (C) && (C) <= 'Z')
-#define LOWERCASE(C) ('a' <= (C) && (C) <= 'z')
 
 struct mark_path** marks_get(struct marks* const M, const char C) {
 	if (UPPERCASE(C)) {
@@ -208,6 +205,7 @@ static inline void list_marks(struct ui* const i, struct marks* const m) {
 }
 
 static int open_file_with(char* const p, char* const f) {
+	if (!p) return 0;
 	char* const arg[] = { p, f, NULL };
 	return spawn(arg, 0);
 }
@@ -688,7 +686,7 @@ static void cmd_quick_chmod_plus_x(struct ui* const i) {
 }
 
 static void interpreter(struct ui* const i, struct task* const t,
-		struct marks* const m, char* const line) {
+		struct marks* const m, char* const line, size_t linesize) {
 	static char* anykey = \
 		"; read -n1 -r -p \"Press any key to continue...\" key\n"
 		"if [ \"$key\" != '' ]; then echo; fi";
@@ -726,7 +724,7 @@ static void interpreter(struct ui* const i, struct task* const t,
 			failed(i, "chdir", strerror(e));
 			return;
 		}
-		strcpy(line+line_len, anykey);
+		xstrlcpy(line+line_len, anykey, linesize);
 		char* const arg[] = { xgetenv(sh), "-i", "-c", line+3, NULL };
 		spawn(arg, 0);
 	}
@@ -880,7 +878,7 @@ static void cmd_command(struct ui* const i, struct task* const t,
 	}
 	i->dirty |= DIRTY_BOTTOMBAR;
 	i->prompt = NULL;
-	interpreter(i, t, m, cmd);
+	interpreter(i, t, m, cmd, sizeof(cmd));
 }
 
 static void process_input(struct ui* const i, struct task* const t,
@@ -1001,7 +999,7 @@ static void process_input(struct ui* const i, struct task* const t,
 		err = panel_enter_selected_dir(i->pv);
 		if (err) {
 			if (err == ENOTDIR) {
-				open_selected_with(i, "open"); // TODO
+				open_selected_with(i, xgetenv(opener));
 			}
 			else  {
 				failed(i, "enter dir", strerror(err));
@@ -1326,7 +1324,7 @@ void read_config(struct ui* const i, struct task* const t,
 			z = memchr(buf, '\n', rem);
 			*z = 0;
 			linelen = z - buf;
-			interpreter(i, t, m, buf);
+			interpreter(i, t, m, buf, sizeof(buf));
 			memmove(buf, z+1, rem-linelen);
 			rem -= linelen+1;
 		}

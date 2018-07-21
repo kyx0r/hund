@@ -21,11 +21,11 @@ A minimalistic terminal file manager.
 | $PAGER | pager | less |
 | $HOME | user's home directory | /etc/passwd |
 | $SHELL | shell used by `:sh` | sh |
+| $OPEN | file opener | (none) |
 #### Planned features
 - Calculate volume of directories
 - Filter files
 - ACLs (at least detection)
-- Configuration in a file
 - Color schemes
 - man page
 - Packaging for some popular distros + installation scripts
