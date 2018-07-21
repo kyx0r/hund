@@ -918,7 +918,7 @@ int spawn(char* const arg[], const enum spawn_flags f) {
 			close(nullfd);
 		}
 		execvp(arg[0], arg);
-		return errno;
+		exit(EXIT_FAILURE);
 	}
 	else {
 		global_i->dirty |= DIRTY_BOTTOMBAR;
