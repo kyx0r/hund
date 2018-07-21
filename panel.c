@@ -146,7 +146,7 @@ int panel_enter_selected_dir(struct panel* const fv) {
 int panel_up_dir(struct panel* const fv) {
 	int err;
 	char prevdir[NAME_BUF_SIZE];
-	strncpy(prevdir, fv->wd+current_dir_i(fv->wd), NAME_BUF_SIZE);
+	xstrlcpy(prevdir, fv->wd+current_dir_i(fv->wd), NAME_BUF_SIZE);
 	popd(fv->wd, &fv->wdlen);
 	if ((err = panel_scan_dir(fv))) {
 		return err;
@@ -278,6 +278,7 @@ inline static void merge(const enum key cmp, const int scending,
 }
 
 void merge_sort(struct panel* const fv, const enum key cmp) {
+	// TODO inplace if possible
 	struct file** tmp;
 	struct file** A = fv->file_list;
 	struct file** B = calloc(fv->num_files,

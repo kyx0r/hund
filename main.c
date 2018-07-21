@@ -570,7 +570,7 @@ inline static void cmd_cd(struct ui* const i) {
 		if (err) failed(i, "cd", strerror(err));
 	}
 	else {
-		strncpy(i->pv->wd, path, PATH_BUF_SIZE);
+		xstrlcpy(i->pv->wd, path, PATH_BUF_SIZE);
 		i->pv->wdlen = pathlen;
 		ui_rescan(i, i->pv, NULL);
 	}
@@ -613,7 +613,7 @@ inline static void cmd_change_sorting(struct ui* const i) {
 	char* top = i->pv->order + strlen(buf);
 	int r;
 	i->mt = MSG_INFO;
-	strcpy(i->msg, "-- SORT --");
+	xstrlcpy(i->msg, "-- SORT --", MSG_BUFFER_SIZE);
 	i->dirty |= DIRTY_BOTTOMBAR | DIRTY_STATUSBAR;
 	ui_draw(i);
 	for (;;) {
@@ -826,7 +826,7 @@ static void _perm(struct ui* const i, const bool unset, const int mask) {
 }
 
 static void chg_column(struct ui* const i) {
-	strcpy(i->msg, "-- COLUMN --");
+	xstrlcpy(i->msg, "-- COLUMN --", MSG_BUFFER_SIZE);
 	i->mt = MSG_INFO;
 	i->dirty |= DIRTY_BOTTOMBAR;
 	ui_draw(i);
@@ -914,7 +914,7 @@ static void process_input(struct ui* const i, struct task* const t,
 			}
 			else {
 				i->o[1] = pwd->pw_uid;
-				strncpy(i->user, pwd->pw_name, LOGIN_BUF_SIZE);
+				xstrlcpy(i->user, pwd->pw_name, LOGIN_BUF_SIZE);
 			}
 		}
 		free(s);
@@ -931,7 +931,7 @@ static void process_input(struct ui* const i, struct task* const t,
 			}
 			else {
 				i->g[1] = grp->gr_gid;
-				strncpy(i->group, grp->gr_name, LOGIN_BUF_SIZE);
+				xstrlcpy(i->group, grp->gr_name, LOGIN_BUF_SIZE);
 			}
 		}
 		free(s);
@@ -1427,7 +1427,7 @@ int main(int argc, char* argv[]) {
 	memset(&m, 0, sizeof(struct marks));
 
 	i.mt = MSG_INFO;
-	strncpy(i.msg, "Type ? for help and license notice.", MSG_BUFFER_SIZE);
+	xstrlcpy(i.msg, "Type ? for help and license notice.", MSG_BUFFER_SIZE);
 
 	static const char* const config_paths[] = {
 		"~/.hundrc",
