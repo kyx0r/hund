@@ -764,6 +764,8 @@ static void interpreter(struct ui* const i, struct task* const t,
 
 static void _perm(struct ui* const i, const bool unset, const int mask) {
 	mode_t* m[2] = { &i->plus, &i->minus, };
+	mode_t* tmp;
+	bool minus;
 	struct input in = get_input(i->timeout);
 	if (in.t != I_UTF8) return;
 	#define REL(M) do { \
@@ -774,11 +776,12 @@ static void _perm(struct ui* const i, const bool unset, const int mask) {
 		*m[0] = (~mask & *m[0]) | (mask & (M)); \
 		*m[1] = (~mask & *m[1]) | (mask & ~(M)); \
 	} while (0);
+	minus = in.utf[0] == '-';
 	if (in.utf[0] == '+' || in.utf[0] == '-') {
 		in = get_input(i->timeout);
 		if (in.t != I_UTF8) return;
-		if (unset || in.utf[0] == '-') {
-			mode_t* tmp = m[0];
+		if (unset || minus) {
+			tmp = m[0];
 			m[0] = m[1];
 			m[1] = tmp;
 		}
@@ -798,6 +801,11 @@ static void _perm(struct ui* const i, const bool unset, const int mask) {
 		}
 	}
 	else {
+		if (unset) {
+			tmp = m[0];
+			m[0] = m[1];
+			m[1] = tmp;
+		}
 		switch (in.utf[0]) {
 		case '0': SET(00000); break;
 		case '1': SET(00111); break;
@@ -991,8 +999,13 @@ static void process_input(struct ui* const i, struct task* const t,
 		break;
 	case CMD_ENTER_DIR:
 		err = panel_enter_selected_dir(i->pv);
-		if (err && err != ENOTDIR) {
-			failed(i, "enter dir", strerror(err));
+		if (err) {
+			if (err == ENOTDIR) {
+				open_selected_with(i, "open"); // TODO
+			}
+			else  {
+				failed(i, "enter dir", strerror(err));
+			}
 		}
 		i->dirty |= DIRTY_PATHBAR;
 		break;
@@ -1016,9 +1029,6 @@ static void process_input(struct ui* const i, struct task* const t,
 		break;
 	case CMD_EDIT_FILE:
 		open_selected_with(i, xgetenv(ed));
-		break;
-	case CMD_OPEN_FILE:
-		open_selected_with(i, "open"); // TODO
 		break;
 	case CMD_COMMAND:
 		cmd_command(i, t, m);

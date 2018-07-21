@@ -61,7 +61,7 @@ enum command {
 	CMD_LINK,
 
 	CMD_UP_DIR,
-	CMD_ENTER_DIR,
+	CMD_ENTER_DIR, // TODO RENAME
 
 	CMD_ENTRY_UP,
 	CMD_ENTRY_DOWN,
@@ -75,7 +75,6 @@ enum command {
 	CMD_COMMAND,
 	CMD_CD,
 	CMD_PAGER,
-	CMD_OPEN_FILE,
 	CMD_EDIT_FILE,
 
 	CMD_REFRESH,
@@ -265,7 +264,6 @@ static struct input2cmd default_mapping[] = {
 	{ { KUTF8("l") }, MODE_MANAGER, CMD_ENTER_DIR },
 
 	{ { KUTF8("p") }, MODE_MANAGER, CMD_PAGER },
-	{ { KUTF8("o") }, MODE_MANAGER, CMD_OPEN_FILE },
 	{ { KUTF8("e") }, MODE_MANAGER, CMD_EDIT_FILE },
 
 	/* <TODO> */
@@ -334,7 +332,7 @@ static const char* const cmd_help[] = {
 	[CMD_LINK] = "Create symlinks to selected files",
 
 	[CMD_UP_DIR] = "Go up in directory tree",
-	[CMD_ENTER_DIR] = "Enter highlighted directory",
+	[CMD_ENTER_DIR] = "Enter highlighted directory or open file",
 
 	[CMD_ENTRY_UP] = "Go to previous entry",
 	[CMD_ENTRY_DOWN] = "Go to next entry",
@@ -349,7 +347,6 @@ static const char* const cmd_help[] = {
 
 	[CMD_CD] = "Jump to some directory",
 	[CMD_PAGER] = "Open selected file in pager",
-	[CMD_OPEN_FILE] = "Open selected file",
 	[CMD_EDIT_FILE] = "Open selected file in text editor",
 	[CMD_REFRESH] = "Rescan directories and redraw UI",
 	[CMD_SWITCH_PANEL] = "Switch active panel",
