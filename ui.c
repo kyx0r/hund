@@ -106,13 +106,12 @@ void ui_init(struct ui* const i, struct panel* const pv,
 	i->fvs[0] = i->pv = pv;
 	i->fvs[1] = i->sv = sv;
 
-	i->kmap = default_mapping;
 	i->kml = default_mapping_length;
-	memset(i->K, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
-	//i->kmap = malloc(default_mapping_length*sizeof(struct input2cmd));
-	/*for (size_t k = 0; k < default_mapping_length; ++k) {
+	i->kmap = malloc(i->kml*sizeof(struct input2cmd));
+	for (size_t k = 0; k < i->kml; ++k) {
 		memcpy(&i->kmap[k], &default_mapping[k], sizeof(struct input2cmd));
-	}*/
+	}
+	memset(i->K, 0, sizeof(struct input)*INPUT_LIST_LENGTH);
 
 	i->perm[0] = i->perm[1] = 0;
 	i->o[0] = i->o[1] = 0;
@@ -140,6 +139,7 @@ void ui_end(struct ui* const i) {
 				err, strerror(err));
 		exit(EXIT_FAILURE);
 	}
+	free(i->kmap);
 	memset(i, 0, sizeof(struct ui));
 }
 
@@ -302,10 +302,9 @@ static void _entry(struct ui* const i, const struct panel* const fv,
 	struct append_buffer* const ab = &i->B[BUF_PANELS];
 	// TODO scroll filenames that are too long to fit in the panel width
 	const struct file* const cfr = fv->file_list[e];
-	const bool hl = e == fv->selection && fv == i->pv;
 
 	// File SYMbol
-	const enum theme_element fsym = mode2theme(cfr->s.st_mode);
+	enum theme_element fsym = mode2theme(cfr->s.st_mode);
 
 	char name[NAME_BUF_SIZE];
 	const unsigned u = cut_unwanted(cfr->name, name, '.', NAME_BUF_SIZE);
@@ -322,20 +321,33 @@ static void _entry(struct ui* const i, const struct panel* const fv,
 
 	char open = file_symbols[fsym];
 	char close = ' ';
-	if (cfr->selected || (hl && !fv->num_selected)) {
+
+	if (e == fv->selection) {
+		if (!fv->num_selected) {
+			open = '[';
+			close = ']';
+		}
+		if (fv == i->pv) {
+			fsym += 1;
+		}
+		else {
+			append_attr(ab, ATTR_UNDERLINE, NULL);
+		}
+	}
+	if (cfr->selected) {
 		open = '[';
 		close = ']';
+		append_attr(ab, ATTR_BOLD, NULL);
 	}
-	if (u) close = '*';
-
-	append_theme(ab, fsym + (hl ? 1 : 0));
-	if (cfr->selected) append_attr(ab, ATTR_BOLD, NULL);
+	append_theme(ab, fsym);
 	fill(ab, open, 1);
 	append(ab, name, utf8_w2nb(name, name_draw));
 	fill(ab, ' ', width - (1+name_draw+cl+1));
 	append(ab, column, cl);
-	if (u) append_attr(ab,
-		ATTR_YELLOW | ATTR_BOLD | ATTR_FOREGROUND, NULL);
+	if (u) {
+		close = '*';
+		append_attr(ab, ATTR_YELLOW|ATTR_BOLD|ATTR_FOREGROUND, NULL);
+	}
 	fill(ab, close, 1);
 	append_attr(ab, ATTR_NORMAL, NULL);
 }
@@ -625,6 +637,9 @@ void ui_bottombar(struct ui* const i, struct append_buffer* const ab) {
 				i->minus, i->perm[1] & 07777);
 		append(ab, p, sizeof(p));
 	}
+	else {
+		// TODO input buffer
+	}
 }
 
 void ui_draw(struct ui* const i) {
@@ -687,8 +702,8 @@ int chmod_open(struct ui* const i, char* const path) {
 	i->perm[0] = i->perm[1] = s.st_mode;
 	i->path = path;
 	i->m = MODE_CHMOD;
-	strncpy(i->user, pwd->pw_name, LOGIN_BUF_SIZE);
-	strncpy(i->group, grp->gr_name, LOGIN_BUF_SIZE);
+	xstrlcpy(i->user, pwd->pw_name, LOGIN_BUF_SIZE);
+	xstrlcpy(i->group, grp->gr_name, LOGIN_BUF_SIZE);
 	return 0;
 }
 
