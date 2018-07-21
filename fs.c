@@ -19,6 +19,30 @@
 
 #include "fs.h"
 
+/* Similar to strlcpy;
+ * Copies string pointed by src to dest.
+ * Assumes that dest is n bytes long,
+ * so it can fit string of length n-1 + null terminator.
+ * String in src cannot be longer than n-1.
+ * Null terminator is always appended to dest.
+ * All remaining space in dest upon copying src is null terminated.
+ *
+ * Written after compiler started to whine about strncpy()
+ * (specified bound N equals destination size [-Wstringop-truncation])
+ */
+char* xstrlcpy(char* dest, const char* src, size_t n)
+{
+	size_t srcl = strnlen(src, n-1);
+	size_t i;
+	for (i = 0; i < srcl; ++i) {
+		dest[i] = src[i];
+	}
+	for (; i < n; ++i) {
+		dest[i] = 0;
+	}
+	return dest;
+}
+
 char* get_home(void) {
 	char* home;
 	if ((home = getenv("HOME"))) {

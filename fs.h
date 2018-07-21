@@ -68,7 +68,7 @@ typedef unsigned int fnum_t; // Number of Files
 
 /* From LSB to MSB, by bit index */
 static const char* const mode_bit_meaning[] = {
-	"execute/sears by others",
+	"execute/search by others",
 	"write by others",
 	"read by others",
 	"execute/search by group",
@@ -92,6 +92,8 @@ static const char* const perm2rwx[] = {
 	[06] = "rw-",
 	[07] = "rwx",
 };
+
+char* xstrlcpy(char*, const char*, size_t);
 
 char* get_home(void);
 
