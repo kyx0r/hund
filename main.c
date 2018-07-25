@@ -310,7 +310,7 @@ inline static bool _solve_name_conflicts_if_any(struct ui* const i,
 	list_copy(r, s);
 	while (conflicts_with_existing(i->sv, r)) {
 		was_conflict = true;
-		switch (ui_select(i, question, o, 4)) {
+		switch (ui_ask(i, question, o, 4)) {
 		case 0: // rename
 			if ((err = edit_list(r, r))) {
 				failed(i, "editor", strerror(err));
@@ -356,7 +356,7 @@ static void prepare_task(struct ui* const i, struct task* const t,
 	}
 	enum task_flags tf = 0;
 	if (tt == TASK_CHMOD && S_ISDIR(i->perm[0])
-	&& !ui_select(i, "Apply recursively?", o, 2)) {
+	&& !ui_ask(i, "Apply recursively?", o, 2)) {
 		tf |= TF_RECURSIVE_CHMOD;
 	}
 	task_new(t, tt, tf, i->pv->wd, i->sv->wd, &S, &R);
@@ -525,7 +525,7 @@ static void cmd_rename(struct ui* const i) {
 			ok = false;
 		}
 		if ((!ok || !(ok = rename_prepare(i->pv, &S, &R, &N, &a, &al)))
-		&& ui_select(i, msg, o, 2) == 1) {
+		&& ui_ask(i, msg, o, 2) == 1) {
 			list_free(&S);
 			list_free(&R);
 			return;
@@ -748,10 +748,7 @@ static void interpreter(struct ui* const i, struct task* const t,
 	}
 	else if (!strcmp(line, "noh") || !strcmp(line, "nos")) {
 		i->dirty |= DIRTY_PANELS | DIRTY_STATUSBAR;
-		i->pv->num_selected = 0; // TODO duplicate?
-		for (fnum_t f = 0; f < i->pv->num_files; ++f) {
-			i->pv->file_list[f]->selected = false;
-		}
+		panel_unselect_all(i->pv);
 	}
 	else {
 		failed(i, "interpreter", "Unrecognized command"); // TODO
@@ -1052,11 +1049,8 @@ static void process_input(struct ui* const i, struct task* const t,
 			}
 		}
 		break;
-	case CMD_SELECT_NONE: // TODO duplicate?
-		i->pv->num_selected = 0;
-		for (fnum_t f = 0; f < i->pv->num_files; ++f) {
-			i->pv->file_list[f]->selected = false;
-		}
+	case CMD_SELECT_NONE:
+		panel_unselect_all(i->pv);
 		break;
 	case CMD_SELECTED_NEXT:
 		if (!i->pv->num_selected
@@ -1191,7 +1185,7 @@ static void task_execute(struct ui* const i, struct task* const t) {
 		if (t->err) t->ts = TS_FAILED;
 		if (t->tw.tws == AT_LINK && !(t->tf & (TF_ANY_LINK_METHOD))) {
 			if (t->t & (TASK_COPY | TASK_MOVE)) {
-				switch (ui_select(i, symlink_q, symlink_o, 5)) {
+				switch (ui_ask(i, symlink_q, symlink_o, 5)) {
 				case 0: t->tf |= TF_RAW_LINKS; break;
 				case 1: t->tf |= TF_RECALCULATE_LINKS; break;
 				case 2: t->tf |= TF_DEREF_LINKS; break;
@@ -1212,14 +1206,14 @@ static void task_execute(struct ui* const i, struct task* const t) {
 			snprintf(msg, sizeof(msg),
 				"Remove %u files? (%s)",
 				t->files_total, psize);
-			if (ui_select(i, msg, remove_o, 2)) {
+			if (ui_ask(i, msg, remove_o, 2)) {
 				t->ts = TS_FINISHED;
 			}
 		}
 		else if (t->conflicts && t->t & (TASK_COPY | TASK_MOVE)) {
 			snprintf(msg, sizeof(msg),
 				"There are %d conflicts", t->conflicts);
-			switch (ui_select(i, msg, conflict_o, 4)) {
+			switch (ui_ask(i, msg, conflict_o, 4)) {
 			case 0: t->tf |= TF_ASK_CONFLICTS; break;
 			case 1: t->tf |= TF_OVERWRITE_CONFLICTS; break;
 			case 2: t->tf |= TF_SKIP_CONFLICTS; break;
@@ -1248,7 +1242,7 @@ static void task_execute(struct ui* const i, struct task* const t) {
 		snprintf(msg, sizeof(msg), "@ %s\r\n(%d) %s.",
 			t->tw.path, t->err, strerror(t->err));
 		if (t->err == EEXIST) {
-			switch (ui_select(i, msg, manual_o, 4)) {
+			switch (ui_ask(i, msg, manual_o, 4)) {
 			case 0:
 				t->tf |= TF_OVERWRITE_ONCE;
 				break;
@@ -1267,7 +1261,7 @@ static void task_execute(struct ui* const i, struct task* const t) {
 			t->ts = TS_RUNNING;
 		}
 		else {
-			switch (ui_select(i, msg, error_o, 3)) {
+			switch (ui_ask(i, msg, error_o, 3)) {
 			case 0:
 				t->ts = TS_RUNNING;
 				break;

@@ -230,10 +230,10 @@ static void _column(const enum column C, const struct file* const cfr,
 	}
 	switch (C) {
 	case COL_INODE:
-		*buflen = snprintf(buf, bufsize, "%6lu", cfr->s.st_ino);
+		*buflen = snprintf(buf, bufsize, "%6lu", cfr->s.st_ino); // TODO fmt type
 		break;
 	case COL_LONGSIZE:
-		*buflen = snprintf(buf, bufsize, "%10lu", cfr->s.st_size);
+		*buflen = snprintf(buf, bufsize, "%10ld", cfr->s.st_size); // TODO fmt type
 		break;
 	case COL_SHORTSIZE:
 		pretty_size(cfr->s.st_size, buf);
@@ -460,6 +460,7 @@ void ui_statusbar(struct ui* const i, struct append_buffer* const ab) {
 
 static void _keyname(const struct input* const in, char* const buf) {
 	// TODO
+	// TODO strncpy
 	static const char* const N[] = {
 		[I_ARROW_UP] = "up",
 		[I_ARROW_DOWN] = "down",
@@ -714,7 +715,7 @@ void chmod_close(struct ui* const i) {
 	i->perm[0] = i->perm[1] = 0;
 }
 
-int ui_select(struct ui* const i, const char* const q,
+int ui_ask(struct ui* const i, const char* const q,
 		const struct select_option* o, const size_t oc) {
 	const int oldtimeout = i->timeout;
 	i->timeout = -1;
@@ -894,7 +895,7 @@ bool ui_rescan(struct ui* const i, struct panel* const a,
 	return true;
 }
 
-inline void failed(struct ui* const i, const char* const what,
+void failed(struct ui* const i, const char* const what,
 		const char* const why) {
 	i->mt = MSG_ERROR;
 	i->dirty |= DIRTY_BOTTOMBAR;
@@ -923,7 +924,8 @@ int spawn(char* const arg[], const enum spawn_flags f) {
 	else {
 		global_i->dirty |= DIRTY_BOTTOMBAR;
 		global_i->mt = MSG_INFO;
-		strcpy(global_i->msg, "external program is running...");
+		xstrlcpy(global_i->msg,
+			"external program is running...", MSG_BUFFER_SIZE);
 		waitpid(pid, &status, 0);
 	}
 	global_i->msg[0] = 0;

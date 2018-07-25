@@ -562,7 +562,7 @@ struct select_option {
 	char* h; // Hint
 };
 
-int ui_select(struct ui* const, const char* const q,
+int ui_ask(struct ui* const, const char* const q,
 		const struct select_option*, const size_t);
 
 enum command get_cmd(struct ui* const);
