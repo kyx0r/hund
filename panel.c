@@ -51,9 +51,6 @@ inline void last_entry(struct panel* const fv) {
 	jump_n_entries(fv, fv->num_files);
 }
 
-/*
- * returns number of entries jumped over
- */
 void jump_n_entries(struct panel* const fv, const int n) {
 	if (!fv->num_files) {
 		fv->selection = 0;
@@ -369,6 +366,12 @@ void select_from_list(struct panel* const fv,
 	}
 }
 
+void panel_unselect_all(struct panel* const fv) {
+	fv->num_selected = 0;
+	for (fnum_t f = 0; f < fv->num_files; ++f) {
+		fv->file_list[f]->selected = false;
+	}
+}
 /*
  * Needed by rename operation.
  * Checks conflicts with existing files and allows complicated swaps.

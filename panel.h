@@ -116,6 +116,7 @@ void panel_selected_to_list(struct panel* const, struct string_list* const);
 
 void select_from_list(struct panel* const, const struct string_list* const);
 
+void panel_unselect_all(struct panel* const);
 /*
  * TODO find a better name
  */
