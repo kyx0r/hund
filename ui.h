@@ -74,8 +74,6 @@ enum command {
 
 	CMD_COMMAND,
 	CMD_CD,
-	CMD_PAGER,
-	CMD_EDIT_FILE,
 
 	CMD_REFRESH,
 	CMD_SWITCH_PANEL,
@@ -263,9 +261,6 @@ static struct input2cmd default_mapping[] = {
 	{ { KCTRL('J') }, MODE_MANAGER, CMD_ENTER_DIR },
 	{ { KUTF8("l") }, MODE_MANAGER, CMD_ENTER_DIR },
 
-	{ { KUTF8("p") }, MODE_MANAGER, CMD_PAGER },
-	{ { KUTF8("e") }, MODE_MANAGER, CMD_EDIT_FILE },
-
 	/* <TODO> */
 	{ { KUTF8("v") }, MODE_MANAGER, CMD_SELECT_FILE },
 	{ { KUTF8("V") }, MODE_MANAGER, CMD_SELECT_ALL },
@@ -346,8 +341,6 @@ static const char* const cmd_help[] = {
 	[CMD_COMMAND] = "Open command line",
 
 	[CMD_CD] = "Jump to some directory",
-	[CMD_PAGER] = "Open selected file in pager",
-	[CMD_EDIT_FILE] = "Open selected file in text editor",
 	[CMD_REFRESH] = "Rescan directories and redraw UI",
 	[CMD_SWITCH_PANEL] = "Switch active panel",
 	[CMD_DUP_PANEL] = "Open current directory in the other panel",

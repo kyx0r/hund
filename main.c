@@ -74,7 +74,7 @@ int pager_spawn(int* const fd, pid_t* const pid) {
 		close(pipefd[0]);
 		char* arg[] = { xgetenv(pager), "-", NULL };
 		execvp(arg[0], arg);
-		return errno;
+		exit(EXIT_FAILURE);
 	}
 	*fd = pipefd[1];
 	return 0;
@@ -238,16 +238,10 @@ static int edit_list(struct string_list* const in,
 
 static void open_selected_with(struct ui* const i, char* const w) {
 	char* path;
+	int err;
 	if ((path = panel_path_to_selected(i->pv))) {
-		const mode_t m = hfr(i->pv)->s.st_mode;
-		if (S_ISREG(m) || S_ISLNK(m)) { // TODO
-			int err;
-			if ((err = open_file_with(w, path))) {
-				failed(i, "open", strerror(err));
-			}
-		}
-		else {
-			failed(i, "edit", "not a regular file");
+		if ((err = open_file_with(w, path))) {
+			failed(i, "open", strerror(err));
 		}
 		free(path);
 	}
@@ -687,6 +681,7 @@ static void cmd_quick_chmod_plus_x(struct ui* const i) {
 
 static void interpreter(struct ui* const i, struct task* const t,
 		struct marks* const m, char* const line, size_t linesize) {
+	/* TODO document it */
 	static char* anykey = \
 		"; read -n1 -r -p \"Press any key to continue...\" key\n"
 		"if [ \"$key\" != '' ]; then echo; fi";
@@ -727,6 +722,9 @@ static void interpreter(struct ui* const i, struct task* const t,
 		xstrlcpy(line+line_len, anykey, linesize);
 		char* const arg[] = { xgetenv(sh), "-i", "-c", line+3, NULL };
 		spawn(arg, 0);
+	}
+	else if (!memcmp(line, "o ", 2)) {
+		open_selected_with(i, line+2);
 	}
 	else if (!memcmp(line, "mark ", 5)) { // TODO
 		if (line[6] != ' ') {
@@ -1021,12 +1019,6 @@ static void process_input(struct ui* const i, struct task* const t,
 		break;
 	case CMD_REMOVE:
 		prepare_task(i, t, TASK_REMOVE);
-		break;
-	case CMD_PAGER:
-		open_selected_with(i, xgetenv(pager));
-		break;
-	case CMD_EDIT_FILE:
-		open_selected_with(i, xgetenv(ed));
 		break;
 	case CMD_COMMAND:
 		cmd_command(i, t, m);
