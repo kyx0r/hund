@@ -665,6 +665,7 @@ static void cmd_mklnk(struct ui* const i) {
 	//unlink(tmpn);
 	ui_rescan(i, i->sv, NULL);
 	select_from_list(i->sv, &sf);
+	list_free(&sf);
 }
 
 static void cmd_quick_chmod_plus_x(struct ui* const i) {
@@ -1066,13 +1067,13 @@ static void process_input(struct ui* const i, struct task* const t,
 		break;
 	case CMD_SELECTED_PREV:
 		if (!i->pv->num_selected || !i->pv->selection) break;
-		f = i->pv->selection-1;
-		while (f+1 >= 1) { // TODO
+		f = i->pv->selection;
+		while (f) {
+			f -= 1;
 			if (i->pv->file_list[f]->selected) {
 				i->pv->selection = f;
 				break;
 			}
-			f -= 1;
 		}
 		break;
 	case CMD_MARK_NEW:
